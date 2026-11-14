@@ -26,6 +26,13 @@ herdr agent prompt $NAME "Read CLAUDE.md, orchestrations/files/BRIEF.md and orch
 - Never answer an approval prompt that grants new access (MCP servers, etc.). If a coder is `blocked`, read it with `herdr agent read`; if it needs Allen, tell the director.
 - Track each coder with a background `herdr agent wait $NAME` (no polling). On wake, `herdr agent read $NAME --source recent-unwrapped --lines 80` to see whether it is really done or just paused.
 
+## 2b. Usage policy: Claude vs Cursor
+Claude coders, reviewers and orchestrators all share Allen's one Claude 5-hour meter (shown in every Claude tab's status bar). Hitting 100% stalls every Claude agent, including you, until it resets.
+- Default new coders to Cursor: `herdr agent start $NAME --kind cursor --pane $PANE -- --force --trust --model <model>`. Good picks: `gpt-5.3-codex` (backend/logic), `composer-2.5` (fast UI and mechanical work), `claude-sonnet-5-thinking-high` (tricky mixed work, billed to Cursor, not the Claude meter).
+- Reviewers run on Cursor by default: `cursor-agent -p --force --trust --model gpt-5.3-codex "<same reviewer prompt>"`. A different model family from the coder is preferred.
+- Use a Claude coder only for work that clearly needs it, and only while your status bar shows the 5-hour meter under 60%.
+- Cursor coders get the same brief and protocol; their pane is still checked with `herdr agent read`. If `herdr agent wait` never reports idle for a Cursor agent, read the pane to judge completion.
+
 ## 3. Coder brief must contain
 Goal, owned files, contract items, acceptance checks (observable commands and expected output), port, migration sub-range, which mocks to use, "push after every commit", PR target `agent/<orch>`, and the PR body checklist (contract items touched, check output tails, how to UI-test).
 
@@ -36,7 +43,7 @@ git -C C:/Pluto-$NAME diff agent/$ORCH...HEAD > C:/Pluto-$NAME/.review/diff.patc
 claude -p --permission-mode auto "You are a fresh reviewer. Follow REVIEW.md exactly. Goals and acceptance checks: orchestrations/tasks/$NAME.md. Diff: .review/diff.patch (base agent/$ORCH). Write your report to .review/review-1.md and print it." > C:/Pluto-$NAME/.review/review-1.log
 gh pr comment <pr> --body-file C:/Pluto-$NAME/.review/review-1.md
 ```
-Run it from the coder's worktree (`cwd`) after the coder is idle. `cursor-agent -p --force --trust` is an acceptable reviewer CLI. Never give the reviewer the coder's transcript or your own opinion of the code.
+Run it from the coder's worktree (`cwd`) after the coder is idle. Per section 2b, default to `cursor-agent -p --force --trust --model gpt-5.3-codex` in place of `claude -p`. Never give the reviewer the coder's transcript or your own opinion of the code.
 
 ## 5. Fix loop
 CHANGES REQUIRED -> prompt the coder with the review file path; one fix round; one fresh re-review (new headless session). Still blocking: you decide non-security items; security or contract items go to the director (`herdr agent prompt director ...` is not available; write `orchestrations/escalations/<orch>-<n>.md`, commit, push, and stop that task). APPROVE -> `gh pr merge <pr> --squash --delete-branch=false`, then pull into your worktree.
