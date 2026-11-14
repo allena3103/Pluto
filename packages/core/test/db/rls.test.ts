@@ -63,7 +63,7 @@ describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
     const tables = await pgQuery<{ table_name: string }>(
       "select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'",
     );
-    expect(tables.map((t) => t.table_name).sort()).toEqual([...TABLES].sort());
+    expect(tables.map((t) => t.table_name).sort()).toEqual([...TABLES, "sms_inbound_receipts"].sort());
 
     const noRls = await pgQuery<{ relname: string }>(
       `select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
