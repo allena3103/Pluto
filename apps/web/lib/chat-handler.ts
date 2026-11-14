@@ -39,8 +39,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, controller: AbortContro
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      controller.abort();
       reject(new ChatTimeout());
+      controller.abort();
     }, ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));

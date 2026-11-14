@@ -3,7 +3,7 @@ import { runAgent as defaultRunAgent } from "@pluto/agent";
 import type { PlutoDb } from "@pluto/core/context";
 import { makeToolContext } from "@pluto/core/context";
 import { AgentReplyRequest, AgentReplyResponse, DeepLink, INTERNAL_SECRET_HEADER } from "@pluto/core/contract";
-import { createSmsMagicLink as defaultCreateSmsMagicLink } from "@/lib/sms-magic-link";
+import { createSmsMagicLink as defaultCreateSmsMagicLink } from "./sms-magic-link";
 
 export type RunAgentFn = typeof defaultRunAgent;
 
