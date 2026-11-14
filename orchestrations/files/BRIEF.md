@@ -66,10 +66,10 @@ Coders: branch `agent/<orch>-<task>`, worktree `C:/Pluto-<orch>-<task>`, based o
 
 ## Security rules
 - RLS on every table; every policy keyed on `auth.uid()`. Core functions also filter by `student_id` explicitly.
-- Service role only in: `/api/ingest`, `/api/sms/inbound`, `/api/alerts/*`, `/api/canvas/*` cron/sync, `/open/:token`, MCP demo-token fallback. Each verifies a secret, signature or token first.
-- MCP tools are read-only. No tool writes.
+- Service role only in: `/api/ingest`, `/api/sms/inbound`, `/api/alerts/*`, `/api/canvas/*` cron/sync, `/open/:token`, MCP demo-token fallback, and the MCP `save_study_guide` text step (after auth). Each verifies a secret, signature or token first.
+- MCP tools are read-only except `save_study_guide`, which only adds a saved note for the signed-in student and texts that student (`docs/plan.md`, "MCP contract").
 - No secrets, tokens or real PDFs in git. Canvas tokens encrypted at rest (AES-256-GCM, key `CANVAS_TOKEN_KEY`).
-- Magic links: single use, expire in 15 minutes, bound to one student and one file page.
+- Magic links: single use, expire in 15 minutes, bound to one student and one target (a file page, or a saved note for `save_study_guide` texts).
 
 ## Final report (every orchestrator, to the director, as `orchestrations/reports/<orch>-<milestone>.md` in its PR)
 1. What is done, mapped to build steps and done-when checks.
