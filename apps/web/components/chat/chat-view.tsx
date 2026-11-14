@@ -15,9 +15,6 @@ function formatCitationLabel(citation: ChatCitation): string {
 }
 
 function citationHref(citation: ChatCitation): string {
-  if (citation.deepLink.startsWith("/")) {
-    return citation.deepLink;
-  }
   return notePath(citation.fileId, citation.page);
 }
 

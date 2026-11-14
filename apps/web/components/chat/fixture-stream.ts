@@ -1,5 +1,5 @@
 import { CHAT_STREAM_CONTENT_TYPE } from "@pluto/core/contract";
-import { notePath } from "@pluto/core/deep-links";
+import { noteUrl } from "@pluto/core/deep-links";
 
 const DEMO_FILE_ID = "00000000-0000-4000-8000-000000000101";
 const DEMO_FILE_ID_2 = "00000000-0000-4000-8000-000000000102";
@@ -33,6 +33,7 @@ export function createChatFixtureStream(
   message: string,
   priorSessionId: string | undefined,
   signal: AbortSignal,
+  origin: string,
 ): ReadableStream<Uint8Array> {
   const lower = message.trim().toLowerCase();
   const sessionId = priorSessionId ?? "00000000-0000-4000-8000-00000000f001";
@@ -67,7 +68,7 @@ export function createChatFixtureStream(
             type: "citation",
             fileId: DEMO_FILE_ID,
             page: 3,
-            deepLink: notePath(DEMO_FILE_ID, 3),
+            deepLink: noteUrl(origin, DEMO_FILE_ID, 3),
           }),
         );
         await delay(80, signal);
@@ -76,7 +77,7 @@ export function createChatFixtureStream(
             type: "citation",
             fileId: DEMO_FILE_ID_2,
             page: 7,
-            deepLink: notePath(DEMO_FILE_ID_2, 7),
+            deepLink: noteUrl(origin, DEMO_FILE_ID_2, 7),
           }),
         );
 

@@ -178,7 +178,7 @@ export function useChatStream() {
         let body: ReadableStream<Uint8Array> | null = null;
 
         if (shouldUseChatFixture()) {
-          body = createChatFixtureStream(text, sessionId, controller.signal);
+          body = createChatFixtureStream(text, sessionId, controller.signal, window.location.origin);
         } else {
           const response = await fetch("/api/chat", {
             method: "POST",
@@ -247,11 +247,11 @@ export function useChatStream() {
           );
           return;
         }
-        const message =
-          err instanceof Error && err.message
-            ? err.message
-            : "Could not reach the server. Check your connection and try again.";
-        failAssistant(assistantId, text, message);
+        failAssistant(
+          assistantId,
+          text,
+          "Could not reach the server. Check your connection and try again.",
+        );
       } finally {
         setIsStreaming(false);
         setMessages((prev) =>
@@ -292,7 +292,7 @@ export function useChatStream() {
   const retryLast = useCallback(() => {
     if (!pendingRetryMessage || isStreaming) return;
     const text = pendingRetryMessage;
-    setComposerText(text);
+    setComposerText("");
 
     const assistantId = newId();
     setMessages((prev) => [
