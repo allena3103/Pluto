@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
+import type { Database } from "@pluto/core/database.types";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicSupabaseEnv } from "@/lib/env";
+import { supabaseFetch } from "@/lib/supabase/fetch";
 
 const PUBLIC_PATH_PREFIXES = [
   "/login",
@@ -20,7 +22,7 @@ function isPublicPath(pathname: string) {
     return true;
   }
 
-  if (pathname.match(/\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js|map|txt|xml|woff2?)$/i)) {
+  if (pathname.match(/\.(?:png|jpg|jpeg|gif|webp|svg|ico|avif|woff|woff2|ttf|otf|eot)$/i)) {
     return true;
   }
 
@@ -28,19 +30,32 @@ function isPublicPath(pathname: string) {
 }
 
 export async function proxy(request: NextRequest) {
-  const response = NextResponse.next({
+  let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   });
 
   const { url, anonKey } = getPublicSupabaseEnv();
-  const supabase = createServerClient(url, anonKey, {
+  const supabase = createServerClient<Database>(url, anonKey, {
+    global: {
+      fetch: supabaseFetch,
+    },
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) => {
+          request.cookies.set(name, value);
+        });
+
+        response = NextResponse.next({
+          request: {
+            headers: request.headers,
+          },
+        });
+
         cookiesToSet.forEach(({ name, value, options }) => {
           response.cookies.set(name, value, options);
         });
@@ -62,7 +77,11 @@ export async function proxy(request: NextRequest) {
     const loginUrl = new URL("/login", request.url);
     const nextPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
     loginUrl.searchParams.set("next", nextPath || "/");
-    return NextResponse.redirect(loginUrl);
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+    return redirectResponse;
   }
 
   return response;

@@ -1,8 +1,13 @@
 import { createBrowserClient } from "@supabase/ssr";
+import type { Database } from "@pluto/core/database.types";
 import { getPublicSupabaseEnv } from "@/lib/env";
+import { supabaseFetch } from "@/lib/supabase/fetch";
 
-// TODO(orchestrator): Type this client with Database once @pluto/core/database.types exists on this branch.
 export function createClient() {
   const { url, anonKey } = getPublicSupabaseEnv();
-  return createBrowserClient(url, anonKey);
+  return createBrowserClient<Database>(url, anonKey, {
+    global: {
+      fetch: supabaseFetch,
+    },
+  });
 }

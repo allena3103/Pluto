@@ -1,13 +1,17 @@
 import { createServerClient } from "@supabase/ssr";
+import type { Database } from "@pluto/core/database.types";
 import { cookies } from "next/headers";
 import { getPublicSupabaseEnv } from "@/lib/env";
+import { supabaseFetch } from "@/lib/supabase/fetch";
 
-// TODO(orchestrator): Type this client with Database once @pluto/core/database.types exists on this branch.
 export async function createClient() {
   const cookieStore = await cookies();
   const { url, anonKey } = getPublicSupabaseEnv();
 
-  return createServerClient(url, anonKey, {
+  return createServerClient<Database>(url, anonKey, {
+    global: {
+      fetch: supabaseFetch,
+    },
     cookies: {
       getAll() {
         return cookieStore.getAll();
