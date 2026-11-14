@@ -80,7 +80,7 @@ export function createDeadlineChangeNotifier(input: {
         });
       } catch (fetchError) {
         const name = fetchError instanceof Error ? fetchError.name : "Error";
-        throw new Error(`deadline-change request failed (${name})`);
+        throw new Error(`deadline-change request failed (${name})`, { cause: fetchError });
       }
       const payload: unknown = await response.json().catch(() => null);
       if (!response.ok) throw new Error(`deadline-change returned status ${response.status}`);
