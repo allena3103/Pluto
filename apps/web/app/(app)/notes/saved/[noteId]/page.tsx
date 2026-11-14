@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookmarkCheck, FileText, Trash2 } from "lucide-react";
+import { BookmarkCheck, FileText } from "lucide-react";
 import { notePath } from "@pluto/core/deep-links";
 import { MarkdownText } from "@/components/markdown-text";
+import { DeleteSavedNoteButton } from "@/components/notes/delete-saved-note-button";
 import { PageShell } from "@/components/page-shell";
 import { parseSources } from "@/lib/saved-notes";
 import { createClient } from "@/lib/supabase/server";
-import { deleteSavedNote } from "./actions";
 
 const BACK_TO_NOTES = { href: "/notes", label: "All notes" };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -87,16 +87,7 @@ export default async function SavedNotePage({ params }: Props) {
         </section>
       )}
 
-      <form action={deleteSavedNote} className="mt-8">
-        <input type="hidden" name="noteId" value={note.id} />
-        <button
-          type="submit"
-          className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-input bg-card px-4 py-2 text-sm font-bold text-red-700 shadow-warm-sm transition-all hover:-translate-y-0.5 hover:border-red-300 hover:bg-red-50"
-        >
-          <Trash2 className="size-4" aria-hidden />
-          Delete this note
-        </button>
-      </form>
+      <DeleteSavedNoteButton noteId={note.id} title={note.title} variant="full" className="mt-8" />
     </PageShell>
   );
 }

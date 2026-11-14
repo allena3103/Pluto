@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BookmarkCheck, ChevronRight, FileText } from "lucide-react";
+import { DeleteSavedNoteButton } from "@/components/notes/delete-saved-note-button";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, PageShell, TINT_CLASSES, type PageTint } from "@/components/page-shell";
@@ -173,23 +174,28 @@ export default async function NotesPage() {
                     </p>
                     <div className="space-y-2">
                       {course.saved.map((note) => (
-                        <Link
+                        <div
                           key={note.id}
-                          href={`/notes/saved/${encodeURIComponent(note.id)}`}
-                          className="group flex items-center gap-3 rounded-2xl border border-border/80 bg-card px-4 py-3 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-warm"
+                          className="flex items-center gap-1 rounded-2xl border border-border/80 bg-card pr-2 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-warm"
                         >
-                          <BookmarkCheck className="size-5 shrink-0 text-emerald-600" aria-hidden />
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <p className="text-[0.95rem] font-bold break-words text-foreground">{note.title}</p>
-                            <p className="text-xs font-semibold text-muted-foreground">
-                              Saved {formatAddedAt(note.created_at)}
-                            </p>
-                          </div>
-                          <ChevronRight
-                            className="size-5 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
-                            aria-hidden
-                          />
-                        </Link>
+                          <Link
+                            href={`/notes/saved/${encodeURIComponent(note.id)}`}
+                            className="group flex min-w-0 flex-1 items-center gap-3 py-3 pl-4"
+                          >
+                            <BookmarkCheck className="size-5 shrink-0 text-emerald-600" aria-hidden />
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="text-[0.95rem] font-bold break-words text-foreground">{note.title}</p>
+                              <p className="text-xs font-semibold text-muted-foreground">
+                                Saved {formatAddedAt(note.created_at)}
+                              </p>
+                            </div>
+                            <ChevronRight
+                              className="size-5 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+                              aria-hidden
+                            />
+                          </Link>
+                          <DeleteSavedNoteButton noteId={note.id} title={note.title} variant="icon" />
+                        </div>
                       ))}
                     </div>
                   </div>
