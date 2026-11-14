@@ -43,14 +43,24 @@ function foldLine(line: string): string {
 
   const chunks: string[] = [];
   let current = "";
+  let limit = 75;
+
+  const pushCurrent = (): void => {
+    chunks.push(current);
+    current = "";
+    // Continuation lines include one leading space, so payload is max 74 octets.
+    limit = 74;
+  };
+
   for (const char of line) {
-    if (Buffer.byteLength(current + char, "utf8") > 75) {
-      chunks.push(current);
-      current = char;
-    } else {
-      current += char;
+    const charBytes = Buffer.byteLength(char, "utf8");
+    const currentBytes = Buffer.byteLength(current, "utf8");
+    if (currentBytes + charBytes > limit) {
+      pushCurrent();
     }
+    current += char;
   }
+
   if (current) chunks.push(current);
   return chunks.join("\r\n ");
 }

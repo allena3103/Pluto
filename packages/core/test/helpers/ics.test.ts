@@ -46,6 +46,27 @@ describe("buildIcs", () => {
     }
   });
 
+  it("keeps every emitted line at <= 75 octets with multibyte UTF-8 content", () => {
+    const ics = buildIcs({
+      calendarName: "Calendário de estudo",
+      now: new Date("2026-11-14T00:00:00.000Z"),
+      events: [
+        {
+          uid: "utf8-event",
+          title: "áéíóú漢字🙂".repeat(30),
+          start: new Date("2026-11-14T14:00:00.000Z"),
+          end: new Date("2026-11-14T15:00:00.000Z"),
+        },
+      ],
+    });
+
+    const lines = ics.split("\r\n").filter(Boolean);
+    expect(lines.some((line) => line.startsWith(" "))).toBe(true);
+    for (const line of lines) {
+      expect(Buffer.byteLength(line, "utf8")).toBeLessThanOrEqual(75);
+    }
+  });
+
   it("builds a feed url and token", () => {
     const token = newFeedToken();
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
