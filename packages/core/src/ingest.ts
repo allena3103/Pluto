@@ -61,7 +61,7 @@ function shortMessage(err: unknown): string {
 
 /**
  * Ingests one stored PDF. Returns null when the file does not exist.
- * Never leaves a file in `processing`: any failure ends in `failed` with `ingest_error` set.
+ * Any failure ends in `failed` with `ingest_error` set; if even that write fails, it throws.
  * Idempotent: ingesting twice leaves the same rows.
  */
 export async function ingestFile(admin: PlutoDb, fileId: string): Promise<IngestResult | null> {
@@ -76,11 +76,16 @@ export async function ingestFile(admin: PlutoDb, fileId: string): Promise<Ingest
   const studentId = file.student_id;
   const fail = async (err: unknown): Promise<IngestResult> => {
     const message = shortMessage(err);
-    await admin
+    const { error: failError } = await admin
       .from("files")
       .update({ ingest_status: "failed", ingest_error: message })
       .eq("id", fileId)
       .eq("student_id", studentId);
+    // If the status could not be written the row may still say `processing`: fail loudly
+    // instead of reporting a state the database does not hold.
+    if (failError) {
+      throw new Error(`ingest: could not record the failure (${message}): ${failError.message}`);
+    }
     return { fileId, status: "failed", error: message };
   };
 
