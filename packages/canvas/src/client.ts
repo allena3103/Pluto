@@ -72,7 +72,7 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
   const mode = resolveMode(options.mode);
   const fetchImpl =
     options.fetch ??
-    (mode === MODE_FIXTURES ? createFixturesFetch(options.baseUrl) : fetch);
+    (mode === MODE_FIXTURES ? createFixturesFetch(options.baseUrl, { now: options.now }) : fetch);
   const warnedPaths = new Set<string>();
 
   const http = createCanvasHttpClient({

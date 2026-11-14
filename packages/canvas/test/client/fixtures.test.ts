@@ -47,4 +47,41 @@ describe("canvas fixtures mode", () => {
       canvasFileId: "hist-file-1",
     });
   });
+
+  it("resolves seeded due_at templates to exact UTC instants", async () => {
+    const client = createCanvasClient({
+      baseUrl: "https://fixtures.canvas.local",
+      token: "unused",
+      mode: "fixtures",
+      now: () => new Date("2026-11-14T12:00:00Z"),
+    });
+
+    const historyAssignments = await client.listAssignments("seed-hist-105");
+    expect(findDueAt(historyAssignments, "seed-101")).toBe("2026-11-20T04:59:00Z");
+    expect(findDueAt(historyAssignments, "seed-102")).toBe("2026-11-26T04:59:00Z");
+    expect(findDueAt(historyAssignments, "seed-103")).toBe("2026-12-04T04:59:00Z");
+  });
+
+  it("handles DST transitions when resolving due_at templates", async () => {
+    const client = createCanvasClient({
+      baseUrl: "https://fixtures.canvas.local",
+      token: "unused",
+      mode: "fixtures",
+      now: () => new Date("2026-10-31T12:00:00Z"),
+    });
+
+    const bioAssignments = await client.listAssignments("seed-bio-151");
+    expect(findDueAt(bioAssignments, "seed-111")).toBe("2026-11-04T04:59:00Z");
+  });
 });
+
+function findDueAt(
+  assignments: Array<{ canvasAssignmentId: string; dueAt: string | null }>,
+  assignmentId: string,
+): string | null {
+  const assignment = assignments.find((item) => item.canvasAssignmentId === assignmentId);
+  if (!assignment) {
+    throw new Error(`Missing assignment: ${assignmentId}`);
+  }
+  return assignment.dueAt;
+}

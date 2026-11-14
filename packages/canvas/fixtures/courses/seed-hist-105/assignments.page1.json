@@ -2,7 +2,7 @@
   {
     "id": "seed-101",
     "name": "Primary Source Essay",
-    "due_at": "2026-11-20T04:59:00Z",
+    "due_at": "{{due:weeks=1,days=3}}",
     "points_possible": 100,
     "assignment_group_id": "seed-hist-essays",
     "submission": { "score": null, "workflow_state": "unsubmitted", "submitted_at": null }
@@ -10,7 +10,7 @@
   {
     "id": "seed-102",
     "name": "Reading Response 5",
-    "due_at": "2026-11-25T04:59:00Z",
+    "due_at": "{{due:weeks=2,days=2}}",
     "points_possible": 20,
     "assignment_group_id": "seed-hist-responses",
     "submission": { "score": null, "workflow_state": "submitted", "submitted_at": "2026-11-24T20:15:00Z" }
