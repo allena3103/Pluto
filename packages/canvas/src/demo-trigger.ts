@@ -170,7 +170,7 @@ export function createDemoFixturesFetch(
     if (inside.startsWith("..") || path.isAbsolute(inside)) return response;
     let raw: string;
     try {
-      raw = await readFile(filePath, "utf8");
+      raw = await readFile(/*turbopackIgnore: true*/ filePath, "utf8");
     } catch {
       return response;
     }

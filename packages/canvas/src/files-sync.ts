@@ -358,7 +358,7 @@ export function createFixtureFileFetch(directory: string | null = findFixtureFil
       return new Response("not found", { status: 404 });
     }
     try {
-      const bytes = await readFile(path.join(directory, match[1]!));
+      const bytes = await readFile(/*turbopackIgnore: true*/ path.join(directory, match[1]!));
       return new Response(new Uint8Array(bytes), {
         status: 200,
         headers: { "content-type": "application/pdf", "content-length": String(bytes.byteLength) },
