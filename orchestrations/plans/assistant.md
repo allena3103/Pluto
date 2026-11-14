@@ -2,6 +2,16 @@
 
 Orchestrator: assistant (Cursor planner, `grok-4.7-high`). Branch `agent/assistant`, worktree `C:/Pluto-assistant`, port 3400, migrations `20261114040000`-`20261114045959`.
 Build steps: 5 (agent loop and `/api/chat` + `/api/agent/reply`), 8 (SMS), 9 (alerts + ICS), plus the 2026-11-14 phone-linking item.
+
+## Timeline (director, Sat 10:00, `20d5a90`)
+Read from `origin/agent/pluto`. BRIEF's cadence: a milestone PR into `agent/pluto` about every 2 hours, or as soon as a row works. Sync first (PROTOCOL 2e). The milestone PR body asks grokbot for a merge commit, not squash. Max 1-2 coders. Close a coder's tab as soon as its PR merges.
+
+| Target (EST) | Row | On this branch |
+| --- | --- | --- |
+| Sat 17:00 | `/api/chat` with Gemini, together with web (notes viewer, `/open`, sign-up are web's) | after #28 merges |
+| Sat 19:00 | SMS round trip via Sendblue, phone linking, crunch-week alert, ICS feed | phone linking is #29, merged. SMS, the alert, and the ICS feed wait on the F2 helper sync |
+
+#28 is labeled `security-review`. Grokbot will not merge it until a fresh review posts `VERDICT: APPROVE`. The four notes on that review are fixed on `agent/assistant-agent` before that review.
 Contract: `docs/plan.md` (decision log through the shared-web-config edit) and `packages/core/src/contract.ts`. They already agree on the ten endpoints, NDJSON `/api/chat` (`text`, `citation`, `done`, `error`, content type `application/x-ndjson`), and header `x-internal-secret`. Do not edit either file.
 
 ## What this branch already has
