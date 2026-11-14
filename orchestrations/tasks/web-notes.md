@@ -78,6 +78,7 @@ No shape changes. You implement the consumer side of the deep-link format `/note
 
 ## Rules
 - Commit small, push after every commit (`git push -u origin agent/web-notes` the first time).
+- **Open the PR and stop. Never merge it** (no `gh pr merge`, no local merge into `agent/web`, no push to `agent/web`). Grokbot reviews, UI-tests and merges every PR; a coder that merges its own work skips that review.
 - Never commit `.env.local`, a secret, a signed URL or a PDF.
 - Stay in the files listed above.
 - Your PR does **not** need the `security-review` label, but it is read for exactly one thing first: that no path lets a student read another student's file.

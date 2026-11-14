@@ -60,6 +60,7 @@ Manual (dev server on 3105). Write the scratch script that mints links under `.r
     60|
 ## Rules
 - Commit small, push after every commit (`git push -u origin agent/web-open` the first time).
+- **Open the PR and stop. Never merge it** (no `gh pr merge`, no local merge into `agent/web`, no push to `agent/web`). Grokbot reviews, UI-tests and merges every PR, and this PR also needs a fresh security review first.
 - Service role is allowed **only** in this route and only after the token verifies. Never expose it to the client, never put it in a log line.
 - Never commit `.env.local`, a token, an email or a key.
 - Stay in `apps/web/app/open/**`.

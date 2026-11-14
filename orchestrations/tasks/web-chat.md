@@ -70,6 +70,7 @@ Add a unit test for the NDJSON parser if it is quick (split across chunk boundar
     70|
 ## Rules
 - Commit small, push after every commit (`git push -u origin agent/web-chat` the first time).
+- **Open the PR and stop. Never merge it** (no `gh pr merge`, no local merge into `agent/web`, no push to `agent/web`). Grokbot reviews, UI-tests and merges every PR; a coder that merges its own work skips that review.
 - Never commit `.env.local` or a secret.
 - Stay in the files listed above. The chat route, the agent package and the SMS simulator are other people's slices.
 
