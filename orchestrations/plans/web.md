@@ -2,91 +2,95 @@
 
 Branch `agent/web`, worktree `C:/Pluto-web`, port 3100 (coders 3101-3109), migration range `20261114010000`-`20261114015959` (web expects **no** migrations; if a task seems to need one, stop and escalate to the director).
 
-Task file: `orchestrations/files/10-web.md`. Build steps 5 (UI half), 6, 7, 11. Protocol: `orchestrations/files/PROTOCOL.md`. Contract: `docs/plan.md` + `packages/core/src/contract.ts`.
+Task file: `orchestrations/files/10-web.md` (items 9-11 are on `origin/agent/pluto` at `c6ee3a5`; they are copied into this plan). Build steps 5 (UI half), 6, 7, 11. Protocol: `orchestrations/files/PROTOCOL.md` on `origin/agent/pluto` at `20d5a90` (2b models, 2d Cursor planner, 2e sync PRs, 6 milestone cadence). Contract: `docs/plan.md` + `packages/core/src/contract.ts`.
 
-## Baseline verified on `agent/web` before planning (F1 + foundation-tools merged)
+Restarted 2026-11-14 on Cursor `grok-4.7-high`. This revision follows the director plan at `20d5a90` (Sat 10:15). `BRIEF.md` and `PROTOCOL.md` were read from `origin/agent/pluto`; they are not merged into `agent/web` (a sync is its own PR, section 2e).
 
-```
-$ npm install                      -> added 421 packages, audited 430
-$ npm run typecheck                -> exit 0 (@pluto/web, @pluto/core, scripts)
-    10|$ npm run lint                     -> exit 0
-$ npm run env:local -- --port 3100 -> wrote apps/web/.env.local (port 3100, 11 secrets)
-$ npm test                         -> Test Files 11 passed (11) | Tests 136 passed (136)
-```
+## Status
 
-What already exists (do not re-create): `apps/web/proxy.ts` (session refresh + signed-out redirect to `/login?next=...`), `apps/web/lib/supabase/{server,client,admin,fetch}.ts` (all with a 10 s timeout), `apps/web/lib/env.ts`, `apps/web/app/(app)/{layout,page}.tsx` (placeholder), `apps/web/components.json` (shadcn initialised, slate, `@/components`, lucide), Tailwind 4 via `app/globals.css`.
+| PR | Branch | State | What we do |
+| --- | --- | --- | --- |
+| #13 | `agent/web-grades` | **Merged** (coder self-merged; see `orchestrations/escalations/web-1.md`) | Leave it. Grades and deadlines are on `agent/web`. The Postgres-error leak noted in web-1 waits for the polish pass. |
+| #23 | `agent/web-shell` | **Merged** into `agent/web` (`cc6feb5`). CI on `agent/web` green. | Leave the worktree. A fix round restarts a coder there. |
+| #34 | `agent/web-signup` | **Merged** into `agent/web` (`a9e51a2`). CI green. Fresh review was `VERDICT: APPROVE`. | Tab closed. A fix round restarts in `C:/Pluto-web-signup`. |
+| #24 | `agent/web-notes` | **Draft**. #23 is merged, and the PR diff against `agent/web` still contains the whole shell (notes was branched from `agent/web-shell` before the squash). | A coder in `C:/Pluto-web-notes` merges `origin/agent/web`, leaves a notes-only diff, gets CI green, and marks the PR ready. Nobody merges it. |
+| — | `origin/agent/foundation` | `consumeMagicLink` is here (`packages/core/src/magic-links.ts`) | Not on `agent/web` and not on `origin/agent/pluto`. |
 
-What is still missing from the foundation (F2, arrives via `origin/agent/pluto`): synthetic lecture PDFs + `files`/`file_pages` rows (`scripts/seed.ts seedFiles()`), `/api/ingest`, magic-link helpers (`createMagicLink`, `consumeMagicLink`), `sendSms`, ICS builder, smoke files. `supabase/seed.sql` seeds **no** `files` rows yet, so the notes screens have no data until F2 lands.
+`agent/web` and `origin/agent/pluto` diverged at the F1 squash (`87fbb9f`). Protocol 2e: a later sync is its own PR (`agent/web-sync` into `agent/web`), never mixed into a feature PR. A sync today would not unblock magic links, because those commits are not on `agent/pluto` yet. Do not edit `docs/plan.md` or `orchestrations/files/**`.
+
+Coders: Cursor only, `composer-2.5` (UI) or `grok-4.7-medium` (logic). Fresh reviewers, when required: `grok-4.7-high`. Max **1-2** coders at once. Under 2 GB free RAM, spawn nobody, except the director's 10:08 instruction to start one coder at about 1.7 GB.
+
+W7 `web-signup` is merged (PR #34). Local `npm test` can still fail on the shared database because `phone_link_codes` is not in this branch; CI's fresh database passed. Dev server on 3106 is stopped.
+
+W4 `web-chat` opened PR [#36](https://github.com/allena3103/Pluto/pull/36). CI `check` is green. No `security-review` label. The diff is only `apps/web/app/(app)/chat/**`, `apps/web/components/chat/**`, and `apps/web/test/ndjson-line-buffer.test.ts`. Dev server on 3104 is stopped. The coder tab is closed; a grokbot fix restarts in `C:/Pluto-web-chat`.
+
+W8 waits. Free RAM after closing the chat tab was 1.75 GB. Shell and notes worktrees stay. A fix round restarts a coder in the same worktree.
+
+## Timeline (BRIEF, Sat 10:00)
+
+| Target (EST) | Web row | What ships |
+| --- | --- | --- |
+| Sat 17:00 | Notes viewer, `/open` magic links, chat UI against `/api/chat`, `/signup` | Notes is #24 after #23. `/open` starts only once `consumeMagicLink` is on `agent/web`. Chat and signup start now. |
+| Sat 19:00 | Phone-linking page, so the assistant row can show a code | W8, when a coder slot is free. Assistant owns the route and the SMS. |
+| Sun 01:00 | Polish | Sign-up polish, loading and error states, 390px pass, chat fixture removed. PWA stays inside #23. |
+
+Milestone PRs into `agent/pluto` go out about every 2 hours, or as soon as a row above works on `agent/web`. Each one is preceded by an `agent/web-sync` PR (PROTOCOL 2e): branch from `agent/web`, merge `origin/agent/pluto`, take theirs for every file this slice does not own, keep web files, run the checks, PR into `agent/web`. Never mix a sync into a feature PR. The milestone PR body asks grokbot for a **merge commit, not a squash**. No milestone this turn: the 17:00 row is not on the branch yet.
+
+Feature branches come off `agent/web`, and their PRs target `agent/web`. Do not branch them off `agent/web-shell`: that PR diff would contain the whole shell and collide with #23. `components/ui`, `lib/safe-next.ts`, the login page, and the app nav are **not** on `agent/web`. Style with Tailwind, the same way grades does. Do not edit `apps/web/package.json` or the lockfile.
+
+## Director items added 2026-11-14
+
+9. **Sign-up** `/signup`: name, email, password via `supabase.auth.signUp` (name in `options.data.name`). Generic errors. Validated `next` passes through. Link from `/login` and back. Email confirmation is off (`supabase/config.toml` already has `enable_confirmations = false`; do not edit it).
+10. **Phone linking** `/settings/phone`: calls `POST /api/sms/link-code` (assistant builds it) and shows "Text LINK \<code\> to \<SENDBLUE_FROM_NUMBER\>". Shows `profiles.phone` once set. Never writes `profiles.phone`.
+11. PR #23 is the director's. PR #24 waits for #23.
+
+The login-page link to `/signup`, and a nav link to `/settings/phone`, edit files #23 owns. They are a follow-up after #23 merges, not part of the signup or phone PRs.
 
 ## Dependency shape
 
-    20|```
-W1 web-shell (login + nav + PWA + ui primitives + all deps)   <- prerequisite, nothing runs beside it
-      |
-      +--> W2 web-notes   (/notes, /notes/[fileId] viewer)      needs F2 files for real data
-      +--> W3 web-grades  (/api/grades, /grades, /deadlines)    needs nothing beyond seed
-      |
-      +--> W4 web-chat    (/chat streaming UI + citations)       real /api/chat lands with assistant
-      +--> W5 web-open    (/open/[token])                        needs F2 consumeMagicLink
-      |
-      +--> W6 polish + milestone report (orchestrator)
+```
+W1 web-shell   PR #23, director, do not touch
+W2 web-notes   PR #24, draft, waits for #23
+W3 web-grades  PR #13, merged
+
+Ready on agent/web (no file overlap; max 2 running):
+  W4 web-chat     composer-2.5     port 3104
+  W7 web-signup   grok-4.7-medium  port 3106   security-review
+Queued for the next free slot (Sat 19:00 row):
+  W8 web-phone    composer-2.5     port 3107
+Blocked until F2's helper is on agent/web (Sat 12:00 foundation row):
+  W5 web-open     grok-4.7-medium  port 3105   security-review
+Then:
+  W6 polish (Sun 01:00) + the milestone report
+  W9 after #23 merges: link /login -> /signup, and a settings/phone entry in the shell nav
 ```
 
-    30|Concurrency: **max 2 coders at once** (PROTOCOL 2c), and 1 while free memory is under 2 GB (it was 1.95 GB at planning time, with foundation and canvas coders running). Order: W1 alone -> W2 + W3 -> W4 + W5 -> W6.
+#23 and #34 are merged. #36 is waiting on grokbot. W8 starts when free RAM is at least 2 GB. W5 only after `consumeMagicLink` is on this branch. #24 stays with the director. After the merges, typecheck and lint passed here. `npm test` still has one local failure: `phone_link_codes` is on the shared database and not in this branch. CI on the merge commits was green.
 
-W1 is the shared prerequisite: it owns `apps/web/package.json`, so it adds **every** dependency the later tasks need (pdf.js, shadcn/radix, lucide, cva) and all `components/ui/**` primitives. Later tasks then never touch `package.json` or the lockfile, which is what would otherwise conflict.
+## Milestones (into `agent/pluto`, merge commit)
 
-If grokbot has not merged W1's PR ~20 minutes after it is green, W2 and W3 are branched off `agent/web-shell` instead of `agent/web` (PRs still target `agent/web`); after W1 merges they merge `agent/web` back in. This is a deliberate deviation from PROTOCOL 2 to avoid stalling on the merge queue.
-
-## Milestones (one PR into `agent/pluto` each)
-
-| Milestone | Contents | Report |
+| When | Contents | Report |
 | --- | --- | --- |
-| M1 | W1 + W2 + W3: login with `next`, app shell, PWA, notes list, PDF viewer at page n, `/api/grades`, `/grades`, `/deadlines` | `orchestrations/reports/web-M1.md` |
-    40|| M2 | W4 + W5 + W6: chat screen against the real `/api/chat`, `/open/[token]`, loading/error states, 390px pass, dev fixture removed | `orchestrations/reports/web-M2.md` |
+| Sat 17:00, or sooner if the row works | Notes viewer (#24), `/open` if the helper has landed, chat UI, `/signup`, plus #23 and grades already in flight | `orchestrations/reports/web-M1.md` |
+| Sun 01:00 | Polish: loading and error states, 390px, fixture removed, signup link from `/login` | `orchestrations/reports/web-M2.md` |
+
+Before each of those: sync PR, checks, report, then `gh pr create --base agent/pluto --head agent/web` whose body tells grokbot to use a merge commit. A smaller milestone also goes out about every 2 hours once `agent/web` has a new merged user-visible slice.
 
 ## Tasks
 
-Every brief lives at `orchestrations/tasks/web-<task>.md` (committed on `agent/web` before the worktree is created). Every task: branch `agent/web-<task>`, worktree `C:/Pluto-<task-name>`, PR into `agent/web`, push after every commit, mobile first at 390px, Tailwind + shadcn/ui, `PLUTO_LLM=mock`.
+Every brief lives at `orchestrations/tasks/web-<task>.md` on `agent/web` before the worktree is created. Every task: branch `agent/web-<task>`, worktree `C:/Pluto-web-<task>`, PR into `agent/web`, push after every commit, mobile first at 390px, Tailwind, `PLUTO_LLM=mock`. **Open the PR and stop. Never merge.**
 
-### W1 `web-shell` — login, app shell, PWA, ui primitives, deps
-Port 3101. Model: Cursor `claude-sonnet-5-thinking-high` (auth-sensitive, mixed UI + server actions). Label PR `security-review` (login and sessions) -> fresh reviewer before grokbot.
+### W1 `web-shell` — director, PR #23
+Do not spawn, prompt, commit, or review. Port 3101 stays theirs.
 
-Owns: `apps/web/app/login/**`, `apps/web/app/(app)/layout.tsx`, `apps/web/app/(app)/page.tsx`, `apps/web/components/ui/**`, `apps/web/components/app-nav.tsx`, `apps/web/components/pwa-register.tsx`, `apps/web/public/**`, `apps/web/app/manifest.ts` (or `public/manifest.webmanifest`), `apps/web/package.json`, `apps/web/lib/safe-next.ts`, root `package-lock.json`.
-    50|
-Acceptance:
-- Signed out, `GET /` -> 307 to `/login?next=%2F`; signing in lands back on `/`.
-- `/login?next=%2Foauth%2Fconsent%3Fauthorization_id%3Dabc` returns to that exact path after sign-in; `next=https://evil.example`, `next=//evil.example` and `next=/\evil` all fall back to `/`.
-- `/login?error=link` shows the expired/used link message.
-- Nav reaches `/chat`, `/notes`, `/grades`, `/deadlines`, `/settings/canvas`, `/sms-sim` (the last four may 404 until their owners land them); sign out returns to `/login` and `/` then redirects back to login.
-- `/manifest.webmanifest` 200 with name, icons (192 + 512), `display: standalone`; service worker registers on `/`; Lighthouse-installable not required.
-- No horizontal scroll at 390px on `/login` and `/`.
-- `npm run typecheck && npm run lint && npm test` green; `npm run build -w @pluto/web` succeeds.
+### W2 `web-notes` — rebase onto merged shell, PR #24
+Port 3102. Model: Cursor `grok-4.7-medium`. The notes commits themselves are only `apps/web/app/(app)/notes/**` and `apps/web/components/notes/**` (5 files, 708 lines). The open PR also contains the pre-squash shell. Merge `origin/agent/web` into `agent/web-notes` and make `git diff origin/agent/web...HEAD --stat` list only those notes paths. Then CI green, `gh pr ready 24`, stop. Do not merge the PR.
 
-### W2 `web-notes` — notes list and PDF viewer
-    60|Port 3102. Model: Cursor `gpt-5.3-codex` (pdf.js in a Next 16 client component is the fiddly part).
-
-Owns: `apps/web/app/(app)/notes/**`, `apps/web/components/notes/**`.
-
-Acceptance:
-- `/notes` lists the demo student's files grouped by course then week label, newest first, with ingest status; empty state when there are no files.
-- `/notes/<fileId>?page=3` renders page 3 first, at 390px, with page jump and prev/next; `?page=0`, `?page=abc` and an out-of-range page fall back to page 1 (page numbers 1-based).
-- The signed Storage URL is created server-side from the session client (RLS applies); another student's `fileId` gives a not-found page, never a PDF.
-- Deep links from the contract (`/notes/<fileId>?page=<n>`) open the same view.
-
-### W3 `web-grades` — grades endpoint, grades screen, deadlines screen
-    70|Port 3103. Model: Cursor `composer-2.5` (mechanical, well-specified; the route is thin).
-
-Owns: `apps/web/app/api/grades/**`, `apps/web/app/(app)/grades/**`, `apps/web/app/(app)/deadlines/**`, `apps/web/components/grades/**`, `apps/web/components/deadlines/**`.
-
-Acceptance:
-- `GET /api/grades` with the demo session returns `GradesResponse` exactly (validated with `GradesResponse.parse`); `?course=History%20105` filters; signed out -> 401; an unknown course -> 404 with a JSON error, never another student's data.
-- `/grades` shows per course: each group's score and weight, the running weighted grade and the ungraded count, matching the endpoint output for the demo student.
-- `/deadlines` lists upcoming assignments soonest first with the moved due date struck through for the seeded date change (`a0000000-0000-4000-8000-000000000101`).
-- Both screens work at 390px and have loading and error states.
+### W3 `web-grades` — merged, PR #13
+On `agent/web`. No further coder.
 
 ### W4 `web-chat` — chat screen
-    80|Port 3104. Model: Cursor `claude-sonnet-5-thinking-high` (NDJSON streaming + citation UI).
+Port 3104. Model: Cursor `composer-2.5`. No `security-review`.
 
 Owns: `apps/web/app/(app)/chat/**`, `apps/web/components/chat/**`.
 
@@ -95,34 +99,67 @@ Acceptance:
 - Keeps the `sessionId` from `done` for the next message; `error` shows a readable message and leaves the typed text recoverable.
 - Until `/api/chat` exists, a dev-only fixture (`NEXT_PUBLIC_PLUTO_CHAT_FIXTURE=1`, non-production only) drives the same code path. W6 deletes it before M2.
 - Claude-style thread at 390px: input pinned to the bottom, no horizontal scroll, works with the on-screen keyboard.
+- No new dependencies and no imports from `@/components/ui` (those files are not on this branch).
 
-### W5 `web-open` — magic-link open
-    90|Port 3105. Model: Cursor `gpt-5.3-codex`. Label PR `security-review` (magic links, service role, sessions). **Blocked until F2's `consumeMagicLink` reaches `origin/agent/pluto`.**
+### W5 `web-open` — magic-link open (blocked)
+Port 3105. Model: Cursor `grok-4.7-medium`. Label `security-review`. **Do not spawn** until `packages/core/src/magic-links.ts` on `agent/web` exports `consumeMagicLink`. It is on `origin/agent/foundation` only. The helper returns `{ studentId, fileId, page, redirectPath } | null` and marks the row used in one update. The route must call it, not reimplement it.
 
 Owns: `apps/web/app/open/**`.
 
-Acceptance:
+Acceptance (when unblocked):
 - A token from core `createMagicLink` redirects (302) to `/notes/<fileId>?page=<n>` with a session for that student in a fresh browser profile.
 - The second use of the same token, an expired token and a garbage token all redirect to `/login?error=link`.
 - The route never signs in a student other than the token's owner; service role is used only after the token verifies.
 
-### W6 polish + milestone (orchestrator, or one Cursor coder if time allows)
-Loading and error states on every screen, 390px pass on all screens, remove the chat fixture, write `orchestrations/reports/web-M<n>.md`, merge `origin/agent/pluto`, rerun all checks, open the milestone PR.
-   100|
+### W7 `web-signup` — `/signup`
+Port 3106. Model: Cursor `grok-4.7-medium`. Label `security-review` (authentication). Fresh reviewer `grok-4.7-high` before grokbot, per PROTOCOL 4, with the reviewer model from PROTOCOL 2b on `origin/agent/pluto`.
+
+Owns: `apps/web/app/signup/**`. One extra line, and nothing else, in `apps/web/proxy.ts`: add `"/signup"` to `PUBLIC_PATH_PREFIXES`. Without that line the proxy sends every signed-out visitor to `/login`, so the page cannot be reached. Do not edit `apps/web/app/login/**` or `apps/web/lib/safe-next.ts`.
+
+Acceptance:
+- Signed out, `GET /signup` is 200, not a redirect to `/login`.
+- Submitting name, email, and password calls `supabase.auth.signUp` with `options.data.name`, then lands on the validated `next` (or `/`) with a session. The profile row's `name` comes from the existing `handle_new_user` trigger. The page does not insert into `profiles`.
+- `next=https://evil.example`, `next=//evil.example`, and `next=/\evil` fall back to `/`. A same-origin path with a query string is preserved.
+- A failed signup shows a generic message and does not add an account-existence leak beyond what Supabase already returns.
+- The page links to `/login`. The reverse link waits for W9.
+- An already signed-in visitor is redirected to the validated `next` or `/`.
+- `npm run typecheck && npm run lint && npm test` green; `npm run build -w @pluto/web` lists `/signup`.
+
+### W8 `web-phone` — `/settings/phone`
+Port 3107. Model: Cursor `composer-2.5`. No `security-review` (session read, no service role, no webhook, no write to `profiles.phone`).
+
+Owns: `apps/web/app/(app)/settings/phone/**`, `apps/web/components/settings/phone/**`.
+
+Acceptance:
+- Signed in, the page shows `profiles.phone` for the session user (explicit `id` filter) or a clear "not linked" state. It never updates `profiles`.
+- The button POSTs to `/api/sms/link-code` with the session cookie and no student id in the body. A `{ code }` JSON body is shown as `Text LINK <code> to <SENDBLUE_FROM_NUMBER>`, or "the Pluto number" when that env var is unset.
+- A missing route (404) shows "Phone linking isn't available yet" and does not invent a code.
+- Works at 390px, with loading and error states.
+- `npm run typecheck && npm run lint && npm test` green; `npm run build -w @pluto/web` lists `/settings/phone`.
+
+### W6 polish (Sun 01:00, orchestrator)
+Loading and error states, 390px pass, remove the chat fixture, signup polish, write the report, sync, open the milestone PR asking for a merge commit. Not this turn.
+
+### W9 shell follow-ups (after #23 merges)
+One small PR: on the login page, a link to `/signup` that keeps `next`; in the app nav, a link to `/settings/phone`. Only if those files are then on `agent/web`.
+
 ## Review and merge
 
-- Every coder PR: grokbot reviews and merges. Nobody else merges.
-- Fresh headless reviewer first, `security-review` label: W1 (login, sessions) and W5 (magic links, service role). W2, W3, W4 skip it.
-- Reviewer command (one at a time, from the coder's worktree), per PROTOCOL 4: `cursor-agent -p --force --trust --model gpt-5.3-codex` with `REVIEW.md` and `.review/diff.patch`.
-- After each merge into `agent/web`: `git pull`, then `npm run typecheck && npm run lint && npm test` here, plus the task's own manual check.
+- Grokbot reviews and merges every coder PR. Nobody else merges. Never `gh pr merge`.
+- Fresh reviewer before grokbot: W7 (signup) and, later, W5 (magic links). W4 and W8 skip it.
+- Reviewer command, one at a time, from the coder worktree: `cursor-agent -p --force --trust --model grok-4.7-high`, with `REVIEW.md` and `.review/diff.patch`.
+- A PR is ready for grokbot only when CI `check` is green and, if labeled, the fresh review says `VERDICT: APPROVE`.
+- After grokbot merges a coder PR: `git pull` here, rerun typecheck, lint, and test, and `herdr tab close` that coder's tab.
+- Milestone PRs ask grokbot for a merge commit, not a squash. Coder PRs do not ask for a merge method.
 
 ## Risks
 
 | Risk | Handling |
 | --- | --- |
-   110|| No `files`/`file_pages` rows until F2 | W2 inserts one temporary `files` row for the demo student and uploads a locally generated PDF to `notes/<student_id>/<file_id>.pdf` in the shared local stack, tests, then deletes both. No PDF and no fixture row is committed. Re-verify against the real seed after F2 merges. |
-| `/api/chat` does not exist yet (assistant slice) | W4 builds against `ChatStreamEvent` with a dev-only fixture; M2 is only opened after the chat screen has run against the real route. |
-| `consumeMagicLink` not available | W5 stays queued; if F2 slips, M2 ships without it and W5 becomes its own PR. |
-| Memory (16 GB machine, ~2 GB free) | 1 coder while under 2 GB free, 2 above; no `next dev` left running; coder tabs closed as soon as their PR merges. |
-| Next 16 renamed middleware to `proxy.ts` and made `params`/`searchParams` promises | Every brief points at `apps/web/AGENTS.md` and `node_modules/next/dist/docs/`. |
-| Lockfile conflicts between coders | Only W1 touches `apps/web/package.json` and `package-lock.json`. |
+| #23 still open, so shadcn and `safe-next` are absent | Tailwind only. Signup keeps its own `next` check under `app/signup/`. W9 switches the login link on after #23. |
+| `/signup` is not public in `proxy.ts` | W7 adds that one prefix. The PR is `security-review`. |
+| `consumeMagicLink` not on `agent/web` | W5 stays queued. Do not reimplement the helper in the route. |
+| `POST /api/sms/link-code` is the assistant slice | W8 calls it and handles 404. It does not create the route and does not write `profiles.phone`. The column-level "name only" update policy is not on `agent/web` yet (foundation harden migration), so the page must not issue an update at all. |
+| `/api/chat` is not on `agent/web` or `agent/pluto` yet | W4 implements the contract client. A dev fixture covers local checks until the route exists; the 17:00 bar is the same UI against the real route. |
+| Free RAM fell to 1.04 GB before spawn | Two coders is the cap, and zero while under 2 GB. Do not start `next dev` in this worktree. Do not close the web-shell or web-notes tabs. |
+| Squash ancestry vs `agent/pluto` | Sync is a separate PR before every milestone. Feature PRs stay off `agent/web`. The milestone body asks for a merge commit. |

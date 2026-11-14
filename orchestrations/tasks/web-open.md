@@ -4,7 +4,7 @@ Branch `agent/web-open`, worktree `C:/Pluto-web-open`, PR into **`agent/web`**. 
 
 A student gets an SMS with a one-time link, taps it on their phone, and lands signed in on the exact notes page. This is the most security-sensitive route in the web slice: it uses the service-role key and it creates a session. Your PR is labeled `security-review` and gets a fresh reviewer before grokbot.
 
-**Prerequisite:** core's `consumeMagicLink` (foundation F2). Do not start until the orchestrator tells you it is on `agent/web`; check with `Select-String -Path packages/core/src/magic-links.ts -Pattern "consumeMagicLink"`.
+**Prerequisite:** core's `consumeMagicLink` (foundation F2). Do not start until the orchestrator tells you it is on `agent/web`; check with `Select-String -Path packages/core/src/magic-links.ts -Pattern "consumeMagicLink"`. As of the 2026-11-14 restart that file is only on `origin/agent/foundation`, not on `agent/web` or `origin/agent/pluto`. Model when you are started: Cursor `grok-4.7-medium`.
 
 ## Read first
     10|- `CLAUDE.md`, `orchestrations/files/BRIEF.md`, `orchestrations/plans/web.md`.

@@ -1,14 +1,19 @@
 # Coder task: web-chat (chat screen)
 
-Branch `agent/web-chat`, worktree `C:/Pluto-web-chat`, PR into **`agent/web`**. Port **3104**. Orchestrator: web. Build step 5 (UI half).
+Branch `agent/web-chat`, worktree `C:/Pluto-web-chat`, PR into **`agent/web`**. Port **3104**. Orchestrator: web. Build step 5 (UI half). Model: Cursor `composer-2.5`.
 
 A Claude-style chat on a phone. The agent route (`POST /api/chat`) belongs to the assistant slice: you build the client against the contract, not against their code.
+
+## Base branch
+PR #23 (login, app shell, shadcn, nav) and PR #34 (`/signup`) are merged into `agent/web`. Your branch is cut from that tip. Reuse `apps/web/components/ui/**` and the `(app)` layout. Do not edit the layout, the nav, the login page, `apps/web/proxy.ts`, or `apps/web/lib/safe-next.ts`. Do not add a dependency unless the screen cannot be built without it; if you add one, it is a single package and you list it in the PR body.
+
+The Sat 17:00 bar is this screen talking to the real `POST /api/chat`. That route is not on `agent/web` yet (assistant owns it). Build the client against `ChatStreamEvent` so it works unchanged when the route appears. Use the dev fixture only while `POST /api/chat` 404s, and only when `NEXT_PUBLIC_PLUTO_CHAT_FIXTURE=1` and `NODE_ENV` is not `production`. Stop the dev server when each check finishes.
 
 ## Read first
 - `CLAUDE.md`, `orchestrations/files/BRIEF.md`, `orchestrations/plans/web.md`.
 - `apps/web/AGENTS.md`: **this is Next 16, not the Next you know.** Read the relevant guides in `node_modules/next/dist/docs/` (resolve from `apps/web`) first.
     10|- `packages/core/src/contract.ts`: `ChatRequest`, `ChatStreamEvent`, `CHAT_STREAM_CONTENT_TYPE` (`application/x-ndjson`), `ENDPOINTS.chat`, and `deep-links.ts` (`notePath`). **Never edit `packages/core/**` or `docs/plan.md`.**
-- Shell landed by `web-shell`: `apps/web/components/ui/**`, nav, theme tokens, `(app)` layout and error boundaries. Reuse them; do not restyle them.
+- The `(app)` layout, nav, and `components/ui` landed with PR #23. Your page renders inside that shell. Use the existing primitives. Do not restyle shared files.
 
 The stream contract, exactly: `POST /api/chat` with `{ sessionId?, message }` returns newline-delimited JSON, **one `ChatStreamEvent` per line**, ending with exactly one `done` or one `error`:
 - `{ type: "text", delta }` — append in order.
