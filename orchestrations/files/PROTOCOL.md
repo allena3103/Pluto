@@ -33,6 +33,14 @@ Claude coders, reviewers and orchestrators all share Allen's one Claude 5-hour m
 - Use a Claude coder only for work that clearly needs it, and only while your status bar shows the 5-hour meter under 60%.
 - Cursor coders get the same brief and protocol; their pane is still checked with `herdr agent read`. If `herdr agent wait` never reports idle for a Cursor agent, read the pane to judge completion.
 
+## 2c. Memory cap (16 GB machine, shared by everyone)
+The machine has 16 GB and already ran out once (background shells were killed).
+- At most 2 coders running at once per orchestrator. Queue the rest.
+- Run reviewers one at a time.
+- Never leave `npm run dev` or `next dev` running after a check; stop it. Only one dev server per worktree at a time.
+- Close a coder's tab as soon as its PR is merged; an idle agent still holds memory.
+- Before spawning, check free memory (`powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB"`); under 2 GB free, wait for a running coder to finish.
+
 ## 3. Coder brief must contain
 Goal, owned files, contract items, acceptance checks (observable commands and expected output), port, migration sub-range, which mocks to use, "push after every commit", PR target `agent/<orch>`, and the PR body checklist (contract items touched, check output tails, how to UI-test).
 

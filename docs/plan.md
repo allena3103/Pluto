@@ -174,3 +174,4 @@ Director-owned. Newest last.
 | 2026-11-13 | `packages/core` owns shared helpers used by several surfaces: magic links, `sendSms` (simulator + Sendblue), ICS builder, deep links. Deep-link format `/notes/<fileId>?page=<n>`, 1-based. |
 | 2026-11-13 | Mocks for keyless development: `PLUTO_LLM=mock`, `SMS_PROVIDER=simulator`, `CANVAS_MODE=fixtures`. |
 | 2026-11-13 | Agent loop (web chat + SMS) uses the Google Gemini API instead of the Anthropic API (Gemini is a sponsor). Env: `GEMINI_API_KEY`, `GEMINI_MODEL`; `PLUTO_LLM=mock|gemini`. Claude stays the MCP client in the demo. |
+| 2026-11-13 | `/api/alerts/demo` accepts either the signed-in student's session (studentId must equal the session user) or `INTERNAL_API_SECRET` (for a timer). |
