@@ -6,7 +6,7 @@ import {
   type ToolOutput,
 } from "../contract";
 import { resolveCourse } from "./resolve-course";
-import { fetchFilePagesForFiles, pageDeepLink, toDbToolError } from "./shared";
+import { fetchAllRows, fetchFilePagesForFiles, pageDeepLink } from "./shared";
 
 export interface GetRecentNotesOptions {
   textCapChars?: number;
@@ -21,19 +21,23 @@ export async function getRecentNotes(
   const cutoff = new Date(Date.now() - input.days * 24 * 60 * 60 * 1000).toISOString();
   const cap = options.textCapChars ?? RECENT_NOTES_TEXT_CAP_CHARS;
 
-  const { data, error } = await ctx.db
-    .from("files")
-    .select("id, title, week_label, added_at, page_count")
-    .eq("student_id", ctx.studentId)
-    .eq("course_id", course.courseId)
-    .eq("ingest_status", "ready")
-    .gte("added_at", cutoff)
-    .order("added_at", { ascending: true })
-    .order("id", { ascending: true })
-    .limit(5000);
-  if (error) throw toDbToolError(error);
-
-  const files = data ?? [];
+  const files = await fetchAllRows<{
+    id: string;
+    title: string;
+    week_label: string | null;
+    added_at: string;
+    page_count: number | null;
+  }>(
+    ctx.db
+      .from("files")
+      .select("id, title, week_label, added_at, page_count")
+      .eq("student_id", ctx.studentId)
+      .eq("course_id", course.courseId)
+      .eq("ingest_status", "ready")
+      .gte("added_at", cutoff)
+      .order("added_at", { ascending: true })
+      .order("id", { ascending: true }),
+  );
   const pagesByFile = await fetchFilePagesForFiles(
     ctx,
     files.map((file) => file.id),
@@ -63,7 +67,7 @@ export async function getRecentNotes(
     }
 
     const totalPageCount = file.page_count ?? filePages.length;
-    if (pages.length < filePages.length) truncated = true;
+    if (pages.length < totalPageCount) truncated = true;
 
     return {
       fileId: file.id,

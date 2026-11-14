@@ -1,0 +1,234 @@
+[
+  {
+    "file": "hist105-week1-printing-and-reformation.pdf",
+    "courseKey": "history105",
+    "title": "Week 1: Printing and the Reformation",
+    "weekLabel": "Week 1",
+    "addedDaysAgo": 20,
+    "pages": [
+      {
+        "page": 1,
+        "fact": "Johannes Gutenberg finished his printed Bible in Mainz around 1455, using movable metal type.",
+        "query": "Gutenberg Mainz movable type"
+      },
+      {
+        "page": 2,
+        "fact": "Martin Luther circulated his Ninety-five Theses in Wittenberg in 1517, attacking the sale of indulgences.",
+        "query": "Ninety-five Theses Wittenberg indulgences"
+      },
+      {
+        "page": 3,
+        "fact": "The Peace of Augsburg in 1555 let each German prince choose the religion of his territory, summed up as cuius regio, eius religio.",
+        "query": "Peace of Augsburg cuius regio"
+      },
+      {
+        "page": 4,
+        "fact": "The Council of Trent met between 1545 and 1563 and reaffirmed Catholic doctrine while reforming clerical training through seminaries.",
+        "query": "Council of Trent seminaries"
+      }
+    ]
+  },
+  {
+    "file": "hist105-week2-columbian-exchange.pdf",
+    "courseKey": "history105",
+    "title": "Week 2: The Columbian Exchange",
+    "weekLabel": "Week 2",
+    "addedDaysAgo": 17,
+    "pages": [
+      {
+        "page": 1,
+        "fact": "The historian Alfred Crosby coined the term Columbian Exchange in 1972 to describe the transfer of plants, animals and diseases across the Atlantic.",
+        "query": "Alfred Crosby coined Columbian Exchange"
+      },
+      {
+        "page": 2,
+        "fact": "Potatoes and maize from the Americas raised calorie yields per acre in Europe and China, supporting population growth after 1700.",
+        "query": "potatoes maize calorie yields"
+      },
+      {
+        "page": 3,
+        "fact": "Smallpox reached Hispaniola by 1518, and epidemics killed a large share of Indigenous populations within a century of contact.",
+        "query": "smallpox Hispaniola epidemics"
+      },
+      {
+        "page": 4,
+        "fact": "The silver mountain of Potosi, in present-day Bolivia, supplied Spanish coins that paid for Chinese silk and porcelain through Manila after 1571.",
+        "query": "Potosi silver Manila"
+      }
+    ]
+  },
+  {
+    "file": "hist105-week3-scientific-revolution.pdf",
+    "courseKey": "history105",
+    "title": "Week 3: The Scientific Revolution",
+    "weekLabel": "Week 3",
+    "addedDaysAgo": 12,
+    "pages": [
+      {
+        "page": 1,
+        "fact": "Nicolaus Copernicus published On the Revolutions of the Heavenly Spheres in 1543, placing the Sun rather than the Earth at the centre.",
+        "query": "Copernicus Revolutions Heavenly Spheres"
+      },
+      {
+        "page": 2,
+        "fact": "Galileo Galilei turned a telescope to the sky in 1609 and reported four moons orbiting Jupiter in his Starry Messenger of 1610.",
+        "query": "Galileo telescope moons Jupiter"
+      },
+      {
+        "page": 3,
+        "fact": "Francis Bacon argued in the Novum Organum of 1620 that knowledge should be built by induction from organised experiment.",
+        "query": "Francis Bacon Novum Organum induction"
+      },
+      {
+        "page": 4,
+        "fact": "Isaac Newton's Principia of 1687 stated three laws of motion and a law of universal gravitation that covered both falling apples and orbiting planets.",
+        "query": "Newton Principia universal gravitation"
+      }
+    ]
+  },
+  {
+    "file": "hist105-week4-enlightenment.pdf",
+    "courseKey": "history105",
+    "title": "Week 4: The Enlightenment",
+    "weekLabel": "Week 4",
+    "addedDaysAgo": 9,
+    "pages": [
+      {
+        "page": 1,
+        "fact": "Immanuel Kant answered the question What is Enlightenment in 1784 with the motto Sapere aude, dare to know.",
+        "query": "Kant Sapere aude"
+      },
+      {
+        "page": 2,
+        "fact": "John Locke's Two Treatises of Government, published in 1689, argued that rulers hold power in trust to protect life, liberty and property.",
+        "query": "Locke Two Treatises trust property"
+      },
+      {
+        "page": 3,
+        "fact": "Montesquieu's The Spirit of the Laws in 1748 proposed separating legislative, executive and judicial powers so that each could check the others.",
+        "query": "Montesquieu Spirit of the Laws separation"
+      },
+      {
+        "page": 4,
+        "fact": "Denis Diderot and Jean d'Alembert edited the Encyclopedie, whose first volume appeared in Paris in 1751.",
+        "query": "Diderot d'Alembert Encyclopedie"
+      }
+    ]
+  },
+  {
+    "file": "hist105-week5-french-revolution.pdf",
+    "courseKey": "history105",
+    "title": "Week 5: The French Revolution",
+    "weekLabel": "Week 5",
+    "addedDaysAgo": 5,
+    "pages": [
+      {
+        "page": 1,
+        "fact": "The Estates-General met at Versailles in May 1789 for the first time since 1614, called to solve a royal debt crisis.",
+        "query": "Estates-General Versailles debt crisis"
+      },
+      {
+        "page": 2,
+        "fact": "Parisians stormed the Bastille on 14 July 1789, and in August the Assembly abolished feudal privileges.",
+        "query": "stormed Bastille feudal privileges"
+      },
+      {
+        "page": 3,
+        "fact": "The Committee of Public Safety, dominated by Maximilien Robespierre, directed the Terror of 1793 and 1794 until his fall in the month of Thermidor.",
+        "query": "Committee of Public Safety Robespierre Thermidor"
+      },
+      {
+        "page": 4,
+        "fact": "Napoleon Bonaparte seized power in the coup of 18 Brumaire in November 1799 and issued the Civil Code in 1804.",
+        "query": "Napoleon Brumaire Civil Code"
+      }
+    ]
+  },
+  {
+    "file": "hist105-week6-industrial-revolution.pdf",
+    "courseKey": "history105",
+    "title": "Week 6: The Industrial Revolution",
+    "weekLabel": "Week 6",
+    "addedDaysAgo": 2,
+    "pages": [
+      {
+        "page": 1,
+        "fact": "Abundant coal near navigable water, high wages and cheap energy made labour-saving machines pay in Britain earlier than elsewhere.",
+        "query": "coal navigable water labour-saving machines"
+      },
+      {
+        "page": 2,
+        "fact": "James Watt patented a separate condenser in 1769, which cut the fuel a steam engine burned and made it useful beyond coal mines.",
+        "query": "James Watt separate condenser"
+      },
+      {
+        "page": 3,
+        "fact": "Richard Arkwright opened a water-powered cotton spinning mill at Cromford in 1771, an early model of the factory system.",
+        "query": "Arkwright Cromford spinning mill"
+      },
+      {
+        "page": 4,
+        "fact": "Luddites broke stocking frames and power looms in Nottinghamshire and Yorkshire between 1811 and 1816 to protest falling wages.",
+        "query": "Luddites stocking frames Nottinghamshire"
+      }
+    ]
+  },
+  {
+    "file": "bio151-week5-cellular-respiration.pdf",
+    "courseKey": "biology151",
+    "title": "Week 5: Cellular Respiration",
+    "weekLabel": "Week 5",
+    "addedDaysAgo": 10,
+    "pages": [
+      {
+        "page": 1,
+        "fact": "Aerobic respiration yields roughly 30 to 32 ATP per glucose, far more than the 2 ATP from glycolysis alone.",
+        "query": "aerobic respiration ATP per glucose"
+      },
+      {
+        "page": 2,
+        "fact": "Glycolysis takes place in the cytosol and splits one glucose into two pyruvate molecules without using oxygen.",
+        "query": "glycolysis cytosol pyruvate"
+      },
+      {
+        "page": 3,
+        "fact": "The citric acid cycle, also called the Krebs cycle, runs in the mitochondrial matrix and releases carbon dioxide.",
+        "query": "Krebs cycle mitochondrial matrix"
+      },
+      {
+        "page": 4,
+        "fact": "ATP synthase uses a proton gradient across the inner mitochondrial membrane to make ATP, a process called chemiosmosis.",
+        "query": "ATP synthase proton gradient chemiosmosis"
+      }
+    ]
+  },
+  {
+    "file": "stat240-week6-sampling-distributions.pdf",
+    "courseKey": "statistics240",
+    "title": "Week 6: Sampling Distributions",
+    "weekLabel": "Week 6",
+    "addedDaysAgo": 4,
+    "pages": [
+      {
+        "page": 1,
+        "fact": "A sampling distribution is the distribution of a statistic, such as the sample mean, over all possible samples of the same size.",
+        "query": "sampling distribution statistic all possible samples"
+      },
+      {
+        "page": 2,
+        "fact": "The standard error of the mean equals the population standard deviation divided by the square root of the sample size.",
+        "query": "standard error square root sample size"
+      },
+      {
+        "page": 3,
+        "fact": "The central limit theorem says the sample mean is approximately normal for large samples, whatever the shape of the population, with n of at least 30 as a common rule of thumb.",
+        "query": "central limit theorem approximately normal"
+      },
+      {
+        "page": 4,
+        "fact": "A 95 percent confidence interval for a mean is the sample mean plus or minus about 1.96 standard errors.",
+        "query": "confidence interval 1.96 standard errors"
+      }
+    ]
+  }
+]

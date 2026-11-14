@@ -1,7 +1,7 @@
 import type { ToolContext } from "../context";
 import { TOOLS, type ToolArgs, type ToolOutput } from "../contract";
 import { resolveCourse } from "./resolve-course";
-import { toDbToolError } from "./shared";
+import { fetchAllRows } from "./shared";
 
 interface GroupRow {
   id: string;
@@ -88,42 +88,38 @@ export async function getGrades(
     .from("courses")
     .select("id, name")
     .eq("student_id", ctx.studentId)
-    .order("name", { ascending: true })
-    .limit(5000);
+    .order("name", { ascending: true });
   if (resolvedCourse) courseQuery = courseQuery.eq("id", resolvedCourse.courseId);
-  const { data: courses, error: coursesError } = await courseQuery;
-  if (coursesError) throw toDbToolError(coursesError);
-
-  const courseRows = (courses ?? []) as CourseRow[];
+  const courseRows = await fetchAllRows<CourseRow>(courseQuery);
   const courseIds = courseRows.map((course) => course.id);
   if (courseIds.length === 0) return { courses: [] };
 
-  const { data: groups, error: groupsError } = await ctx.db
-    .from("grade_groups")
-    .select("id, course_id, name, weight_percent")
-    .eq("student_id", ctx.studentId)
-    .in("course_id", courseIds)
-    .order("name", { ascending: true })
-    .limit(5000);
-  if (groupsError) throw toDbToolError(groupsError);
+  const groups = await fetchAllRows<GroupRow>(
+    ctx.db
+      .from("grade_groups")
+      .select("id, course_id, name, weight_percent")
+      .eq("student_id", ctx.studentId)
+      .in("course_id", courseIds)
+      .order("name", { ascending: true }),
+  );
 
-  const { data: assignments, error: assignmentsError } = await ctx.db
-    .from("assignments")
-    .select("course_id, grade_group_id, graded, points_possible, score")
-    .eq("student_id", ctx.studentId)
-    .in("course_id", courseIds)
-    .limit(10000);
-  if (assignmentsError) throw toDbToolError(assignmentsError);
+  const assignments = await fetchAllRows<AssignmentRow>(
+    ctx.db
+      .from("assignments")
+      .select("course_id, grade_group_id, graded, points_possible, score")
+      .eq("student_id", ctx.studentId)
+      .in("course_id", courseIds),
+  );
 
   const groupsByCourse = new Map<string, GroupRow[]>();
-  for (const group of (groups ?? []) as GroupRow[]) {
+  for (const group of groups) {
     const rows = groupsByCourse.get(group.course_id) ?? [];
     rows.push(group);
     groupsByCourse.set(group.course_id, rows);
   }
 
   const assignmentsByCourse = new Map<string, AssignmentRow[]>();
-  for (const assignment of (assignments ?? []) as AssignmentRow[]) {
+  for (const assignment of assignments) {
     const rows = assignmentsByCourse.get(assignment.course_id) ?? [];
     rows.push(assignment);
     assignmentsByCourse.set(assignment.course_id, rows);

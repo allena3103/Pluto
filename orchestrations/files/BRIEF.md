@@ -9,15 +9,21 @@ In Claude, a student types "build me a study guide from my History 105 notes fro
 3. Every surface (MCP, web chat, SMS) behaves the same because it calls the same `packages/core` functions.
 4. Polish only after 1-3 work. Cut from the bottom of the build order if time runs short.
 
-## Timeline (building at the event, submission ~Sun 2026-11-15 09:00 EST)
-| Target (EST) | Milestone |
-| --- | --- |
-| Sat 01:00 | F1 merged: scaffold, CI, schema + RLS, seed, contract.ts, auth shell |
-| Sat 05:00 | F2 merged: synthetic PDFs, ingest, FTS, all core tool functions, magic links, smoke script |
-| Sat 12:00 | MCP in Claude builds a study guide (backup video recorded) |
-| Sat 20:00 | Web chat + PDF viewer + grades; SMS round trip; alerts + ICS |
-| Sat 22:00 | Live Canvas sync |
-| Sun 03:00 | Feature freeze. Bugs, rehearsal, recordings only |
+## Timeline (revised Sat 10:00 EST; submission ~Sun 2026-11-15 09:00 EST). Cut from the bottom.
+| Target (EST) | Milestone | Owner |
+| --- | --- | --- |
+| Sat 12:00 | F2 (ingest, helpers, tool fixes) on `agent/pluto`; first Vercel deploy from `main` | foundation, director |
+| Sat 14:00 | Claude connected via the demo URL token; study guide with page citations works on the deployed app; backup video | mcp |
+| Sat 17:00 | Web: notes viewer, `/open` magic links, chat with Gemini, sign-up | web, assistant |
+| Sat 19:00 | SMS round trip, phone linking, crunch-week alert, ICS feed | assistant |
+| Sat 21:00 | OAuth sign-in for Claude, then the ChatGPT test | mcp |
+| Sat 23:00 | Live Canvas sync with Allen's token, deadline-change alert | canvas |
+| Sun 01:00 | Sign-up polish, PWA, loading and error states | web |
+| Sun 03:00 | Feature freeze. Bugs, rehearsal, recordings only | all |
+
+Integration cadence: every planner opens a milestone PR into `agent/pluto` about every 2 hours, or as soon as a row above works on its branch. Grokbot merges milestone PRs with a merge commit (not squash). After each one, the director runs the full checks and smoke on `agent/pluto` and opens an `agent/pluto` -> `main` PR; Allen merges it, which deploys to Vercel.
+
+Foundation retires after its F2 milestone merges; from then on the director owns `packages/core/**`, `supabase/config.toml`, CI and root configs. Request changes through the director.
 
 ## Stack
 - npm workspaces monorepo, TypeScript strict, Node 24. No pnpm/bun.
