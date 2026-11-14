@@ -11,6 +11,7 @@ const DEFAULT_MAX_PAGES = 20;
 const MAX_ATTEMPTS = 4;
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_JITTER_MAX_MS = 250;
+const MAX_RETRY_DELAY_MS = 60_000;
 const ORIGIN_MISMATCH_MESSAGE =
   "Canvas pagination link origin does not match the configured base URL.";
 
@@ -33,7 +34,6 @@ export type PaginatedRequestOptions = {
   path: string;
   searchParams?: URLSearchParams;
   endpointName: string;
-  allowForbiddenAsEmpty?: boolean;
 };
 
 type RetryDecision = {
@@ -81,7 +81,6 @@ export function createCanvasHttpClient(options: CanvasHttpClientOptions): Canvas
           fetchImpl,
           timeoutMs,
           sleep,
-          allowForbiddenAsEmpty: requestOptions.allowForbiddenAsEmpty ?? false,
         });
 
         const normalized = normalizeArrayBody(pageResult.data);
@@ -168,7 +167,6 @@ async function requestPage(options: {
   fetchImpl: typeof fetch;
   timeoutMs: number;
   sleep: (ms: number) => Promise<void>;
-  allowForbiddenAsEmpty: boolean;
 }): Promise<RequestPageResult> {
   const requestUrl = options.includeAuthHeader
     ? urlForTokenRequest(options.url, options.baseUrl, options.path, options.token)
@@ -205,15 +203,12 @@ async function requestPage(options: {
       }
 
       if (response.ok) {
-        const data = await safeReadResponseBody(response);
+        const data = await safeReadResponseBody(response, options.path);
         return { data, headers: response.headers };
       }
 
       const errorBody = await safeReadErrorText(response);
       const retryDecision = classifyRetry(response, errorBody);
-      if (response.status === 403 && !retryDecision.isRateLimit && options.allowForbiddenAsEmpty) {
-        return { data: [], headers: response.headers };
-      }
 
       if (!retryDecision.retryable) {
         throw new CanvasHttpError({
@@ -240,6 +235,7 @@ async function requestPage(options: {
 
       const retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"));
       const waitMs = retryAfterMs ?? computeBackoffMs(attempt);
+      assertRetryDelay(waitMs, response.status, options.path);
       await options.sleep(waitMs);
       continue;
     } catch (error) {
@@ -268,6 +264,7 @@ async function requestPage(options: {
       }
 
       const waitMs = computeBackoffMs(attempt);
+      assertRetryDelay(waitMs, 500, options.path);
       await options.sleep(waitMs);
     }
   }
@@ -286,7 +283,7 @@ function normalizeArrayBody(data: unknown): unknown[] {
   return Array.isArray(data) ? data : [];
 }
 
-async function safeReadResponseBody(response: Response): Promise<unknown> {
+async function safeReadResponseBody(response: Response, requestPath: string): Promise<unknown> {
   if (response.status === 204) {
     return [];
   }
@@ -294,11 +291,22 @@ async function safeReadResponseBody(response: Response): Promise<unknown> {
   if (text.trim() === "") {
     return [];
   }
-  const parsed = JSON.parse(text) as unknown;
-  if (parsed == null) {
-    return [];
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed == null) {
+      return [];
+    }
+    return parsed;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new CanvasHttpError({
+        status: response.status,
+        requestPath,
+        message: `Canvas response body was not valid JSON (status ${response.status}).`,
+      });
+    }
+    throw error;
   }
-  return parsed;
 }
 
 async function safeReadErrorText(response: Response): Promise<string> {
@@ -334,6 +342,16 @@ function isRateLimit403(headers: Headers, bodyText: string): boolean {
     }
   }
   return false;
+}
+
+function assertRetryDelay(waitMs: number, status: number, requestPath: string): void {
+  if (waitMs > MAX_RETRY_DELAY_MS) {
+    throw new CanvasRateLimitError({
+      status,
+      requestPath,
+      message: "Canvas retry delay exceeded 60 seconds.",
+    });
+  }
 }
 
 function parseRetryAfterMs(value: string | null): number | null {

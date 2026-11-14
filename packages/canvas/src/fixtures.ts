@@ -25,14 +25,14 @@ export function createFixturesFetch(
     const url = normalizeUrl(input, normalizedBase);
     const route = resolveFixtureRoute(url);
     if (!route) {
-      return new Response(JSON.stringify({ error: "fixture-not-found" }), {
-        status: 404,
-        headers: JSON_HEADERS,
-      });
+      return fixtureNotFound();
     }
 
     if (route.kind === "single") {
       const body = await loadFixtureJson(route.filePath, now);
+      if (body === null) {
+        return fixtureNotFound();
+      }
       return new Response(body, { status: 200, headers: JSON_HEADERS });
     }
 
@@ -50,8 +50,18 @@ export function createFixturesFetch(
     }
 
     const body = await loadFixtureJson(pageConfig.filePath, now);
+    if (body === null) {
+      return fixtureNotFound();
+    }
     return new Response(body, { status: 200, headers });
   };
+}
+
+function fixtureNotFound(): Response {
+  return new Response(JSON.stringify({ error: "fixture-not-found" }), {
+    status: 404,
+    headers: JSON_HEADERS,
+  });
 }
 
 function normalizeUrl(input: URL | RequestInfo, fallbackBaseUrl: string): URL {
@@ -107,6 +117,15 @@ function resolveFixtureRoute(url: URL): FixtureRoute | null {
   return null;
 }
 
+function isEnoent(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
+}
+
 function trimTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
@@ -114,9 +133,17 @@ function trimTrailingSlash(value: string): string {
 async function loadFixtureJson(
   relativePath: string,
   nowProvider: () => Date,
-): Promise<string> {
+): Promise<string | null> {
   const fileUrl = new URL(`../fixtures/${relativePath}`, import.meta.url);
-  const rawJson = await readFile(fileUrl, "utf8");
+  let rawJson: string;
+  try {
+    rawJson = await readFile(fileUrl, "utf8");
+  } catch (error) {
+    if (isEnoent(error)) {
+      return null;
+    }
+    throw error;
+  }
   const parsed = JSON.parse(rawJson) as unknown;
   const resolved = resolveTemplates(parsed, nowProvider());
   return JSON.stringify(resolved);

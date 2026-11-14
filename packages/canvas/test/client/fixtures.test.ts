@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createCanvasClient } from "../../src/client";
+import { CanvasNotFoundError } from "../../src/types";
 
 describe("canvas fixtures mode", () => {
   it("returns seeded courses, groups, assignments and pdf files", async () => {
@@ -60,6 +61,27 @@ describe("canvas fixtures mode", () => {
     expect(findDueAt(historyAssignments, "seed-101")).toBe("2026-11-20T04:59:00Z");
     expect(findDueAt(historyAssignments, "seed-102")).toBe("2026-11-26T04:59:00Z");
     expect(findDueAt(historyAssignments, "seed-103")).toBe("2026-12-04T04:59:00Z");
+  });
+
+  it("returns CanvasNotFoundError when the fixture file is missing", async () => {
+    const client = createCanvasClient({
+      baseUrl: "https://fixtures.canvas.local",
+      token: "unused",
+      mode: "fixtures",
+    });
+
+    let error: unknown;
+    try {
+      await client.listAssignmentGroups("missing-course-id");
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(CanvasNotFoundError);
+    const notFound = error as CanvasNotFoundError;
+    expect(notFound.status).toBe(404);
+    expect(notFound.message.includes("ENOENT")).toBe(false);
+    expect("code" in notFound && (notFound as { code?: string }).code === "ENOENT").toBe(false);
   });
 
   it("handles DST transitions when resolving due_at templates", async () => {
