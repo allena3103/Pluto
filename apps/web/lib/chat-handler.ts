@@ -204,9 +204,9 @@ export async function handleChat(request: Request, deps: ChatDeps): Promise<Resp
       return [errorEvent(CHAT_ERROR_TEXT)];
     }
 
-    // A reply built from notes pages stays on the Notes page under its class.
+    // A finished reply built from notes pages stays on the Notes page under its class.
     const saved =
-      citations.length > 0 && text !== EMPTY_TEXT
+      citations.length > 0 && !result.partial && text !== EMPTY_TEXT
         ? await saveChatNote(db, {
             studentId: studentId!,
             sessionId,

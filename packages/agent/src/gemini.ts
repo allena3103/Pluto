@@ -191,11 +191,14 @@ export async function runGemini(input: RunAgentInput, runTool: AgentToolRunner):
   let text = "";
   let magicLinkUrl: string | undefined;
   let clarification: Clarification | undefined;
+  // True once the model returns a turn with no tool calls, i.e. a finished answer.
+  let answered = false;
 
   const finish = (): AgentResult => {
     if (clarification) return { text: clarification.intro, citations: [], questions: clarification.questions };
     const reply = text || EMPTY_REPLY_TEXT;
-    return magicLinkUrl ? { text: reply, citations, magicLinkUrl } : { text: reply, citations };
+    const result: AgentResult = magicLinkUrl ? { text: reply, citations, magicLinkUrl } : { text: reply, citations };
+    return answered ? result : { ...result, partial: true };
   };
 
   if (input.signal?.aborted) return finish();
@@ -238,7 +241,10 @@ export async function runGemini(input: RunAgentInput, runTool: AgentToolRunner):
     if (turnText) text = turnText;
 
     const calls = functionCalls(returned);
-    if (calls.length === 0) break;
+    if (calls.length === 0) {
+      answered = true;
+      break;
+    }
 
     try {
       for (const call of calls) {

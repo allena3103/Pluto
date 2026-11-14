@@ -31,6 +31,8 @@ export type AgentResult = {
   citations: AgentCitation[];
   magicLinkUrl?: string;
   questions?: ClarifyingQuestion[];
+  /** The loop stopped (timeout, error, round cap) before a final answer; `text` may be a preamble. */
+  partial?: boolean;
 };
 
 /** One Interactions API turn. Tests pass a fake; production wraps `GoogleGenAI`. */

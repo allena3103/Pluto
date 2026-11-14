@@ -633,4 +633,25 @@ describe("gemini web replies", () => {
     const sms = await runAgent({ llm: "gemini", channel: "sms", message: "q", runTool: async () => ({}), client: linkClient() });
     expect(sms.text).toBe(reply);
   });
+
+  it("marks a reply partial when the loop ends on a preamble, not a final answer", async () => {
+    let calls = 0;
+    const client: AgentModelClient = {
+      interactions: {
+        create: async () => {
+          calls += 1;
+          if (calls === 1) return { steps: [searchCall], output_text: "Let me check your notes." };
+          throw new Error("model down");
+        },
+      },
+    };
+    const cut = await runAgent({ llm: "gemini", channel: "web", message: "q", runTool: async () => searchHit, client });
+    expect(cut.text).toBe("Let me check your notes.");
+    expect(cut.citations).toHaveLength(1);
+    expect(cut.partial).toBe(true);
+
+    const { client: finished } = scriptedClient([searchCall]);
+    const done = await runAgent({ llm: "gemini", channel: "web", message: "q", runTool: async () => searchHit, client: finished });
+    expect(done.partial).toBeUndefined();
+  });
 });

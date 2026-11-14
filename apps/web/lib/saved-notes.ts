@@ -69,12 +69,13 @@ export async function saveChatNote(
 
   let courseName: string | null = null;
   if (courseId) {
-    const { data: course } = await db
+    const { data: course, error: courseError } = await db
       .from("courses")
       .select("name")
       .eq("student_id", input.studentId)
       .eq("id", courseId)
       .maybeSingle();
+    if (courseError) console.error("chat: saved note course lookup failed:", courseError.message);
     courseName = course?.name ?? null;
   }
 
