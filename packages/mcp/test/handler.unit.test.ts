@@ -42,6 +42,31 @@ describe("mcp handler auth", () => {
   });
 });
 
+describe("mcp tool errors", () => {
+  test("invalid input is a tool error from the contract, not a protocol error", async () => {
+    const config = unitConfig();
+    const token = `Bearer ${UNIT_TOKEN}`;
+    const response = await mcpResult(
+      await postMcp(
+        config,
+        rpcBody("tools/call", {
+          name: "get_note_pages",
+          arguments: {
+            fileId: "11111111-1111-4111-8111-111111111111",
+            firstPage: 5,
+            lastPage: 2,
+          },
+        }),
+        token,
+      ),
+    );
+    expect(response.status).toBe(200);
+    const result = response.body.result as { isError?: boolean; content?: Array<{ text?: string }> };
+    expect(result.isError).toBe(true);
+    expect(result.content?.[0]?.text?.startsWith("invalid_input")).toBe(true);
+  });
+});
+
 describe("mcp tools/list", () => {
   test("initialize and tools/list expose the seven contract tools", async () => {
     const config = unitConfig();
