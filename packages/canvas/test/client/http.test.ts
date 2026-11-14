@@ -216,6 +216,38 @@ describe("canvas http client", () => {
     expect(call).toBe(1);
   });
 
+  it("does not retry a 200 body that is not valid JSON", async () => {
+    let call = 0;
+    const sleeps: number[] = [];
+    const fetchImpl: typeof fetch = async () => {
+      call += 1;
+      return new Response("{", { status: 200 });
+    };
+
+    let error: unknown;
+    try {
+      await buildClient(fetchImpl, async (ms) => {
+        sleeps.push(ms);
+      }).getPaginatedArray({
+        path: "/api/v1/courses",
+        endpointName: "courses",
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(CanvasHttpError);
+    expect(error).not.toBeInstanceOf(CanvasRateLimitError);
+    const httpError = error as CanvasHttpError;
+    expect(httpError.status).toBe(200);
+    expect(httpError.message).toContain("not valid JSON");
+    expect(httpError.message).toContain("200");
+    expect(httpError.message.includes("network request failed")).toBe(false);
+    expect(httpError.message.includes(TOKEN)).toBe(false);
+    expect(call).toBe(1);
+    expect(sleeps).toEqual([]);
+  });
+
   it("treats empty body, null body, and [] as empty arrays", async () => {
     const cases = ["", "null", "[]"];
     for (const body of cases) {

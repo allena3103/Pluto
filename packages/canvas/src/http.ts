@@ -206,7 +206,7 @@ async function requestPage(options: {
       }
 
       if (response.ok) {
-        const data = await safeReadResponseBody(response);
+        const data = await safeReadResponseBody(response, options.path);
         return { data, headers: response.headers };
       }
 
@@ -289,7 +289,7 @@ function normalizeArrayBody(data: unknown): unknown[] {
   return Array.isArray(data) ? data : [];
 }
 
-async function safeReadResponseBody(response: Response): Promise<unknown> {
+async function safeReadResponseBody(response: Response, requestPath: string): Promise<unknown> {
   if (response.status === 204) {
     return [];
   }
@@ -297,11 +297,22 @@ async function safeReadResponseBody(response: Response): Promise<unknown> {
   if (text.trim() === "") {
     return [];
   }
-  const parsed = JSON.parse(text) as unknown;
-  if (parsed == null) {
-    return [];
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed == null) {
+      return [];
+    }
+    return parsed;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new CanvasHttpError({
+        status: response.status,
+        requestPath,
+        message: `Canvas response body was not valid JSON (status ${response.status}).`,
+      });
+    }
+    throw error;
   }
-  return parsed;
 }
 
 async function safeReadErrorText(response: Response): Promise<string> {
