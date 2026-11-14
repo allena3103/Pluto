@@ -12,7 +12,6 @@ import {
   createLinkCode,
   issueLinkCode,
   listLinkCodes,
-  normalizePhone,
   selectLinkCodeHashes,
   setLinkCodeExpiresAt,
   type AdminClient,
@@ -61,21 +60,6 @@ function client(url: string, key: string): SupabaseClient<Database> {
     },
   });
 }
-
-describe("normalizePhone", () => {
-  it("keeps a leading plus and the digits", () => {
-    expect(normalizePhone("+1 (413) 555-0123")).toBe("+14135550123");
-  });
-
-  it("adds +1 to a 10-digit number and rejects junk", () => {
-    expect(normalizePhone("4135550123")).toBe("+14135550123");
-    expect(normalizePhone("(413) 555-0123")).toBe("+14135550123");
-    expect(normalizePhone("14135550123")).toBe("+14135550123");
-    expect(normalizePhone("not-a-phone")).toBeNull();
-    expect(normalizePhone("")).toBeNull();
-    expect(normalizePhone("+0123456789")).toBeNull();
-  });
-});
 
 describe("issueLinkCode", () => {
   it("returns 401 and does not call create when userId is null", async () => {

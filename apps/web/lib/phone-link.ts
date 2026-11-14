@@ -1,6 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@pluto/core/database.types";
+import { normalizePhone } from "@pluto/core/sms";
 
 /** How long a freshly minted link code stays usable. */
 export const LINK_CODE_TTL_MS = 15 * 60 * 1000;
@@ -10,8 +11,6 @@ const CODE_LENGTH = 6;
 
 /** Six characters from the unambiguous alphabet, after trim and uppercase. */
 export const LINK_CODE_PATTERN = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
-
-const E164 = /^\+[1-9]\d{6,14}$/;
 
 export type AdminClient = SupabaseClient<Database>;
 
@@ -79,33 +78,6 @@ function mintCode(): string {
 
 function isUniqueViolation(error: DbError): boolean {
   return error.code === "23505";
-}
-
-/**
- * Match the foundation helper that lands later.
- * A leading `+` keeps that plus and the digits. Otherwise a 10-digit number
- * gains `+1`, and an 11-digit number starting with `1` gains `+`. Anything that
- * is not `^\+[1-9]\d{6,14}$` is null.
- */
-export function normalizePhone(phone: string): string | null {
-  const trimmed = phone.trim();
-  if (!trimmed) return null;
-
-  if (trimmed.startsWith("+")) {
-    const candidate = `+${trimmed.slice(1).replace(/\D/g, "")}`;
-    return E164.test(candidate) ? candidate : null;
-  }
-
-  const digits = trimmed.replace(/\D/g, "");
-  let candidate: string;
-  if (digits.length === 10) {
-    candidate = `+1${digits}`;
-  } else if (digits.length === 11 && digits.startsWith("1")) {
-    candidate = `+${digits}`;
-  } else {
-    return null;
-  }
-  return E164.test(candidate) ? candidate : null;
 }
 
 /**
