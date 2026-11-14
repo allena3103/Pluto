@@ -8,6 +8,7 @@ export type CanvasClientOptions = {
   timeoutMs?: number;
   maxPages?: number;
   sleep?: (ms: number) => Promise<void>;
+  now?: () => Date;
 };
 
 export type CanvasCourse = {
