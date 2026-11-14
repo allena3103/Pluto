@@ -4,10 +4,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signupRedirectTarget } from "./safe-next";
 
-export const GENERIC_SIGNUP_ERROR =
-  "Could not create the account. If you already have one, sign in.";
+const GENERIC_SIGNUP_ERROR = "Could not create the account. If you already have one, sign in.";
 
-export const NAME_REQUIRED_ERROR = "Enter your name.";
+const NAME_REQUIRED_ERROR = "Enter your name.";
 
 export type SignupState = {
   error: string | null;
