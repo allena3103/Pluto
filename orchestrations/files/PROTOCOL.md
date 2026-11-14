@@ -33,25 +33,48 @@ Claude coders, reviewers and orchestrators all share Allen's one Claude 5-hour m
 - Use a Claude coder only for work that clearly needs it, and only while your status bar shows the 5-hour meter under 60%.
 - Cursor coders get the same brief and protocol; their pane is still checked with `herdr agent read`. If `herdr agent wait` never reports idle for a Cursor agent, read the pane to judge completion.
 
+## 2c. Memory cap (16 GB machine, shared by everyone)
+The machine has 16 GB and already ran out once (background shells were killed).
+- At most 2 coders running at once per orchestrator. Queue the rest.
+- Run reviewers one at a time.
+- Never leave `npm run dev` or `next dev` running after a check; stop it. Only one dev server per worktree at a time.
+- Close a coder's tab as soon as its PR is merged; an idle agent still holds memory.
+- Before spawning, check free memory (`powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB"`); under 2 GB free, wait for a running coder to finish.
+
 ## 3. Coder brief must contain
 Goal, owned files, contract items, acceptance checks (observable commands and expected output), port, migration sub-range, which mocks to use, "push after every commit", PR target `agent/<orch>`, and the PR body checklist (contract items touched, check output tails, how to UI-test).
 
-## 4. Fresh review (headless, no shared context)
-For every coder PR, run a fresh reviewer in a clean checkout of the PR branch. It gets only CLAUDE.md, REVIEW.md, the contract, the task's goals and acceptance checks, and the diff.
+## 4. Who reviews what
+Grokbot (Allen's GitHub reviewer) reviews and merges every PR: coder PRs into `agent/<orch>` and milestone PRs into `agent/pluto`. It also runs UI checks on the Vercel preview. Nobody else merges.
+
+A fresh headless reviewer is still required, before grokbot sees the PR, for any PR that touches:
+- `supabase/migrations/**`, RLS policies or storage policies
+- authentication: login, sessions, middleware, MCP OAuth or the demo bearer token, `/oauth/consent`
+- magic links (`createMagicLink`, `consumeMagicLink`, `/open/[token]`)
+- the SMS webhook (`/api/sms/inbound`) or any route using the service-role key or `INTERNAL_API_SECRET`
+- Canvas token encryption
+
+Label those PRs `security-review` (`gh pr edit <pr> --add-label security-review`, create the label once if missing). Every other PR skips the fresh reviewer.
+
+Fresh review, for labeled PRs only. It gets only CLAUDE.md, REVIEW.md, the contract, the task's goals and acceptance checks, and the diff:
 ```bash
 git -C C:/Pluto-$NAME diff agent/$ORCH...HEAD > C:/Pluto-$NAME/.review/diff.patch   # .review is gitignored
-claude -p --permission-mode auto "You are a fresh reviewer. Follow REVIEW.md exactly. Goals and acceptance checks: orchestrations/tasks/$NAME.md. Diff: .review/diff.patch (base agent/$ORCH). Write your report to .review/review-1.md and print it." > C:/Pluto-$NAME/.review/review-1.log
+cursor-agent -p --force --trust --model gpt-5.3-codex "You are a fresh reviewer. Follow REVIEW.md exactly. Goals and acceptance checks: orchestrations/tasks/$NAME.md. Diff: .review/diff.patch (base agent/$ORCH). Write your report to .review/review-1.md and print it." > C:/Pluto-$NAME/.review/review-1.log
 gh pr comment <pr> --body-file C:/Pluto-$NAME/.review/review-1.md
 ```
-Run it from the coder's worktree (`cwd`) after the coder is idle. Per section 2b, default to `cursor-agent -p --force --trust --model gpt-5.3-codex` in place of `claude -p`. Never give the reviewer the coder's transcript or your own opinion of the code.
+Run it from the coder's worktree after the coder is idle. Never give the reviewer the coder's transcript or your own opinion of the code.
 
-## 5. Fix loop
-CHANGES REQUIRED -> prompt the coder with the review file path; one fix round; one fresh re-review (new headless session). Still blocking: you decide non-security items; security or contract items go to the director (`herdr agent prompt director ...` is not available; write `orchestrations/escalations/<orch>-<n>.md`, commit, push, and stop that task). APPROVE -> `gh pr merge <pr> --squash --delete-branch=false`, then pull into your worktree.
+## 5. Merge gate and fix loop
+- GitHub can't enforce required checks on this private repo, so the gate is a rule: a PR is ready for grokbot only when CI (`check`) is green and, if labeled, the fresh review says `VERDICT: APPROVE`. State both in the PR body. Never ask grokbot to merge a red PR.
+- Fresh review CHANGES REQUIRED: prompt the coder with the review file path; one fix round; one fresh re-review. Still blocking: security or contract items go to the director (write `orchestrations/escalations/<orch>-<n>.md`, commit, push, stop that task and go idle).
+- Grokbot comments with problems: prompt the coder to fix them on the same branch. If grokbot and the contract disagree, the contract wins; escalate to the director.
+- After grokbot merges a coder PR: `git pull` in your worktree and rerun typecheck, lint, test (and smoke once it exists) yourself. If the merged result is broken, fix it with a new coder PR right away.
+- Track merges with `gh pr view <pr> --json state,mergedAt` when a coder goes idle or grokbot comments; do not poll in a tight loop.
 
 ## 6. Milestone PR to the integration branch
-- Rebase or merge `origin/agent/pluto` into your branch, rerun typecheck/lint/test/smoke yourself, write the final report (`orchestrations/reports/<orch>-<milestone>.md`, see BRIEF), push, and open `gh pr create --base agent/pluto --head agent/<orch>`.
-- The PR body: summary, contract items touched, check output tails, the report path, and a "How to UI-test (for grokbot)" section.
-- Then go idle. The director reviews, waits for grokbot, merges, and prompts you with the next step or with fixes.
+- Merge `origin/agent/pluto` into your branch, rerun typecheck/lint/test/smoke yourself, write the final report (`orchestrations/reports/<orch>-<milestone>.md`, see BRIEF), push, and open `gh pr create --base agent/pluto --head agent/<orch>`.
+- The PR body: summary, contract items touched, check output tails, fresh-review verdicts for labeled PRs, the report path, and a "How to UI-test (for grokbot)" section.
+- Then go idle. Grokbot reviews and merges. The director reruns the checks on `agent/pluto` after each merge and sends you fixes if the combined branch breaks.
 
 ## 7. Hygiene
 - Commit small, push after every commit.
