@@ -17,7 +17,7 @@ Restarted 2026-11-14 on Cursor `grok-4.7-high`. This revision follows the direct
 
 `agent/web` and `origin/agent/pluto` diverged at the F1 squash (`87fbb9f`). Protocol 2e: a later sync is its own PR (`agent/web-sync` into `agent/web`), never mixed into a feature PR. A sync today would not unblock magic links, because those commits are not on `agent/pluto` yet. Do not edit `docs/plan.md` or `orchestrations/files/**`.
 
-Coders: Cursor only, `composer-2.5` (UI) or `grok-4.7-medium` (logic). Fresh reviewers, when required: `grok-4.7-high`. Max **1-2** coders at once. Under 2 GB free RAM, spawn nobody (PROTOCOL 2c). Free RAM at this update was **2.29 GB**, so the ready pair starts after this plan commit. Close a coder's herdr tab as soon as grokbot merges its PR.
+Coders: Cursor only, `composer-2.5` (UI) or `grok-4.7-medium` (logic). Fresh reviewers, when required: `grok-4.7-high`. Max **1-2** coders at once. Under 2 GB free RAM, spawn nobody (PROTOCOL 2c). Free RAM was 2.29 GB when this revision was written and **1.04 GB** before any worktree was created, so W7 and W4 are not running yet. Spawn that pair on the next check that shows at least 2 GB free. Close a coder's herdr tab as soon as grokbot merges its PR.
 
 ## Timeline (BRIEF, Sat 10:00)
 
@@ -58,7 +58,7 @@ Then:
   W9 after #23 merges: link /login -> /signup, and a settings/phone entry in the shell nav
 ```
 
-Spawn this turn: **W7 and W4**. W8 when one of them finishes. W5 only after `consumeMagicLink` is on this branch.
+Next spawn, once free RAM is at least 2 GB: **W7 and W4**. W8 when one of them finishes. W5 only after `consumeMagicLink` is on this branch. Not spawned at 10:15: free RAM fell to 1.04 GB.
 
 ## Milestones (into `agent/pluto`, merge commit)
 
@@ -154,5 +154,5 @@ One small PR: on the login page, a link to `/signup` that keeps `next`; in the a
 | `consumeMagicLink` not on `agent/web` | W5 stays queued. Do not reimplement the helper in the route. |
 | `POST /api/sms/link-code` is the assistant slice | W8 calls it and handles 404. It does not create the route and does not write `profiles.phone`. The column-level "name only" update policy is not on `agent/web` yet (foundation harden migration), so the page must not issue an update at all. |
 | `/api/chat` is not on `agent/web` or `agent/pluto` yet | W4 implements the contract client. A dev fixture covers local checks until the route exists; the 17:00 bar is the same UI against the real route. |
-| Free RAM was 2.29 GB at this update | Two coders is the cap. Do not start `next dev` in this worktree. Do not close the web-shell or web-notes tabs. |
+| Free RAM fell to 1.04 GB before spawn | Two coders is the cap, and zero while under 2 GB. Do not start `next dev` in this worktree. Do not close the web-shell or web-notes tabs. |
 | Squash ancestry vs `agent/pluto` | Sync is a separate PR before every milestone. Feature PRs stay off `agent/web`. The milestone body asks for a merge commit. |
