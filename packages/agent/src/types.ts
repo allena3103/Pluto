@@ -59,6 +59,8 @@ export type RunAgentInput = {
   runTool?: AgentToolRunner;
   createMagicLink?: CreateMagicLink;
   llm?: "mock" | "gemini";
+  /** Server-side only. A route must not copy it from the request body. */
+  model?: string;
   signal?: AbortSignal;
   /** Injected Interactions client. When set, the Gemini path does not construct the SDK client. */
   client?: AgentModelClient;

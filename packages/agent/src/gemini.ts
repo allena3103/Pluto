@@ -147,7 +147,9 @@ async function executeTool(
   }
 }
 
-export function resolveModel(): string {
+export function resolveModel(model?: string): string {
+  const supplied = typeof model === "string" ? model.trim() : "";
+  if (supplied) return supplied;
   const chosen = process.env.GEMINI_MODEL?.trim();
   return chosen || DEFAULT_GEMINI_MODEL;
 }
@@ -192,7 +194,7 @@ export async function runGemini(input: RunAgentInput, runTool: AgentToolRunner):
 
   const tools = buildToolDeclarations(Boolean(input.createMagicLink));
   const steps = historySteps(input.history, input.message);
-  const model = resolveModel();
+  const model = resolveModel(input.model);
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     if (input.signal?.aborted) break;

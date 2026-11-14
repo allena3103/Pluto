@@ -43,6 +43,8 @@ export function runAgent(input: {
   runTool?: AgentToolRunner;
   createMagicLink?: CreateMagicLink;
   llm?: "mock" | "gemini";
+  /** Server-side only. A route must not copy it from the request body. */
+  model?: string;
   signal?: AbortSignal;
   client?: AgentModelClient;
 }): Promise<{ text: string; citations: AgentCitation[]; magicLinkUrl?: string }> {

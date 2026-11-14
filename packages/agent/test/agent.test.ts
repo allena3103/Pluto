@@ -377,27 +377,46 @@ describe("gemini agent", () => {
     }
   });
 
-  it("reads the model id from GEMINI_MODEL and otherwise uses the default", async () => {
+  it("uses a non-empty model id, otherwise GEMINI_MODEL, otherwise the default", async () => {
     type PublicInput = Parameters<typeof runAgent>[0];
     type AcceptsModel = "model" extends keyof PublicInput ? true : false;
-    const acceptsModel: AcceptsModel = false;
-    expect(acceptsModel).toBe(false);
+    const acceptsModel: AcceptsModel = true;
+    expect(acceptsModel).toBe(true);
 
     const previous = process.env.GEMINI_MODEL;
     try {
       process.env.GEMINI_MODEL = "  gemini-from-env  ";
       const supplied = recordingClient();
-      const extra = { model: "client-supplied-id" };
       await runAgent({
         llm: "gemini",
         channel: "web",
         message: "hello",
         runTool: async () => ({}),
         client: supplied.client,
-        ...extra,
+        model: "  client-supplied-id  ",
       });
-      expect(supplied.requests[0]?.model).toBe("gemini-from-env");
-      expect(JSON.stringify(supplied.requests)).not.toContain("client-supplied-id");
+      expect(supplied.requests[0]?.model).toBe("client-supplied-id");
+
+      const blankModel = recordingClient();
+      await runAgent({
+        llm: "gemini",
+        channel: "web",
+        message: "hello",
+        runTool: async () => ({}),
+        client: blankModel.client,
+        model: "   ",
+      });
+      expect(blankModel.requests[0]?.model).toBe("gemini-from-env");
+
+      const fromEnv = recordingClient();
+      await runAgent({
+        llm: "gemini",
+        channel: "web",
+        message: "hello",
+        runTool: async () => ({}),
+        client: fromEnv.client,
+      });
+      expect(fromEnv.requests[0]?.model).toBe("gemini-from-env");
 
       delete process.env.GEMINI_MODEL;
       const fallback = recordingClient();
