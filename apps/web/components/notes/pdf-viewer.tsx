@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from "pdfjs-dist";
+import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { AlertCircle, ChevronLeft, ChevronRight, RefreshCcw, ScanText, Shrink, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
 
 type PdfViewerProps = {
   signedUrl: string;
@@ -142,20 +142,13 @@ export function PdfViewer({ signedUrl, initialPage, pageCountHint, pageTextByNum
         const scale = fitWidth ? fitScale : fitScale * manualZoom;
         const viewport = pdfPage.getViewport({ scale });
 
-        const context = canvas.getContext("2d");
-        if (!context) {
-          throw new Error("missing canvas context");
-        }
-
         const ratio = window.devicePixelRatio || 1;
         canvas.width = Math.floor(viewport.width * ratio);
         canvas.height = Math.floor(viewport.height * ratio);
         canvas.style.width = `${Math.floor(viewport.width)}px`;
         canvas.style.height = `${Math.floor(viewport.height)}px`;
 
-        context.setTransform(ratio, 0, 0, ratio, 0, 0);
-
-        await pdfPage.render({ canvas, canvasContext: context, viewport }).promise;
+        await pdfPage.render({ canvas, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] }).promise;
       } catch {
         if (!cancelled) {
           setView({ kind: "error", message: "Could not render this page. Please retry." });

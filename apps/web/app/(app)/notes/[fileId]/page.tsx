@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PdfViewer } from "@/components/notes/pdf-viewer";
@@ -13,25 +13,32 @@ type FileRow = {
   storage_path: string | null;
 };
 
-function parsePage(rawPage: string | string[] | undefined, pageCount: number | null): number {
+function parsePage(
+  rawPage: string | string[] | undefined,
+  pageCount: number | null,
+): { page: number; wasSanitized: boolean } {
   if (Array.isArray(rawPage)) {
-    return 1;
+    return { page: 1, wasSanitized: true };
   }
 
-  if (!rawPage || !/^[1-9]\d*$/.test(rawPage)) {
-    return 1;
+  if (!rawPage) {
+    return { page: 1, wasSanitized: false };
+  }
+
+  if (!/^[1-9]\d*$/.test(rawPage)) {
+    return { page: 1, wasSanitized: true };
   }
 
   const parsed = Number(rawPage);
   if (!Number.isSafeInteger(parsed) || parsed < 1) {
-    return 1;
+    return { page: 1, wasSanitized: true };
   }
 
   if (pageCount !== null && parsed > pageCount) {
-    return 1;
+    return { page: 1, wasSanitized: true };
   }
 
-  return parsed;
+  return { page: parsed, wasSanitized: false };
 }
 
 type Props = {
@@ -65,7 +72,10 @@ export default async function NoteFilePage({ params, searchParams }: Props) {
     notFound();
   }
 
-  const initialPage = parsePage(page, typedFile.page_count);
+  const { page: initialPage, wasSanitized } = parsePage(page, typedFile.page_count);
+  if (wasSanitized) {
+    redirect(`/notes/${encodeURIComponent(typedFile.id)}?page=1`);
+  }
 
   if (typedFile.ingest_status !== "ready" || !typedFile.storage_path) {
     return (
