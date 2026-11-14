@@ -12,7 +12,8 @@ You are an orchestrator. Read `CLAUDE.md`, `docs/plan.md`, `orchestrations/files
 ORCH=<orch>; TASK=<task>; NAME=$ORCH-$TASK
 git fetch origin && git worktree add C:/Pluto-$NAME -b agent/$NAME agent/$ORCH
 # write the coder brief to orchestrations/tasks/$NAME.md on agent/$ORCH, commit, push, so the worktree has it
-TAB=$(herdr tab create --workspace "$HERDR_WORKSPACE_ID" --cwd C:/Pluto-$NAME --label $NAME --no-focus)
+# Pass your Cursor account through so coders and reviewers bill the same account you do (see 2d):
+TAB=$(herdr tab create --workspace "$HERDR_WORKSPACE_ID" --cwd C:/Pluto-$NAME --label $NAME --no-focus ${CURSOR_API_KEY:+--env CURSOR_API_KEY=$CURSOR_API_KEY})
 PANE=$(echo "$TAB" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).result.root_pane.pane_id))")
 # Claude coder:
 herdr agent start $NAME --kind claude --pane $PANE -- --permission-mode auto
@@ -23,8 +24,15 @@ herdr agent prompt $NAME "Read CLAUDE.md, orchestrations/files/BRIEF.md and orch
 ```
 - Panes open in PowerShell; run the snippet above from your own Bash tool, not inside the pane.
 - If `agent start` returns `agent_not_ready`, run `herdr agent read $NAME --source visible --lines 30`. If it is Claude's "trust this folder" prompt for a `C:/Pluto-*` worktree, accept it (`herdr agent send-keys $NAME down` then `enter`); Allen approved that. Any other approval prompt (MCP servers, new access): do not answer; tell the director.
+- Cursor panes sometimes paste a prompt without submitting it (`agent_prompt_stalled`, screen shows `[Pasted text ...]`). Then run `herdr agent send-keys $NAME enter` once and check it went `working`.
 - Never answer an approval prompt that grants new access (MCP servers, etc.). If a coder is `blocked`, read it with `herdr agent read`; if it needs Allen, tell the director.
-- Track each coder with a background `herdr agent wait $NAME` (no polling). On wake, `herdr agent read $NAME --source recent-unwrapped --lines 80` to see whether it is really done or just paused.
+- Track each coder with a background `herdr agent wait $NAME` (no polling). On wake, `herdr agent read $NAME --source recent-unwrapped --lines 80` to see whether it is really done or just paused. Cursor planners: see 2d.
+
+## 2d. If you are a Cursor planner
+- You have no background-job notifications. While coders or reviewers are running, block in the foreground with `herdr agent wait <name> --timeout 900000` (repeat as needed) and keep your turn going; do not end your turn while your own agents are working.
+- When everything left is waiting on grokbot (PRs open, CI green, nothing running), end your turn with one line starting `WAITING_GROKBOT:` listing the PR numbers. The director watches GitHub and prompts you when they merge or get review comments.
+- Your Cursor account is whatever `CURSOR_API_KEY` is in your environment (empty means the default logged-in account). Never print the key, never write it to a file in a repo, and pass it to coder tabs only via `--env` as in section 2. Headless reviewers inherit it automatically.
+- Model for coders: per 2b. You may pick `claude-opus-5-thinking-high` for a coder only for the hardest task in your slice.
 
 ## 2b. Usage policy: Claude vs Cursor
 Claude coders, reviewers and orchestrators all share Allen's one Claude 5-hour meter (shown in every Claude tab's status bar). Hitting 100% stalls every Claude agent, including you, until it resets.
