@@ -4,6 +4,93 @@ import { findStudentByPhone, normalizePhone, recordInboundSms, sendSms } from ".
 import { SKIP_DB_TESTS } from "../db-env";
 import { createThrowawayUser, deleteUsers, serviceClient, type TestUser } from "../db/helpers";
 
+const SENDBLUE_ENV = {
+  SENDBLUE_API_KEY_ID: "key-id",
+  SENDBLUE_API_SECRET: "secret",
+  SENDBLUE_FROM_NUMBER: "+15557654321",
+} as NodeJS.ProcessEnv;
+
+interface LoggedSms {
+  student_id: string;
+  direction: string;
+  body: string;
+  phone: string;
+  provider: string;
+}
+
+function spyAdmin(result: { data: { id: string } | null; error: { message: string } | null }): {
+  admin: PlutoDb;
+  rows: LoggedSms[];
+} {
+  const rows: LoggedSms[] = [];
+  const query = {
+    insert(row: LoggedSms) {
+      rows.push(row);
+      return query;
+    },
+    select() {
+      return query;
+    },
+    async single() {
+      return result;
+    },
+  };
+  return {
+    admin: {
+      from(table: string) {
+        if (table !== "sms_messages") throw new Error(`unexpected table ${table}`);
+        return query;
+      },
+    } as unknown as PlutoDb,
+    rows,
+  };
+}
+
+describe("sendSms sendblue logging", () => {
+  it("does not log a failed send", async () => {
+    const { admin, rows } = spyAdmin({ data: { id: "should-not-insert" }, error: null });
+    const result = await sendSms(
+      {
+        admin,
+        provider: "sendblue",
+        env: SENDBLUE_ENV,
+        fetch: vi.fn<typeof fetch>().mockResolvedValue(new Response("bad", { status: 500 })),
+      },
+      { studentId: "student-1", to: "+15551234567", body: "nope" },
+    );
+
+    expect(result).toEqual({ ok: false, provider: "sendblue", error: "Sendblue request failed (500)" });
+    expect(rows).toEqual([]);
+  });
+
+  it("returns success when the text was delivered but the log insert fails", async () => {
+    const { admin, rows } = spyAdmin({ data: null, error: { message: "db down" } });
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ id: "sb-delivered" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const result = await sendSms(
+      { admin, provider: "sendblue", env: SENDBLUE_ENV, fetch: fetchImpl },
+      { studentId: "student-1", to: "+15551234567", body: "already sent" },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: true, provider: "sendblue", id: "sb-delivered" });
+    expect(rows).toEqual([
+      {
+        student_id: "student-1",
+        direction: "outbound",
+        body: "already sent",
+        phone: "+15551234567",
+        provider: "sendblue",
+      },
+    ]);
+  });
+});
+
 describe.skipIf(SKIP_DB_TESTS)("sms helpers", () => {
   let admin: PlutoDb;
   const users: Array<TestUser | undefined> = [];
@@ -66,6 +153,19 @@ describe.skipIf(SKIP_DB_TESTS)("sms helpers", () => {
     );
 
     expect(result).toEqual({ ok: true, provider: "sendblue", id: "sb-msg-1" });
+    const { data: logged, error: loggedError } = await admin
+      .from("sms_messages")
+      .select("direction,body,phone,provider")
+      .eq("student_id", user.id)
+      .eq("body", "hello sendblue")
+      .single();
+    if (loggedError || !logged) throw new Error(`failed to read sendblue log: ${loggedError?.message ?? "no data"}`);
+    expect(logged).toMatchObject({
+      direction: "outbound",
+      body: "hello sendblue",
+      phone: "+15551234567",
+      provider: "sendblue",
+    });
     expect(fakeFetch).toHaveBeenCalledTimes(1);
     const call = fakeFetch.mock.calls[0];
     if (!call) throw new Error("expected one fetch call");
@@ -125,6 +225,29 @@ describe.skipIf(SKIP_DB_TESTS)("sms helpers", () => {
       provider: "sendblue",
       error: "missing Sendblue env: SENDBLUE_API_KEY_ID, SENDBLUE_API_SECRET, SENDBLUE_FROM_NUMBER",
     });
+
+    const { count, error: countError } = await admin
+      .from("sms_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", user.id);
+    if (countError) throw new Error(`failed to count sms rows: ${countError.message}`);
+    expect(count).toBe(0);
+  });
+
+  it("reports success when Sendblue delivered but saving the log row fails", async () => {
+    const fakeFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ id: "sb-delivered" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const result = await sendSms(
+      { admin, provider: "sendblue", env: SENDBLUE_ENV, fetch: fakeFetch },
+      { studentId: "00000000-0000-0000-0000-000000000000", to: "+15551234567", body: "already sent" },
+    );
+
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: true, provider: "sendblue", id: "sb-delivered" });
   });
 
   it("records inbound messages", async () => {

@@ -4,6 +4,40 @@ import { buildIcs, calendarFeedUrl, getCalendarFeed, newFeedToken } from "../../
 import { SKIP_DB_TESTS } from "../db-env";
 import { createThrowawayUser, deleteUsers, serviceClient, type TestUser } from "../db/helpers";
 
+function contentLines(ics: string): string[] {
+  return ics.split("\r\n").filter((line) => line.length > 0);
+}
+
+function propertyLines(lines: string[], name: string): string[][] {
+  const groups: string[][] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line?.startsWith(`${name}:`)) continue;
+    const group = [line];
+    for (let next = index + 1; next < lines.length; next += 1) {
+      const continuation = lines[next];
+      if (!continuation?.startsWith(" ")) break;
+      group.push(continuation);
+    }
+    groups.push(group);
+  }
+  return groups;
+}
+
+function unfold(lines: string[]): string {
+  return lines.map((line, index) => (index === 0 ? line : line.slice(1))).join("");
+}
+
+function expectOctetLimit(ics: string): string[] {
+  const lines = contentLines(ics);
+  expect(lines.length).toBeGreaterThan(0);
+  for (const line of lines) {
+    expect(Buffer.byteLength(line, "utf8")).toBeLessThanOrEqual(75);
+    expect(Buffer.from(line, "utf8").toString("utf8")).toBe(line);
+  }
+  return lines;
+}
+
 describe("buildIcs", () => {
   it("writes RFC5545-like ICS output with escaped text, UTC time and folded lines", () => {
     const ics = buildIcs({
@@ -65,6 +99,76 @@ describe("buildIcs", () => {
     for (const line of lines) {
       expect(Buffer.byteLength(line, "utf8")).toBeLessThanOrEqual(75);
     }
+  });
+
+  it("folds a long ASCII value more than once and stays within 75 octets", () => {
+    const title = "A".repeat(400);
+    const ics = buildIcs({
+      calendarName: "Study",
+      now: new Date("2026-11-14T00:00:00.000Z"),
+      events: [
+        {
+          uid: "ascii-long",
+          title,
+          start: new Date("2026-11-14T14:00:00.000Z"),
+          end: new Date("2026-11-14T15:00:00.000Z"),
+        },
+      ],
+    });
+
+    const lines = expectOctetLimit(ics);
+    const [summary] = propertyLines(lines, "SUMMARY");
+    if (!summary) throw new Error("missing SUMMARY");
+    expect(summary.length).toBeGreaterThan(2);
+    expect(summary.some((line) => line.startsWith(" ") && Buffer.byteLength(line, "utf8") === 75)).toBe(true);
+    expect(unfold(summary)).toBe(`SUMMARY:${title}`);
+  });
+
+  it("folds emoji and accented text on octet boundaries without splitting a character", () => {
+    const straddling = `${"a".repeat(66)}é${"b".repeat(71)}🙂${"c".repeat(80)}`;
+    const fitting = `${"a".repeat(63)}🙂${"b".repeat(100)}`;
+    const ics = buildIcs({
+      calendarName: "Calendário",
+      now: new Date("2026-11-14T00:00:00.000Z"),
+      events: [
+        {
+          uid: "mb-boundary",
+          title: straddling,
+          start: new Date("2026-11-14T14:00:00.000Z"),
+          end: new Date("2026-11-14T15:00:00.000Z"),
+        },
+        {
+          uid: "mb-fit",
+          title: fitting,
+          start: new Date("2026-11-14T16:00:00.000Z"),
+          end: new Date("2026-11-14T17:00:00.000Z"),
+        },
+      ],
+    });
+
+    const lines = expectOctetLimit(ics);
+    const [moved, kept] = propertyLines(lines, "SUMMARY");
+    const movedFirst = moved?.[0];
+    const movedSecond = moved?.[1];
+    const movedThird = moved?.[2];
+    const keptFirst = kept?.[0];
+    const keptSecond = kept?.[1];
+    if (!moved || !kept || !movedFirst || !movedSecond || !movedThird || !keptFirst || !keptSecond) {
+      throw new Error("expected folded SUMMARY lines");
+    }
+
+    expect(moved.length).toBeGreaterThan(2);
+    expect(movedFirst).toBe(`SUMMARY:${"a".repeat(66)}`);
+    expect(movedSecond).toBe(` é${"b".repeat(71)}`);
+    expect(movedThird.startsWith(" 🙂")).toBe(true);
+    expect(unfold(moved)).toBe(`SUMMARY:${straddling}`);
+
+    expect(kept.length).toBeGreaterThan(2);
+    expect(keptFirst).toBe(`SUMMARY:${"a".repeat(63)}🙂`);
+    expect(Buffer.byteLength(keptFirst, "utf8")).toBe(75);
+    expect(keptSecond).toBe(` ${"b".repeat(74)}`);
+    expect(Buffer.byteLength(keptSecond, "utf8")).toBe(75);
+    expect(unfold(kept)).toBe(`SUMMARY:${fitting}`);
   });
 
   it("builds a feed url and token", () => {

@@ -104,9 +104,14 @@ export async function sendSms(deps: SmsDeps, input: SendSmsInput): Promise<SendS
   }
 
   const sendResult = await sendWithSendblue(deps.fetch ?? fetch, deps.env ?? process.env, input);
+  if (!sendResult.ok) {
+    // No status column: a failed send logged like a success would show up as delivered.
+    return { ok: false, provider, error: sendResult.error };
+  }
+
   const logged = await insertOutbound(deps.admin, { studentId: input.studentId, to: input.to, body: input.body, provider });
-  if ("error" in logged) return { ok: false, provider, error: logged.error };
-  if (!sendResult.ok) return { ok: false, provider, error: sendResult.error };
+  // The text is already delivered. Reporting failure here would make a retry send it again.
+  if ("error" in logged) return { ok: true, provider, id: sendResult.id };
   return { ok: true, provider, id: sendResult.id || logged.id };
 }
 
