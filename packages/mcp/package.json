@@ -1,0 +1,21 @@
+{
+  "name": "@pluto/mcp",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@pluto/core": "*",
+    "@supabase/supabase-js": "^2.119.0",
+    "zod": "^4.6.7"
+  }
+}
