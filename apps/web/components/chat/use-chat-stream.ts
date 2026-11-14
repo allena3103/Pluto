@@ -188,6 +188,7 @@ export function useChatStream() {
           });
 
           if (response.status === 401) {
+            failAssistant(assistantId, text, "Your session expired. Sign in again.");
             router.push("/login?next=%2Fchat");
             return;
           }
