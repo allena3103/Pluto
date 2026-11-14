@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy, type RenderTask } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { AlertCircle, ChevronLeft, ChevronRight, RefreshCcw, ScanText, Shrink, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -126,6 +126,7 @@ export function PdfViewer({ signedUrl, initialPage, pageCountHint, pageTextByNum
     }
 
     let cancelled = false;
+    let renderTask: RenderTask | null = null;
     const render = async () => {
       const pdf = pdfRef.current;
       const canvas = canvasRef.current;
@@ -136,6 +137,9 @@ export function PdfViewer({ signedUrl, initialPage, pageCountHint, pageTextByNum
 
       try {
         const pdfPage = await pdf.getPage(page);
+        if (cancelled) {
+          return;
+        }
         const baseline = pdfPage.getViewport({ scale: 1 });
         const containerWidth = Math.max(container.clientWidth - 16, 240);
         const fitScale = containerWidth / baseline.width;
@@ -148,8 +152,12 @@ export function PdfViewer({ signedUrl, initialPage, pageCountHint, pageTextByNum
         canvas.style.width = `${Math.floor(viewport.width)}px`;
         canvas.style.height = `${Math.floor(viewport.height)}px`;
 
-        await pdfPage.render({ canvas, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] }).promise;
-      } catch {
+        renderTask = pdfPage.render({ canvas, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] });
+        await renderTask.promise;
+      } catch (err) {
+        if (err instanceof Error && err.name === "RenderingCancelledException") {
+          return;
+        }
         if (!cancelled) {
           setView({ kind: "error", message: "Could not render this page. Please retry." });
         }
@@ -159,6 +167,7 @@ export function PdfViewer({ signedUrl, initialPage, pageCountHint, pageTextByNum
     void render();
     return () => {
       cancelled = true;
+      renderTask?.cancel();
     };
   }, [fitWidth, manualZoom, page, renderTick, view.kind]);
 
@@ -179,38 +188,51 @@ export function PdfViewer({ signedUrl, initialPage, pageCountHint, pageTextByNum
   const canGoNext = pageCount ? page < pageCount : true;
   const currentPageText = useMemo(() => pageTextByNumber[page] ?? null, [page, pageTextByNumber]);
 
-  const onPinchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
-    if (event.touches.length !== 2) {
-      return;
-    }
-    const a = event.touches.item(0);
-    const b = event.touches.item(1);
-    if (!a || !b) {
-      return;
-    }
-    pinchDistanceRef.current = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-    pinchStartZoomRef.current = manualZoom;
+  const manualZoomRef = useRef(manualZoom);
+  useEffect(() => {
+    manualZoomRef.current = manualZoom;
   }, [manualZoom]);
 
-  const onPinchMove = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
-    if (event.touches.length !== 2 || pinchDistanceRef.current === null) {
-      return;
-    }
-    const a = event.touches.item(0);
-    const b = event.touches.item(1);
-    if (!a || !b) {
-      return;
-    }
-    event.preventDefault();
-    const currentDistance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-    const nextZoom = clamp((currentDistance / pinchDistanceRef.current) * pinchStartZoomRef.current, MIN_ZOOM, MAX_ZOOM);
-    setFitWidth(false);
-    setManualZoom(nextZoom);
-  }, []);
+  // React registers touch handlers as passive, so preventDefault only works on a native non-passive listener.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
 
-  const onPinchEnd = useCallback(() => {
-    pinchDistanceRef.current = null;
-  }, []);
+    const distance = (event: TouchEvent): number | null => {
+      const a = event.touches.item(0);
+      const b = event.touches.item(1);
+      return a && b ? Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) : null;
+    };
+    const onStart = (event: TouchEvent) => {
+      if (event.touches.length !== 2) return;
+      const d = distance(event);
+      if (d === null) return;
+      pinchDistanceRef.current = d;
+      pinchStartZoomRef.current = manualZoomRef.current;
+    };
+    const onMove = (event: TouchEvent) => {
+      if (event.touches.length !== 2 || pinchDistanceRef.current === null) return;
+      const d = distance(event);
+      if (d === null) return;
+      event.preventDefault();
+      setFitWidth(false);
+      setManualZoom(clamp((d / pinchDistanceRef.current) * pinchStartZoomRef.current, MIN_ZOOM, MAX_ZOOM));
+    };
+    const onEnd = () => {
+      pinchDistanceRef.current = null;
+    };
+
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd);
+    el.addEventListener("touchcancel", onEnd);
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, [view.kind]);
 
   if (view.kind === "error") {
     return (
@@ -228,6 +250,9 @@ export function PdfViewer({ signedUrl, initialPage, pageCountHint, pageTextByNum
               setView({ kind: "loading" });
               setPage(initialPage);
               setJumpValue(String(initialPage));
+              // The signed URL lasts 60s; ask the server component for a fresh one. The new
+              // signedUrl prop re-runs the load effect. retryCount covers an unchanged URL.
+              router.refresh();
               setRetryCount((value) => value + 1);
             }}
           >
@@ -311,9 +336,6 @@ export function PdfViewer({ signedUrl, initialPage, pageCountHint, pageTextByNum
           <div
             ref={containerRef}
             className="overflow-x-auto rounded-lg border bg-muted/20 p-2"
-            onTouchStart={onPinchStart}
-            onTouchMove={onPinchMove}
-            onTouchEnd={onPinchEnd}
           >
             <canvas ref={canvasRef} className="mx-auto block max-w-none rounded-md bg-white shadow" />
             {view.kind === "loading" ? (
