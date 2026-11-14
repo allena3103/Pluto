@@ -1,21 +1,11 @@
 "use client";
 
-export default function DeadlinesError({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function RouteError({ retry }: { retry: () => void }) {
   return (
     <div className="space-y-4 rounded-xl border border-red-200 bg-red-50 p-4">
-      <h1 className="text-lg font-semibold text-red-900">Could not load deadlines</h1>
-      <p className="text-sm text-red-800">{error.message || "Something went wrong."}</p>
-      <button
-        type="button"
-        onClick={() => reset()}
-        className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
-      >
+      <h2 className="text-lg font-semibold text-red-900">Could not load deadlines</h2>
+      <p className="text-sm text-red-800">Something went wrong. Please try again.</p>
+      <button type="button" onClick={() => retry()} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">
         Try again
       </button>
     </div>

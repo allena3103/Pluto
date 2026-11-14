@@ -2,11 +2,19 @@ import { GradesRequest, GradesResponse } from "@pluto/core/contract";
 import { getGrades } from "@pluto/core/tools/get-grades";
 import { ToolError } from "@pluto/core/tools/tool-error";
 import { createClient } from "@/lib/supabase/server";
-import { getServerEnv } from "@/lib/env";
+import { getServerEnv } from "@/lib/env.server";
 import { makeToolContext } from "@pluto/core/context";
 import { httpStatusForToolError } from "@/components/grades/tool-error-status";
 
 export const dynamic = "force-dynamic";
+
+const ERROR_TEXT: Record<ToolError["code"], string> = {
+  invalid_input: "Invalid request.",
+  course_not_found: "Course not found.",
+  course_ambiguous: "More than one course matches. Be more specific.",
+  file_not_found: "Not found.",
+  db_error: "Something went wrong.",
+};
 
 function parseCourseParam(raw: string | null): string | undefined {
   if (raw === null) return undefined;
@@ -49,8 +57,11 @@ export async function GET(request: Request) {
     return Response.json(body, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof ToolError) {
+      if (error.code === "db_error") {
+        console.error("grades route db_error", error.message);
+      }
       return Response.json(
-        { error: error.message },
+        { error: ERROR_TEXT[error.code] ?? "Something went wrong." },
         { status: httpStatusForToolError(error), headers: { "Cache-Control": "no-store" } },
       );
     }

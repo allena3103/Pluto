@@ -1,6 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { makeToolContext } from "@pluto/core/context";
-import { authenticate, type McpAuthConfig, type McpAuthMode } from "./auth";
+import { authenticate, type AuthResult, type McpAuthConfig, type McpAuthMode } from "./auth";
+import { bearerChallenge } from "./metadata";
 import { createPlutoMcpServer } from "./server";
 
 export type McpHandlerConfig = McpAuthConfig & {
@@ -35,9 +36,9 @@ export async function handleMcpRequest(
   options?: McpRequestOptions,
 ): Promise<Response> {
   const urlMode = options !== undefined;
-  let auth: ReturnType<typeof authenticate>;
+  let auth: AuthResult;
   try {
-    auth = authenticate(request, config, options);
+    auth = await authenticate(request, config, options);
   } catch (error) {
     logFailure("mcp auth failed", error, urlMode);
     return json({ error: "server_error" }, 500);
@@ -47,7 +48,9 @@ export async function handleMcpRequest(
     if (auth.reason === "not_found") {
       return json({ error: "not_found" }, 404);
     }
-    return json({ error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
+    return json({ error: "unauthorized" }, 401, {
+      "WWW-Authenticate": bearerChallenge(config.appUrl, auth.tokenRejected === true),
+    });
   }
 
   if (request.method !== "POST") {

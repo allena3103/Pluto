@@ -24,9 +24,31 @@ export function mockToolCall(message: string): MockCall {
   }
   if (text.includes("course")) return { name: "list_courses", args: {} };
 
-  const args: Record<string, unknown> = { query: message.trim().slice(0, 500), limit: 3 };
+  const args: Record<string, unknown> = { query: mockSearchQuery(message), limit: 3 };
   if (text.includes("history 105")) args.course = "History 105";
   return { name: "search_notes", args };
+}
+
+// Words that describe the request, not the topic.
+const FILLER: Record<string, true> = Object.fromEntries(
+  [
+    "about", "and", "any", "are", "can", "class", "course", "did", "does", "explain", "find", "for", "from",
+    "has", "have", "history", "how", "lecture", "lectures", "mine", "note", "notes", "our", "say", "says",
+    "show", "summarize", "tell", "that", "the", "this", "was", "were", "what", "what's", "whats", "when",
+    "where", "which", "who", "why", "with", "you", "your", "105",
+  ].map((word) => [word, true]),
+);
+
+/**
+ * `search_notes` uses websearch_to_tsquery, which ANDs every word, so a whole question rarely matches.
+ * Keep the topic words and OR them; fall back to the raw message when nothing is left.
+ */
+export function mockSearchQuery(message: string): string {
+  const words = message
+    .toLowerCase()
+    .split(/[^a-z0-9']+/)
+    .filter((word) => word.length > 2 && FILLER[word] !== true);
+  return words.length > 0 ? words.join(" or ").slice(0, 500) : message.trim().slice(0, 500);
 }
 
 type SearchHit = { title: string; page: number; deepLink?: string };

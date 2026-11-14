@@ -1,0 +1,18 @@
+[
+  {
+    "id": "seed-111",
+    "name": "Quiz 4: Photosynthesis",
+    "due_at": "{{due:weeks=1,days=1}}",
+    "points_possible": 25,
+    "assignment_group_id": "seed-bio-quizzes",
+    "submission": { "score": null, "workflow_state": "unsubmitted", "submitted_at": null }
+  },
+  {
+    "id": "seed-112",
+    "name": "Lab Report 3: Mitosis",
+    "due_at": "{{due:weeks=3,days=1}}",
+    "points_possible": 60,
+    "assignment_group_id": "seed-bio-labs",
+    "submission": { "score": null, "workflow_state": "submitted", "submitted_at": "2026-11-30T23:00:00Z" }
+  }
+]

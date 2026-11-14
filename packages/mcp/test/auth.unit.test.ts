@@ -18,8 +18,8 @@ describe("demo token comparison", () => {
     expect(digestEqual("", UNIT_TOKEN)).toBe(false);
   });
 
-  test("a matching bearer of at least 24 characters maps to the configured student", () => {
-    const result = authenticate(request(`Bearer ${UNIT_TOKEN}`), unitConfig({ demoStudentId: studentId }));
+  test("a matching bearer of at least 24 characters maps to the configured student", async () => {
+    const result = await authenticate(request(`Bearer ${UNIT_TOKEN}`), unitConfig({ demoStudentId: studentId }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.method).toBe("demo");
@@ -27,34 +27,34 @@ describe("demo token comparison", () => {
     expect(result.db).toBeDefined();
   });
 
-  test("wrong token, missing header, Basic, unset demo token, and a short demo token are unauthorized", () => {
+  test("wrong token, missing header, Basic, unset demo token, and a short demo token are unauthorized", async () => {
     const enabled = unitConfig();
-    expect(authenticate(request(`Bearer ${"x".repeat(32)}`), enabled).ok).toBe(false);
-    expect(authenticate(request(), enabled).ok).toBe(false);
-    expect(authenticate(request("Basic cGx1dG8="), enabled).ok).toBe(false);
+    expect((await authenticate(request(`Bearer ${"x".repeat(32)}`), enabled)).ok).toBe(false);
+    expect((await authenticate(request(), enabled)).ok).toBe(false);
+    expect((await authenticate(request("Basic cGx1dG8="), enabled)).ok).toBe(false);
 
     const unset = unitConfig({ demoToken: undefined });
-    expect(authenticate(request(`Bearer ${UNIT_TOKEN}`), unset).ok).toBe(false);
+    expect((await authenticate(request(`Bearer ${UNIT_TOKEN}`), unset)).ok).toBe(false);
 
     const short = "short-token";
     const disabled = unitConfig({ demoToken: short });
-    expect(authenticate(request(`Bearer ${short}`), disabled).ok).toBe(false);
+    expect((await authenticate(request(`Bearer ${short}`), disabled)).ok).toBe(false);
   });
 
-  test("query string and cookie tokens are ignored", () => {
+  test("query string and cookie tokens are ignored", async () => {
     const url = `http://127.0.0.1:3301/api/mcp?token=${UNIT_TOKEN}`;
     const headers = new Headers({ cookie: `token=${UNIT_TOKEN}` });
-    const result = authenticate(new Request(url, { method: "POST", headers }), unitConfig());
+    const result = await authenticate(new Request(url, { method: "POST", headers }), unitConfig());
     expect(result.ok).toBe(false);
   });
 
-  test("the url method is on only for flag 1 and a long demo token", () => {
+  test("the url method is on only for flag 1 and a long demo token", async () => {
     expect(demoUrlActive("1", UNIT_TOKEN)).toBe(true);
     expect(demoUrlActive(undefined, UNIT_TOKEN)).toBe(false);
     expect(demoUrlActive("true", UNIT_TOKEN)).toBe(false);
     expect(demoUrlActive("1", "short-token")).toBe(false);
 
-    const matched = authenticate(request(), unitConfig({ demoUrlFlag: "1", demoStudentId: studentId }), {
+    const matched = await authenticate(request(), unitConfig({ demoUrlFlag: "1", demoStudentId: studentId }), {
       urlToken: UNIT_TOKEN,
     });
     expect(matched.ok).toBe(true);
@@ -62,13 +62,13 @@ describe("demo token comparison", () => {
     expect(matched.method).toBe("demo-url");
     expect(matched.studentId).toBe(studentId);
 
-    const hidden = authenticate(request(), unitConfig({ demoStudentId: studentId }), { urlToken: UNIT_TOKEN });
+    const hidden = await authenticate(request(), unitConfig({ demoStudentId: studentId }), { urlToken: UNIT_TOKEN });
     expect(hidden).toEqual({ ok: false, reason: "not_found" });
   });
 
-  test("a bearer token still matches when the url also carries a token query", () => {
+  test("a bearer token still matches when the url also carries a token query", async () => {
     const url = `http://127.0.0.1:3301/api/mcp?access_token=nope`;
-    const result = authenticate(request(`Bearer ${UNIT_TOKEN}`, url), unitConfig());
+    const result = await authenticate(request(`Bearer ${UNIT_TOKEN}`, url), unitConfig());
     expect(result.ok).toBe(true);
   });
 });
