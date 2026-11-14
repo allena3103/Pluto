@@ -282,6 +282,25 @@ describe.skipIf(SKIP_DB_TESTS)("mcp handler against local supabase", () => {
     expect(result.text.startsWith("course_not_found")).toBe(true);
   });
 
+  test("the url token lists courses for the demo student only", async () => {
+    const response = await postMcp(
+      { ...configFor(studentA!.id), demoUrlFlag: "1" },
+      rpcBody("tools/call", { name: "list_courses", arguments: {} }),
+      undefined,
+      "http://127.0.0.1:3301/api/mcp",
+      { urlToken: TOKEN },
+    );
+    const { status, body } = await mcpResult(response);
+    expect(status, JSON.stringify(body)).toBe(200);
+    const result = body.result as { structuredContent?: unknown };
+    const parsed = TOOLS.list_courses.output.parse(result.structuredContent);
+    expect(parsed.courses.some((course) => course.name === courseAName)).toBe(true);
+    const blob = JSON.stringify(parsed);
+    expect(blob).not.toContain(courseBId);
+    expect(blob).not.toContain(studentB!.id);
+    expect(blob).not.toContain(secretB);
+  });
+
   test("an unauthenticated call does not run a tool", async () => {
     const response = await handleMcpRequest(
       new Request("http://127.0.0.1:3301/api/mcp", {

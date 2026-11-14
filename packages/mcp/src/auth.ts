@@ -17,6 +17,11 @@ export type McpAuthConfig = {
    * demo helper.
    */
   demoToken?: string;
+  /**
+   * Raw `PLUTO_DEMO_MCP_URL_ENABLED`. The URL method is on only when this is
+   * exactly `"1"` and `demoToken` is enabled. Any other value leaves it off.
+   */
+  demoUrlFlag?: string;
   demoStudentId: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
@@ -27,12 +32,17 @@ export type AuthSuccess = {
   ok: true;
   studentId: string;
   db: PlutoDb;
-  method: "demo";
+  method: "demo" | "demo-url";
 };
 
 export type AuthFailure = {
   ok: false;
-  reason: "unauthorized";
+  reason: "unauthorized" | "not_found";
+};
+
+/** Set when the request is the URL-token method. The header is not consulted. */
+export type McpAuthMode = {
+  urlToken: string;
 };
 
 export type AuthResult = AuthSuccess | AuthFailure;
@@ -49,6 +59,11 @@ export function digestEqual(left: string, right: string): boolean {
 
 export function demoBearerEnabled(token: string | undefined): token is string {
   return typeof token === "string" && token.length >= DEMO_TOKEN_MIN_LENGTH;
+}
+
+/** URL fallback is on only when the flag is exactly `1` and the demo token is enabled. */
+export function demoUrlActive(flag: string | undefined, token: string | undefined): token is string {
+  return flag === "1" && demoBearerEnabled(token);
 }
 
 /**
@@ -95,10 +110,33 @@ export function authenticateDemo(request: Request, config: McpAuthConfig): AuthS
 }
 
 /**
- * Authenticate an MCP request. Order: demo bearer, then (later) Supabase JWT.
- * Failure is always `{ ok: false, reason: "unauthorized" }` with no token details.
+ * URL-token method. Checks the flag and token config before comparing, so a
+ * disabled fallback never inspects the path token. Mismatch is `not_found`
+ * (the handler responds 404 with no WWW-Authenticate).
  */
-export function authenticate(request: Request, config: McpAuthConfig): AuthResult {
+export function authenticateDemoUrl(urlToken: string, config: McpAuthConfig): AuthResult {
+  const expected = config.demoToken;
+  if (!demoUrlActive(config.demoUrlFlag, expected)) {
+    return { ok: false, reason: "not_found" };
+  }
+  if (!digestEqual(urlToken, expected)) {
+    return { ok: false, reason: "not_found" };
+  }
+  return {
+    ok: true,
+    studentId: config.demoStudentId,
+    db: createServiceRoleClient(config),
+    method: "demo-url",
+  };
+}
+
+/**
+ * Authenticate an MCP request.
+ * With `mode.urlToken`, only the demo-url method runs.
+ * Otherwise: demo bearer, then (later) Supabase JWT.
+ */
+export function authenticate(request: Request, config: McpAuthConfig, mode?: McpAuthMode): AuthResult {
+  if (mode) return authenticateDemoUrl(mode.urlToken, config);
   const demo = authenticateDemo(request, config);
   if (demo) return demo;
   return { ok: false, reason: "unauthorized" };

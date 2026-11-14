@@ -1,4 +1,4 @@
-import { handleMcpRequest, type McpHandlerConfig } from "../src/handler";
+import { handleMcpRequest, type McpHandlerConfig, type McpRequestOptions } from "../src/handler";
 
 export const ACCEPT = "application/json, text/event-stream";
 
@@ -25,13 +25,14 @@ export async function postMcp(
   body: string,
   authorization?: string,
   url = "http://127.0.0.1:3301/api/mcp",
+  options?: McpRequestOptions,
 ): Promise<Response> {
   const headers = new Headers({
     accept: ACCEPT,
     "content-type": "application/json",
   });
   if (authorization !== undefined) headers.set("authorization", authorization);
-  return handleMcpRequest(new Request(url, { method: "POST", headers, body }), config);
+  return handleMcpRequest(new Request(url, { method: "POST", headers, body }), config, options);
 }
 
 export async function mcpResult(response: Response): Promise<{

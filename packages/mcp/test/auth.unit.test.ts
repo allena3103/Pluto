@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { authenticate, digestEqual } from "../src/auth";
+import { authenticate, demoUrlActive, digestEqual } from "../src/auth";
 import { UNIT_TOKEN, unitConfig } from "./request";
 
 const studentId = "22222222-2222-4222-8222-222222222222";
@@ -46,6 +46,24 @@ describe("demo token comparison", () => {
     const headers = new Headers({ cookie: `token=${UNIT_TOKEN}` });
     const result = authenticate(new Request(url, { method: "POST", headers }), unitConfig());
     expect(result.ok).toBe(false);
+  });
+
+  test("the url method is on only for flag 1 and a long demo token", () => {
+    expect(demoUrlActive("1", UNIT_TOKEN)).toBe(true);
+    expect(demoUrlActive(undefined, UNIT_TOKEN)).toBe(false);
+    expect(demoUrlActive("true", UNIT_TOKEN)).toBe(false);
+    expect(demoUrlActive("1", "short-token")).toBe(false);
+
+    const matched = authenticate(request(), unitConfig({ demoUrlFlag: "1", demoStudentId: studentId }), {
+      urlToken: UNIT_TOKEN,
+    });
+    expect(matched.ok).toBe(true);
+    if (!matched.ok) return;
+    expect(matched.method).toBe("demo-url");
+    expect(matched.studentId).toBe(studentId);
+
+    const hidden = authenticate(request(), unitConfig({ demoStudentId: studentId }), { urlToken: UNIT_TOKEN });
+    expect(hidden).toEqual({ ok: false, reason: "not_found" });
   });
 
   test("a bearer token still matches when the url also carries a token query", () => {

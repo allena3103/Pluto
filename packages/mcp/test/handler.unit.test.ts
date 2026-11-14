@@ -42,6 +42,52 @@ describe("mcp handler auth", () => {
   });
 });
 
+describe("mcp demo url token", () => {
+  const listBody = rpcBody("tools/list", {});
+
+  async function urlCall(config: ReturnType<typeof unitConfig>, urlToken: string): Promise<Response> {
+    return postMcp(config, listBody, undefined, "http://127.0.0.1:3301/api/mcp", { urlToken });
+  }
+
+  test("flag unset or not exactly 1 is 404 even with the right token, and does not advertise Bearer", async () => {
+    for (const demoUrlFlag of [undefined, "", "true", "0"]) {
+      const response = await urlCall(unitConfig({ demoUrlFlag }), UNIT_TOKEN);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("www-authenticate")).toBeNull();
+      await expect(response.json()).resolves.toEqual({ error: "not_found" });
+    }
+  });
+
+  test("flag 1 with the right token lists the seven tools", async () => {
+    const response = await mcpResult(await urlCall(unitConfig({ demoUrlFlag: "1" }), UNIT_TOKEN));
+    expect(response.status).toBe(200);
+    const tools = response.body.result?.tools as Array<{ name: string }>;
+    expect(tools.map((tool) => tool.name).sort()).toEqual([...TOOL_NAMES].sort());
+  });
+
+  test("flag 1 with the wrong token is 404 without WWW-Authenticate", async () => {
+    const response = await urlCall(unitConfig({ demoUrlFlag: "1" }), "x".repeat(32));
+    expect(response.status).toBe(404);
+    expect(response.headers.get("www-authenticate")).toBeNull();
+    await expect(response.json()).resolves.toEqual({ error: "not_found" });
+  });
+
+  test("the header path ignores the url flag", async () => {
+    const flagged = unitConfig({ demoUrlFlag: "1" });
+    const listed = await mcpResult(await postMcp(flagged, listBody, `Bearer ${UNIT_TOKEN}`));
+    expect(listed.status).toBe(200);
+    const tools = listed.body.result?.tools as Array<{ name: string }>;
+    expect(tools).toHaveLength(TOOL_NAMES.length);
+
+    const missing = await postMcp(flagged, listBody);
+    expect(missing.status).toBe(401);
+    expect(missing.headers.get("www-authenticate")).toBe("Bearer");
+
+    const unflagged = await mcpResult(await postMcp(unitConfig(), listBody, `Bearer ${UNIT_TOKEN}`));
+    expect(unflagged.status).toBe(200);
+  });
+});
+
 describe("mcp tool errors", () => {
   test("invalid input is a tool error from the contract, not a protocol error", async () => {
     const config = unitConfig();
