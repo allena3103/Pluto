@@ -21,6 +21,8 @@ herdr agent start $NAME --kind claude --pane $PANE -- --permission-mode auto
 herdr agent wait $NAME --until idle --timeout 120000
 herdr agent prompt $NAME "Read CLAUDE.md, orchestrations/files/BRIEF.md and orchestrations/tasks/$NAME.md, then do the task. Push often. When done, open a PR into agent/$ORCH and reply DONE with the PR URL." --wait --until working --timeout 60000
 ```
+- Panes open in PowerShell; run the snippet above from your own Bash tool, not inside the pane.
+- If `agent start` returns `agent_not_ready`, run `herdr agent read $NAME --source visible --lines 30`. If it is Claude's "trust this folder" prompt for a `C:/Pluto-*` worktree, accept it (`herdr agent send-keys $NAME down` then `enter`); Allen approved that. Any other approval prompt (MCP servers, new access): do not answer; tell the director.
 - Never answer an approval prompt that grants new access (MCP servers, etc.). If a coder is `blocked`, read it with `herdr agent read`; if it needs Allen, tell the director.
 - Track each coder with a background `herdr agent wait $NAME` (no polling). On wake, `herdr agent read $NAME --source recent-unwrapped --lines 80` to see whether it is really done or just paused.
 
