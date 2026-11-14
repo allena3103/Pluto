@@ -1,0 +1,34 @@
+{
+  "name": "pluto",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p scripts/tsconfig.json",
+    "lint": "npm run lint --workspaces --if-present && eslint scripts",
+    "test": "npm run test --workspaces --if-present",
+    "smoke": "tsx scripts/smoke/index.ts",
+    "env:local": "node scripts/env-local.mjs",
+    "seed": "tsx scripts/seed.ts",
+    "dev": "node scripts/dev.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "dotenv": "^18.0.10",
+    "eslint": "^10.15.0",
+    "pg": "^8.23.1",
+    "supabase": "^3.1.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^5.1.0"
+  }
+}
