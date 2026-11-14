@@ -1,8 +1,8 @@
 # Coder task: canvas-sync
 
-Branch `agent/canvas-sync`, worktree `C:/Pluto-canvas-sync`, base and PR target `agent/canvas`. Build step 10 (live Canvas sync) and the detection half of step 9. Port 3203. Migration sub-range `20261114020000`-`20261114022959`.
+Branch `agent/canvas-sync-route`, worktree `C:/Pluto-canvas-sync-route`, base and PR target `agent/canvas`. Build step 10 (live Canvas sync) and the detection half of step 9. Port 3203. Migration sub-range `20261114020000`-`20261114022959`. Do not use `C:/Pluto-canvas-sync` or branch `agent/canvas-sync`; that worktree is an old escalation checkout.
 
-You are a Cursor coder. Read `CLAUDE.md` (including "Allen's global rules"), `orchestrations/files/BRIEF.md` and `orchestrations/plans/canvas.md` first. Follow them.
+You are a Cursor coder on `grok-4.7-medium`. Read `CLAUDE.md` (including "Allen's global rules"), `orchestrations/files/BRIEF.md` and `orchestrations/plans/canvas.md` first. Follow them.
 
 **This PR is security-sensitive** (a migration, a service-role route, an internal-secret route, Canvas token decryption). The orchestrator labels it `security-review` and runs a fresh reviewer before grokbot merges.
 
@@ -36,7 +36,7 @@ Not yours, do not touch: every other file in `packages/canvas` (including `clien
 ## `syncCanvas` (`packages/canvas/src/sync.ts`)
 ```ts
 type SyncDeps = {
-  db: PlutoDb;                 // service-role or the student's session client
+  db: PlutoDb;                 // always the service-role client
   studentId: string;
   client: CanvasClient;
   now?: Date;
@@ -58,6 +58,7 @@ type SyncResult = {
 - `assignments`: upsert on `(student_id, canvas_assignment_id)` with `course_id`, `grade_group_id` (resolved from `canvasGroupId`, null when unknown), `title`, `due_at`, `points_possible`, `score`, `graded`, `submitted`.
 - `files`: upsert on `(student_id, canvas_file_id)` with `course_id`, `title` (the Canvas display name), `week_label` (the module name from `listModuleItems` when that file appears in a module, else null), `added_at` (Canvas `created_at`, else now), `source: 'canvas'`, `storage_path = <studentId>/<fileId>.pdf` where `<fileId>` is the `files.id` uuid, `ingest_status: 'pending'` **for new rows only** — never reset a row that is already `ready`.
 - Every insert and update carries `student_id` explicitly; every read filters by it. Nothing is written for a `studentId` other than the one passed in. Use `PlutoDb` from `@pluto/core/context`.
+- `db` is the service-role client. Students cannot insert or update `files` rows, and they cannot write Canvas columns on `profiles`. Do not write courses, grade groups, assignments, or files with the session client. `files.storage_path` must be `<student_id>/<file_id>.pdf`. The shared database already enforces that shape for `files`.
 - Batch the writes (one upsert call per table, not one per row) and keep the whole sync inside a sane time budget. A failure on one table is recorded in `errors` and does not abandon the tables already written.
 
 ### Due-date change detection
@@ -71,16 +72,17 @@ type SyncResult = {
 - `export const runtime = "nodejs"` and a `maxDuration` long enough for a real sync.
 - Auth, before any database work or any Canvas call, in this order:
   1. If `x-internal-secret` is present: compare it to `INTERNAL_API_SECRET` with `crypto.timingSafeEqual` on equal-length buffers. On a match, take `studentId` from the validated body and use the service-role client (`createAdminClient()` from `@/lib/supabase/admin`). On a mismatch, 401 — do not fall through to the session path.
-  2. Otherwise use the session client and `auth.getUser()`. No user -> 401. `studentId` is **always** the session user id; a `studentId` in the body is ignored on this path (or 403 if it disagrees — say which you chose).
+  2. Otherwise call `auth.getUser()` on the session client. No user -> 401. `studentId` is **always** the session user id. If the body also contains a `studentId` and it disagrees, return 403. Ignore a matching body `studentId`.
   3. If `INTERNAL_API_SECRET` is unset, the internal path is unavailable and the route returns 500 rather than running open.
-- Credentials: read `canvas_base_url` and `canvas_token_encrypted` for that student (explicit `student_id`/`id` filter) and decrypt with `decryptCanvasToken`. In `CANVAS_MODE=fixtures` the token is not needed and must not be required. In live mode with no stored token, fall back to `process.env.CANVAS_API_TOKEN` and `process.env.CANVAS_BASE_URL` (a development convenience Allen already has in his secrets file); if neither exists, 400 with a clear message.
+- After either path succeeds, create `createAdminClient()` once and use it for every profile read and every sync write. The session client does not read or write those rows. Filter every statement with the authenticated `studentId`.
+- Credentials: read `canvas_base_url` and `canvas_token_encrypted` for that student (explicit `id` filter, service-role client) and decrypt with `decryptCanvasToken`. In `CANVAS_MODE=fixtures` the token is not needed and must not be required. In live mode with no stored token, fall back to `process.env.CANVAS_API_TOKEN` and `process.env.CANVAS_BASE_URL` (a development convenience Allen already has in his secrets file); if neither exists, 400 with a clear message.
 - The decrypted token lives in a local variable, goes into `createCanvasClient` and nowhere else: not in the response, not in a log, not in an error. Nothing in the response body comes from the token or the ciphertext.
 - Notification: build `notifyDueDateChange` so it POSTs the contract's `AlertDeadlineChangeRequest` (`studentId`, `assignmentId`, `oldDueAt`, `newDueAt`) to `${APP_URL}/api/alerts/deadline-change` with the `x-internal-secret` header, `AbortSignal.timeout(10_000)`, and failures pushed into `errors`. That route is built by a later task, so a 404 today is a recorded error, not a crash.
 - Response: `{ ok: true, result: SyncResult }` with a 200, or a 4xx/5xx with `{ error: string }`. Canvas rate-limit and auth failures map to a clear 502/400 with a safe message.
 
 ## Acceptance checks (paste the real output tails in the PR body)
-From `C:/Pluto-canvas-sync` after `npm install` and `npm run env:local -- --port 3203`:
-1. `npm run typecheck`, `npm run lint`, `npm test`, `npm run build -w @pluto/web` all green. Also `PLUTO_SKIP_DB_TESTS=1 npm test` green.
+From `C:/Pluto-canvas-sync-route` after `npm install` and `npm run env:local -- --port 3203`:
+1. `npm run typecheck`, `npm run lint`, and `npm test -w @pluto/canvas` green. `npm run build -w @pluto/web` green if you can finish it without leaving a dev server running. A full `npm test` on this machine can fail in `@pluto/core` on `phone_link_codes` because the shared database has a table this branch's RLS list does not. That failure is not yours. Do not edit `packages/core`. CI on the PR is the full-suite gate.
 2. The duplicate-check query before the migration, and `npx supabase migration up` output.
 3. DB tests (`describe.skipIf(SKIP_DB_TESTS)`, throwaway user with a unique email, deleted in `afterAll`) proving:
    - a fixtures sync of a fresh student inserts courses, groups, assignments and files, with every row carrying that student's id;
@@ -94,7 +96,7 @@ From `C:/Pluto-canvas-sync` after `npm install` and `npm run env:local -- --port
 
 ## Process
 - Local Supabase is shared and running: never stop it, never `supabase db reset`.
-- Commit small, `git push -u origin agent/canvas-sync` after every commit.
+- Commit small, `git push -u origin HEAD` after every commit.
 - Stop the dev server as soon as a check is done; memory is very tight and other agents are running.
 - Open a PR into `agent/canvas` using `.github/pull_request_template.md`, with the real check tails, the migration output, and a "How to UI-test (for grokbot)" section.
 - CI (`check`) must be green before you reply DONE; check with `gh pr checks <pr>`. Grokbot merges, you never merge.

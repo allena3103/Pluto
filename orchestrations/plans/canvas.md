@@ -5,7 +5,7 @@ Build steps covered: 9 (deadline-change half) and 10 (live Canvas sync). Task fi
 
 ## Status (Sat 10:15 director update, commit `20d5a90` on `origin/agent/pluto`)
 
-Merged into `agent/canvas`: PR #12 (typed client), PR #21 (fixture due dates), PR #22 (token route, service-role profile write), PR #26 (pagination origin check, issue #14). Pulled to `d3f69cb`. The `canvas-origin` tab is already closed.
+Merged into `agent/canvas`: PR #12 (typed client), PR #21 (fixture due dates), PR #22 (token route, service-role profile write), PR #26 (pagination origin check, issue #14), PR #32 (issues #15–#19). HEAD `44047b9`. The `canvas-origin` tab was already closed. Close the `canvas-client-fixes` tab now that #32 is merged.
 
 Timeline row for this slice (BRIEF on `origin/agent/pluto`): **Sat 23:00 EST — live Canvas sync with Allen's token (`CANVAS_API_TOKEN` in `C:/Pluto/.env.secrets`) and the deadline-change alert.** That row is not done. Do not open a milestone PR until a fixtures sync plus the alert path works, then a live sync against that token has been run or reported pending with the reason.
 
@@ -17,8 +17,8 @@ Models: coders `grok-4.7-medium` for logic, `grok-4.7-high` for security fixes. 
 
 Next, in order:
 
-1. **Now.** `canvas-client-fixes` — issues #15–#19 in one PR, `grok-4.7-medium`, no `security-review` label. Brief: `orchestrations/tasks/canvas-client-fixes.md`. Issue #14 is on this branch.
-2. **After that PR merges.** `canvas-sync` (service role for every write; `CANVAS_API_TOKEN` is the live fallback when the student has no stored token). Then `canvas-alerts` once the F2 helpers are on `origin/agent/pluto`. Then `canvas-ingest-demo`.
+1. **Merged.** `canvas-client-fixes` — issues #15–#19, PR #32. CI was green. No fresh review (not a `security-review` PR).
+2. **Next.** `canvas-sync` (service role for every write; `CANVAS_API_TOKEN` is the live fallback when the student has no stored token). Then `canvas-alerts` once the F2 helpers are on `origin/agent/pluto`. Then `canvas-ingest-demo`.
 3. **When the 23:00 row works.** Sync PR, then the milestone PR with a merge-commit request.
 
 ### Discard: `C:/Pluto-canvas-token` uncommitted files
@@ -28,7 +28,7 @@ Service-role rule (decision log on `origin/agent/pluto`, 2026-11-14, PR #9 harde
 
 `docs/plan.md` on this branch does not yet contain that decision-log row. Do not edit `docs/plan.md`. A sync from `origin/agent/pluto` is a separate `agent/canvas-sync` PR (protocol 2e) and must not be mixed into a feature PR. The stale worktree `C:/Pluto-canvas-sync` is the old escalation commit, not that sync.
 
-Max two coders (protocol 2c). At this update one coder runs: `canvas-client-fixes`. Free RAM was about 1.9 GB.
+Max two coders (protocol 2c). After PR #32 merged, one coder starts: `canvas-sync-route` (worktree `C:/Pluto-canvas-sync-route`, because `C:/Pluto-canvas-sync` is the old escalation checkout). Brief: `orchestrations/tasks/canvas-sync.md`. Security-review, fresh reviewer `grok-4.7-high` after the coder is idle.
 
 Contract items touched: `POST /api/alerts/deadline-change` (`AlertDeadlineChangeRequest`, `AlertResponse`), `INTERNAL_SECRET_HEADER`, and the `courses` / `grade_groups` / `assignments` / `files` tables that every tool reads. No new tools, no contract edits. `packages/core` is read-only for this slice: if something is missing there, stop and tell the director.
 
@@ -69,7 +69,7 @@ Rules for every canvas coder:
 | 4 | `canvas-alerts` | cursor `grok-4.7-medium` | `apps/web/app/api/alerts/deadline-change/**`, `packages/canvas/src/deadline-alert.ts`, `packages/canvas/test/alerts/**` | F2 helpers on `origin/agent/pluto` | `20261114023000`-`20261114024959` (only if needed) | 3204 | yes |
 | 5 | `canvas-ingest-demo` | cursor `grok-4.7-medium` | `packages/canvas/src/{files-sync,demo-trigger}.ts`, `packages/canvas/test/files/**`, `packages/canvas/fixtures/demo/**`, `apps/web/app/api/canvas/demo-date-change/**` | 3 merged + F2 ingest | none | 3205 | yes |
 
-Waves (max 2 coders, protocol 2c): tasks 1, 2, and 1b are merged. **Now** = 1c alone. **Next** = 3, then 4 when F2 helpers are on `origin/agent/pluto`, then 5. The 23:00 milestone PR follows a sync PR and asks grokbot for a merge commit.
+Waves (max 2 coders, protocol 2c): tasks 1, 2, 1b, and 1c are merged. **Next** = 3 (`canvas-sync`), then 4 when F2 helpers are on `origin/agent/pluto`, then 5. The 23:00 milestone PR follows a sync PR and asks grokbot for a merge commit.
 
 ### 1. canvas-client
 Typed, Supabase-free Canvas REST client. `createCanvasClient({ baseUrl, token, mode, fetch?, now? })` with `listCourses`, `listAssignmentGroups(courseId)`, `listAssignments(courseId)` (with `include[]=submission`), `listCourseFiles(courseId)`, `listModuleItems(courseId)` for week labels.
