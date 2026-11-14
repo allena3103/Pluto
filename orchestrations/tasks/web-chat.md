@@ -5,7 +5,9 @@ Branch `agent/web-chat`, worktree `C:/Pluto-web-chat`, PR into **`agent/web`**. 
 A Claude-style chat on a phone. The agent route (`POST /api/chat`) belongs to the assistant slice: you build the client against the contract, not against their code.
 
 ## Base branch (2026-11-14 restart)
-Your branch is cut from `agent/web`, which does **not** have PR #23 (login, shadcn, app nav). Do not branch from `agent/web-shell`, do not edit that PR, and do not import `@/components/ui/*` or `apps/web/lib/safe-next.ts` — those files are not on your branch. Style with Tailwind utility classes, in the same spirit as `apps/web/components/grades/`. Do not edit `apps/web/package.json` or the lockfile. Do not edit `(app)/layout.tsx`.
+Your branch is cut from `agent/web`, which does **not** have PR #23 (login, shadcn, app nav). Do not branch from `agent/web-shell`, do not edit that PR, and do not import `@/components/ui/*` or `apps/web/lib/safe-next.ts` — those files are not on your branch. Style with Tailwind utility classes, in the same spirit as `apps/web/components/grades/`. Do not edit `(app)/layout.tsx`. Do not add a dependency unless the screen cannot be built without it; if you add one, it is a single package and you list it in the PR body.
+
+The Sat 17:00 bar is this screen talking to the real `POST /api/chat`. That route is not on `agent/web` yet (assistant owns it). Build the client against `ChatStreamEvent` so it works unchanged when the route appears. Use the dev fixture only while `POST /api/chat` 404s, and only when `NEXT_PUBLIC_PLUTO_CHAT_FIXTURE=1` and `NODE_ENV` is not `production`.
 
 ## Read first
 - `CLAUDE.md`, `orchestrations/files/BRIEF.md`, `orchestrations/plans/web.md`.

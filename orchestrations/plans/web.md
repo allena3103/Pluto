@@ -2,22 +2,32 @@
 
 Branch `agent/web`, worktree `C:/Pluto-web`, port 3100 (coders 3101-3109), migration range `20261114010000`-`20261114015959` (web expects **no** migrations; if a task seems to need one, stop and escalate to the director).
 
-Task file: `orchestrations/files/10-web.md` (items 9-11 are on `origin/agent/pluto` at `c6ee3a5`; they are copied into this plan). Build steps 5 (UI half), 6, 7, 11. Protocol: `orchestrations/files/PROTOCOL.md`, including 2b models, 2d Cursor planner, 2e sync PRs, and 4-6 grokbot, as updated on `origin/agent/pluto` (`80ddd57`). Contract: `docs/plan.md` + `packages/core/src/contract.ts`.
+Task file: `orchestrations/files/10-web.md` (items 9-11 are on `origin/agent/pluto` at `c6ee3a5`; they are copied into this plan). Build steps 5 (UI half), 6, 7, 11. Protocol: `orchestrations/files/PROTOCOL.md` on `origin/agent/pluto` at `20d5a90` (2b models, 2d Cursor planner, 2e sync PRs, 6 milestone cadence). Contract: `docs/plan.md` + `packages/core/src/contract.ts`.
 
-Restarted 2026-11-14 on Cursor `grok-4.7-high` after the previous session hit its Opus limit. Context below is from the files and `gh pr list`, not from the old session.
+Restarted 2026-11-14 on Cursor `grok-4.7-high`. This revision follows the director plan at `20d5a90` (Sat 10:15). `BRIEF.md` and `PROTOCOL.md` were read from `origin/agent/pluto`; they are not merged into `agent/web` (a sync is its own PR, section 2e).
 
 ## Status
 
 | PR | Branch | State | What we do |
 | --- | --- | --- | --- |
 | #13 | `agent/web-grades` | **Merged** (coder self-merged; see `orchestrations/escalations/web-1.md`) | Leave it. Grades and deadlines are on `agent/web`. The Postgres-error leak noted in web-1 waits for the polish pass. |
-| #23 | `agent/web-shell` | **Open**, CI green. Director is finishing fix round 2 in `C:/Pluto-web-shell`. | **Do not touch** the branch, the worktree, the herdr tab, or the PR. |
-| #24 | `agent/web-notes` | **Draft**, CI green, mergeable. | Waits for #23, then needs a notes-only diff against `agent/web` and green CI. Do not prompt that coder and do not edit the branch. |
+| #23 | `agent/web-shell` | **Open**, CI green. Director is running the fresh re-review now. | **Do not touch** the branch, the worktree, the herdr tab, or the PR. |
+| #24 | `agent/web-notes` | **Draft**, CI green, mergeable. | Follows #23. Do not prompt that coder and do not edit the branch. |
 | — | `origin/agent/foundation` | `consumeMagicLink` is here (`packages/core/src/magic-links.ts`) | Not on `agent/web` and not on `origin/agent/pluto`. |
 
 `agent/web` and `origin/agent/pluto` diverged at the F1 squash (`87fbb9f`). Protocol 2e: a later sync is its own PR (`agent/web-sync` into `agent/web`), never mixed into a feature PR. A sync today would not unblock magic links, because those commits are not on `agent/pluto` yet. Do not edit `docs/plan.md` or `orchestrations/files/**`.
 
-Coders: Cursor only, `composer-2.5` (UI) or `grok-4.7-medium` (logic). Fresh reviewers, when required: `grok-4.7-high`. Max **2** coders at once. Under 2 GB free RAM, spawn nobody (PROTOCOL 2c). At this restart free RAM was **0.51 GB**, with director, canvas, mcp, mcp-server, and web-shell still running, plus idle web-notes. Nobody is spawned in the plan commit; the orchestrator spawns the ready pair only after free RAM is at least 2 GB.
+Coders: Cursor only, `composer-2.5` (UI) or `grok-4.7-medium` (logic). Fresh reviewers, when required: `grok-4.7-high`. Max **1-2** coders at once. Under 2 GB free RAM, spawn nobody (PROTOCOL 2c). Free RAM at this update was **2.29 GB**, so the ready pair starts after this plan commit. Close a coder's herdr tab as soon as grokbot merges its PR.
+
+## Timeline (BRIEF, Sat 10:00)
+
+| Target (EST) | Web row | What ships |
+| --- | --- | --- |
+| Sat 17:00 | Notes viewer, `/open` magic links, chat UI against `/api/chat`, `/signup` | Notes is #24 after #23. `/open` starts only once `consumeMagicLink` is on `agent/web`. Chat and signup start now. |
+| Sat 19:00 | Phone-linking page, so the assistant row can show a code | W8, when a coder slot is free. Assistant owns the route and the SMS. |
+| Sun 01:00 | Polish | Sign-up polish, loading and error states, 390px pass, chat fixture removed. PWA stays inside #23. |
+
+Milestone PRs into `agent/pluto` go out about every 2 hours, or as soon as a row above works on `agent/web`. Each one is preceded by an `agent/web-sync` PR (PROTOCOL 2e): branch from `agent/web`, merge `origin/agent/pluto`, take theirs for every file this slice does not own, keep web files, run the checks, PR into `agent/web`. Never mix a sync into a feature PR. The milestone PR body asks grokbot for a **merge commit, not a squash**. No milestone this turn: the 17:00 row is not on the branch yet.
 
 Feature branches come off `agent/web`, and their PRs target `agent/web`. Do not branch them off `agent/web-shell`: that PR diff would contain the whole shell and collide with #23. `components/ui`, `lib/safe-next.ts`, the login page, and the app nav are **not** on `agent/web`. Style with Tailwind, the same way grades does. Do not edit `apps/web/package.json` or the lockfile.
 
@@ -39,26 +49,25 @@ W3 web-grades  PR #13, merged
 Ready on agent/web (no file overlap; max 2 running):
   W4 web-chat     composer-2.5     port 3104
   W7 web-signup   grok-4.7-medium  port 3106   security-review
-Queued until a slot and >= 2 GB free:
+Queued for the next free slot (Sat 19:00 row):
   W8 web-phone    composer-2.5     port 3107
-Blocked:
+Blocked until F2's helper is on agent/web (Sat 12:00 foundation row):
   W5 web-open     grok-4.7-medium  port 3105   security-review
-      until consumeMagicLink is on agent/web
 Then:
-  W6 polish + milestone report (orchestrator)
+  W6 polish (Sun 01:00) + the milestone report
   W9 after #23 merges: link /login -> /signup, and a settings/phone entry in the shell nav
 ```
 
-First pair when RAM allows: **W7 and W4**. W8 starts when one of them finishes. W5 starts only after the helper is on this branch.
+Spawn this turn: **W7 and W4**. W8 when one of them finishes. W5 only after `consumeMagicLink` is on this branch.
 
-## Milestones (one PR into `agent/pluto` each)
+## Milestones (into `agent/pluto`, merge commit)
 
-| Milestone | Contents | Report |
+| When | Contents | Report |
 | --- | --- | --- |
-| M1 | W1 + W2 + W3, once #23 and #24 have merged: login with `next`, app shell, PWA, notes list, PDF viewer at page n, `/api/grades`, `/grades`, `/deadlines` | `orchestrations/reports/web-M1.md` |
-| M2 | W4 + W5 + W7 + W8 + W6: chat against the real `/api/chat`, `/open/[token]`, `/signup`, `/settings/phone`, loading/error states, 390px pass, chat fixture removed | `orchestrations/reports/web-M2.md` |
+| Sat 17:00, or sooner if the row works | Notes viewer (#24), `/open` if the helper has landed, chat UI, `/signup`, plus #23 and grades already in flight | `orchestrations/reports/web-M1.md` |
+| Sun 01:00 | Polish: loading and error states, 390px, fixture removed, signup link from `/login` | `orchestrations/reports/web-M2.md` |
 
-M1 waits on the director for #23 and then on a notes-only #24. Do not open either milestone PR from this restart.
+Before each of those: sync PR, checks, report, then `gh pr create --base agent/pluto --head agent/web` whose body tells grokbot to use a merge commit. A smaller milestone also goes out about every 2 hours once `agent/web` has a new merged user-visible slice.
 
 ## Tasks
 
@@ -121,8 +130,8 @@ Acceptance:
 - Works at 390px, with loading and error states.
 - `npm run typecheck && npm run lint && npm test` green; `npm run build -w @pluto/web` lists `/settings/phone`.
 
-### W6 polish + milestone (orchestrator)
-Loading and error states, 390px pass, remove the chat fixture, write the report, sync `origin/agent/pluto` through `agent/web-sync` if the histories still diverge, rerun all checks, open the milestone PR. Not this turn.
+### W6 polish (Sun 01:00, orchestrator)
+Loading and error states, 390px pass, remove the chat fixture, signup polish, write the report, sync, open the milestone PR asking for a merge commit. Not this turn.
 
 ### W9 shell follow-ups (after #23 merges)
 One small PR: on the login page, a link to `/signup` that keeps `next`; in the app nav, a link to `/settings/phone`. Only if those files are then on `agent/web`.
@@ -133,7 +142,8 @@ One small PR: on the login page, a link to `/signup` that keeps `next`; in the a
 - Fresh reviewer before grokbot: W7 (signup) and, later, W5 (magic links). W4 and W8 skip it.
 - Reviewer command, one at a time, from the coder worktree: `cursor-agent -p --force --trust --model grok-4.7-high`, with `REVIEW.md` and `.review/diff.patch`.
 - A PR is ready for grokbot only when CI `check` is green and, if labeled, the fresh review says `VERDICT: APPROVE`.
-- After grokbot merges a coder PR: `git pull` here and rerun typecheck, lint, and test.
+- After grokbot merges a coder PR: `git pull` here, rerun typecheck, lint, and test, and `herdr tab close` that coder's tab.
+- Milestone PRs ask grokbot for a merge commit, not a squash. Coder PRs do not ask for a merge method.
 
 ## Risks
 
@@ -143,6 +153,6 @@ One small PR: on the login page, a link to `/signup` that keeps `next`; in the a
 | `/signup` is not public in `proxy.ts` | W7 adds that one prefix. The PR is `security-review`. |
 | `consumeMagicLink` not on `agent/web` | W5 stays queued. Do not reimplement the helper in the route. |
 | `POST /api/sms/link-code` is the assistant slice | W8 calls it and handles 404. It does not create the route and does not write `profiles.phone`. The column-level "name only" update policy is not on `agent/web` yet (foundation harden migration), so the page must not issue an update at all. |
-| `/api/chat` does not exist | W4 uses the dev fixture. M2 waits until the screen has run against the real route. |
-| Free RAM 0.51 GB at restart | Spawn nobody until free RAM is at least 2 GB. Do not start `next dev` in this worktree. Do not close the web-shell tab. |
-| Squash ancestry vs `agent/pluto` | Sync is a separate PR. Feature PRs stay off `agent/web`. |
+| `/api/chat` is not on `agent/web` or `agent/pluto` yet | W4 implements the contract client. A dev fixture covers local checks until the route exists; the 17:00 bar is the same UI against the real route. |
+| Free RAM was 2.29 GB at this update | Two coders is the cap. Do not start `next dev` in this worktree. Do not close the web-shell or web-notes tabs. |
+| Squash ancestry vs `agent/pluto` | Sync is a separate PR before every milestone. Feature PRs stay off `agent/web`. The milestone body asks for a merge commit. |
