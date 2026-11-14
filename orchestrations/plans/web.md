@@ -13,7 +13,7 @@ Restarted 2026-11-14 on Cursor `grok-4.7-high`. This revision follows the direct
 | #13 | `agent/web-grades` | **Merged** (coder self-merged; see `orchestrations/escalations/web-1.md`) | Leave it. Grades and deadlines are on `agent/web`. The Postgres-error leak noted in web-1 waits for the polish pass. |
 | #23 | `agent/web-shell` | **Merged** into `agent/web` (`cc6feb5`). CI on `agent/web` green. | Leave the worktree. A fix round restarts a coder there. |
 | #34 | `agent/web-signup` | **Merged** into `agent/web` (`a9e51a2`). CI green. Fresh review was `VERDICT: APPROVE`. | Tab closed. A fix round restarts in `C:/Pluto-web-signup`. |
-| #24 | `agent/web-notes` | **Draft**. It was waiting on #23, which has now merged. | Do not prompt that coder and do not edit the branch. The director said #24 follows #23. |
+| #24 | `agent/web-notes` | **Draft**. #23 is merged, and the PR diff against `agent/web` still contains the whole shell (notes was branched from `agent/web-shell` before the squash). | A coder in `C:/Pluto-web-notes` merges `origin/agent/web`, leaves a notes-only diff, gets CI green, and marks the PR ready. Nobody merges it. |
 | — | `origin/agent/foundation` | `consumeMagicLink` is here (`packages/core/src/magic-links.ts`) | Not on `agent/web` and not on `origin/agent/pluto`. |
 
 `agent/web` and `origin/agent/pluto` diverged at the F1 squash (`87fbb9f`). Protocol 2e: a later sync is its own PR (`agent/web-sync` into `agent/web`), never mixed into a feature PR. A sync today would not unblock magic links, because those commits are not on `agent/pluto` yet. Do not edit `docs/plan.md` or `orchestrations/files/**`.
@@ -83,8 +83,8 @@ Every brief lives at `orchestrations/tasks/web-<task>.md` on `agent/web` before 
 ### W1 `web-shell` — director, PR #23
 Do not spawn, prompt, commit, or review. Port 3101 stays theirs.
 
-### W2 `web-notes` — waiting, PR #24
-Do not spawn or prompt. After #23 merges, the notes diff must be notes-only against the new `agent/web`, with green CI. Port 3102.
+### W2 `web-notes` — rebase onto merged shell, PR #24
+Port 3102. Model: Cursor `grok-4.7-medium`. The notes commits themselves are only `apps/web/app/(app)/notes/**` and `apps/web/components/notes/**` (5 files, 708 lines). The open PR also contains the pre-squash shell. Merge `origin/agent/web` into `agent/web-notes` and make `git diff origin/agent/web...HEAD --stat` list only those notes paths. Then CI green, `gh pr ready 24`, stop. Do not merge the PR.
 
 ### W3 `web-grades` — merged, PR #13
 On `agent/web`. No further coder.
