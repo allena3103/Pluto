@@ -1,4 +1,5 @@
 // Proves one student cannot read or write another student's rows, in every public table.
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -262,4 +263,373 @@ describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
     const profiles = must(await service.from("profiles").select("id, name").eq("id", fresh!.id), "profile");
     expect(profiles.map((p) => p.name)).toEqual(["RLS Fresh"]);
   });
+
+  it("other students cannot rename a profile or retitle a file they do not own", async () => {
+    const profileBefore = one(await service.from("profiles").select("name").eq("id", victim!.id).single(), "victim name");
+    const fileBefore = one(await service.from("files").select("title").eq("id", victimRows.fileId).single(), "victim title");
+
+    for (const attacker of attackers) {
+      const renamed = await attacker.client.from("profiles").update({ name: "hijacked" }).eq("id", victim!.id).select();
+      expect(renamed.error, `${attacker.label} rename`).toBeNull();
+      expect(renamed.data, `${attacker.label} rename`).toEqual([]);
+
+      const retitled = await attacker.client
+        .from("files")
+        .update({ title: "hijacked" })
+        .eq("id", victimRows.fileId)
+        .select();
+      expect(retitled.error, `${attacker.label} retitle`).toBeNull();
+      expect(retitled.data, `${attacker.label} retitle`).toEqual([]);
+    }
+
+    const profileAfter = one(await service.from("profiles").select("name").eq("id", victim!.id).single(), "victim name after");
+    const fileAfter = one(await service.from("files").select("title").eq("id", victimRows.fileId).single(), "victim title after");
+    expect(profileAfter.name).toBe(profileBefore.name);
+    expect(fileAfter.title).toBe(fileBefore.title);
+  });
+
+  it("a student can edit their own file but cannot aim storage_path at any object", async () => {
+    const inserted = one(
+      await victim!.client
+        .from("files")
+        .insert({
+          student_id: victim!.id,
+          course_id: victimRows.courseId,
+          title: "My notes",
+          source: "manual",
+        })
+        .select("id, title, storage_path, ingest_status, page_count")
+        .single(),
+      "insert own file",
+    );
+    const fileId = inserted.id;
+
+    try {
+      expect(inserted.storage_path).toBeNull();
+      expect(inserted.ingest_status).toBe("pending");
+
+      const renamed = one(
+        await victim!.client.from("files").update({ title: "Renamed notes", week_label: "Week 2" }).eq("id", fileId).select("title, week_label").single(),
+        "rename own file",
+      );
+      expect(renamed).toMatchObject({ title: "Renamed notes", week_label: "Week 2" });
+
+      const foreignPaths = [
+        `${DEMO_STUDENT_ID}/${fileId}.pdf`,
+        `${DEMO_STUDENT_ID}/${victimRows.fileId}.pdf`,
+        `${victim!.id}/${victimRows.fileId}.pdf`,
+        `${victim!.id}/../${DEMO_STUDENT_ID}/${victimRows.fileId}.pdf`,
+        `${victim!.id}/${fileId}.pdf`,
+        null,
+      ];
+      for (const storagePath of foreignPaths) {
+        const res = await victim!.client.from("files").update({ storage_path: storagePath }).eq("id", fileId).select();
+        expect(res.error?.code, `student storage_path ${storagePath}`).toBe("42501");
+      }
+
+      const withTitle = await victim!.client
+        .from("files")
+        .update({ title: "should not stick", storage_path: `${DEMO_STUDENT_ID}/${fileId}.pdf` })
+        .eq("id", fileId)
+        .select();
+      expect(withTitle.error?.code, "title mixed with storage_path").toBe("42501");
+
+      for (const patch of [{ ingest_status: "ready" }, { ingest_error: "nope" }, { page_count: 4 }]) {
+        const res = await victim!.client.from("files").update(patch).eq("id", fileId).select();
+        expect(res.error?.code, `student ${Object.keys(patch).join(",")}`).toBe("42501");
+      }
+
+      const sneaky = await victim!.client
+        .from("files")
+        .insert({
+          student_id: victim!.id,
+          course_id: victimRows.courseId,
+          title: "sneaky",
+          source: "manual",
+          storage_path: `${DEMO_STUDENT_ID}/${victimRows.fileId}.pdf`,
+        })
+        .select("id");
+      expect(sneaky.error?.code, "student insert storage_path").toBe("42501");
+
+      const row = must(
+        await service.from("files").select("title, week_label, storage_path, ingest_status, ingest_error, page_count").eq("id", fileId).single(),
+        "file unchanged",
+      );
+      expect(row).toMatchObject({
+        title: "Renamed notes",
+        week_label: "Week 2",
+        storage_path: null,
+        ingest_status: "pending",
+        ingest_error: null,
+        page_count: null,
+      });
+      const sneakyRows = must(await service.from("files").select("id").eq("title", "sneaky"), "sneaky rows");
+      expect(sneakyRows).toEqual([]);
+    } finally {
+      await service.from("files").delete().eq("id", fileId);
+    }
+  });
+
+  it("storage_path is null or exactly <student_id>/<file_id>.pdf, even for service role", async () => {
+    const id = randomUUID();
+    const canonical = `${victim!.id}/${id}.pdf`;
+    const created = one(
+      await service
+        .from("files")
+        .insert({
+          id,
+          student_id: victim!.id,
+          course_id: victimRows.courseId,
+          title: "canonical path",
+          source: "manual",
+          storage_path: canonical,
+        })
+        .select("storage_path")
+        .single(),
+      "canonical insert",
+    );
+    expect(created.storage_path).toBe(canonical);
+
+    const badPaths = [
+      `${DEMO_STUDENT_ID}/${id}.pdf`,
+      `${DEMO_STUDENT_ID}/${victimRows.fileId}.pdf`,
+      `${victim!.id}/${victimRows.fileId}.pdf`,
+      `${victim!.id}/../${DEMO_STUDENT_ID}/${victimRows.fileId}.pdf`,
+      `${victim!.id.toUpperCase()}/${id.toUpperCase()}.pdf`,
+      `${canonical}/extra`,
+      `/${canonical}`,
+      "",
+      `notes/${canonical}`,
+    ];
+    for (const storagePath of badPaths) {
+      const res = await service.from("files").update({ storage_path: storagePath }).eq("id", id).select("storage_path");
+      expect(res.error?.code, storagePath).toBe("23514");
+    }
+
+    const badId = randomUUID();
+    const badInsert = await service
+      .from("files")
+      .insert({
+        id: badId,
+        student_id: victim!.id,
+        course_id: victimRows.courseId,
+        title: "bad path",
+        source: "manual",
+        storage_path: `${DEMO_STUDENT_ID}/${badId}.pdf`,
+      })
+      .select("id");
+    expect(badInsert.error?.code, "service insert of another student's key").toBe("23514");
+
+    const still = one(await service.from("files").select("storage_path").eq("id", id).single(), "still canonical");
+    expect(still.storage_path).toBe(canonical);
+    const absent = must(await service.from("files").select("id").eq("id", badId), "bad insert rolled back");
+    expect(absent).toEqual([]);
+
+    const cleared = one(
+      await service.from("files").update({ storage_path: null }).eq("id", id).select("storage_path").single(),
+      "clear path",
+    );
+    expect(cleared.storage_path).toBeNull();
+    await service.from("files").delete().eq("id", id);
+  });
+
+  it("a student can update only their profile name", async () => {
+    const mine = one(
+      await victim!.client.from("profiles").select("name, phone, canvas_base_url, canvas_token_encrypted").eq("id", victim!.id).single(),
+      "own profile",
+    );
+    expect(mine.phone).toBeNull();
+
+    const otherPhone = one(await service.from("profiles").select("phone").eq("id", OTHER_STUDENT_ID).single(), "other phone");
+    expect(otherPhone.phone).toBeTruthy();
+
+    const claimed = await victim!.client.from("profiles").update({ phone: otherPhone.phone }).eq("id", victim!.id).select();
+    expect(claimed.error?.code, "claim another student's phone").toBe("42501");
+
+    const unusedPhone = `+1555${victim!.id.replace(/\D/g, "").slice(0, 7).padEnd(7, "0")}`;
+    const selfPhone = await victim!.client.from("profiles").update({ phone: unusedPhone }).eq("id", victim!.id).select();
+    expect(selfPhone.error?.code, "set an unowned phone").toBe("42501");
+
+    const ssrf = await victim!.client
+      .from("profiles")
+      .update({ canvas_base_url: "http://127.0.0.1/" })
+      .eq("id", victim!.id)
+      .select();
+    expect(ssrf.error?.code, "canvas_base_url").toBe("42501");
+
+    const token = await victim!.client
+      .from("profiles")
+      .update({ canvas_token_encrypted: "student-supplied" })
+      .eq("id", victim!.id)
+      .select();
+    expect(token.error?.code, "canvas_token_encrypted").toBe("42501");
+
+    const created = await victim!.client
+      .from("profiles")
+      .update({ created_at: EPOCH })
+      .eq("id", victim!.id)
+      .select();
+    expect(created.error?.code, "created_at").toBe("42501");
+
+    const mixed = await victim!.client
+      .from("profiles")
+      .update({ name: "should not stick", phone: unusedPhone, canvas_base_url: "http://169.254.169.254/" })
+      .eq("id", victim!.id)
+      .select();
+    expect(mixed.error?.code, "name mixed with phone and canvas url").toBe("42501");
+
+    const renamed = one(
+      await victim!.client.from("profiles").update({ name: "RLS Victim Renamed" }).eq("id", victim!.id).select("name").single(),
+      "rename self",
+    );
+    expect(renamed.name).toBe("RLS Victim Renamed");
+
+    const serverPhone = `+1555${randomUUID().replace(/\D/g, "").slice(0, 7).padEnd(7, "1")}`;
+    const asServer = one(
+      await service
+        .from("profiles")
+        .update({
+          phone: serverPhone,
+          canvas_base_url: "https://umamherst.instructure.com",
+          canvas_token_encrypted: "server-sealed",
+        })
+        .eq("id", victim!.id)
+        .select("name, phone, canvas_base_url, canvas_token_encrypted")
+        .single(),
+      "service role writes the server-owned columns",
+    );
+    expect(asServer).toMatchObject({
+      name: "RLS Victim Renamed",
+      phone: serverPhone,
+      canvas_base_url: "https://umamherst.instructure.com",
+      canvas_token_encrypted: "server-sealed",
+    });
+
+    const afterRename = one(
+      await victim!.client.from("profiles").update({ name: "RLS Victim" }).eq("id", victim!.id).select("name, phone, canvas_base_url").single(),
+      "rename back",
+    );
+    expect(afterRename).toMatchObject({
+      name: "RLS Victim",
+      phone: serverPhone,
+      canvas_base_url: "https://umamherst.instructure.com",
+    });
+
+    const otherStill = one(await service.from("profiles").select("phone").eq("id", OTHER_STUDENT_ID).single(), "other phone unchanged");
+    expect(otherStill.phone).toBe(otherPhone.phone);
+  });
+
+  it("column privileges and the profile trigger match the write lock", async () => {
+    const flags = await pgQuery<{
+      profile_name: boolean;
+      profile_phone: boolean;
+      profile_url: boolean;
+      profile_token: boolean;
+      profile_created: boolean;
+      profile_id: boolean;
+      path_update: boolean;
+      path_insert: boolean;
+      title_update: boolean;
+      ingest_update: boolean;
+      page_update: boolean;
+    }>(
+      `select
+         has_column_privilege('authenticated', 'public.profiles'::regclass, 'name', 'UPDATE') as profile_name,
+         has_column_privilege('authenticated', 'public.profiles'::regclass, 'phone', 'UPDATE') as profile_phone,
+         has_column_privilege('authenticated', 'public.profiles'::regclass, 'canvas_base_url', 'UPDATE') as profile_url,
+         has_column_privilege('authenticated', 'public.profiles'::regclass, 'canvas_token_encrypted', 'UPDATE') as profile_token,
+         has_column_privilege('authenticated', 'public.profiles'::regclass, 'created_at', 'UPDATE') as profile_created,
+         has_column_privilege('authenticated', 'public.profiles'::regclass, 'id', 'UPDATE') as profile_id,
+         has_column_privilege('authenticated', 'public.files'::regclass, 'storage_path', 'UPDATE') as path_update,
+         has_column_privilege('authenticated', 'public.files'::regclass, 'storage_path', 'INSERT') as path_insert,
+         has_column_privilege('authenticated', 'public.files'::regclass, 'title', 'UPDATE') as title_update,
+         has_column_privilege('authenticated', 'public.files'::regclass, 'ingest_status', 'UPDATE') as ingest_update,
+         has_column_privilege('authenticated', 'public.files'::regclass, 'page_count', 'UPDATE') as page_update`,
+    );
+    expect(flags).toEqual([
+      {
+        profile_name: true,
+        profile_phone: false,
+        profile_url: false,
+        profile_token: false,
+        profile_created: false,
+        profile_id: false,
+        path_update: false,
+        path_insert: false,
+        title_update: true,
+        ingest_update: false,
+        page_update: false,
+      },
+    ]);
+
+    const constraint = await pgQuery<{ conname: string }>(
+      "select conname from pg_constraint where conname = 'files_storage_path_canonical'",
+    );
+    expect(constraint.map((row) => row.conname)).toEqual(["files_storage_path_canonical"]);
+
+    const victimId = assertUuid(victim!.id);
+    must(
+      await service.from("profiles").update({ canvas_base_url: "https://umamherst.instructure.com" }).eq("id", victim!.id).select("id").single(),
+      "seed a canvas url for the trigger",
+    );
+    await expect(
+      pgQuery(
+        `do $pluto$
+         begin
+           perform set_config('row_security', 'off', true);
+           perform set_config('request.jwt.claim.role', 'authenticated', true);
+           perform set_config('request.jwt.claims', '{"role":"authenticated"}', true);
+           update public.profiles
+             set canvas_base_url = 'http://127.0.0.1/'
+             where id = '${victimId}';
+         end
+         $pluto$;`,
+      ),
+    ).rejects.toThrow(/students may update only profiles.name/);
+
+    const untouched = one(
+      await service.from("profiles").select("canvas_base_url").eq("id", victim!.id).single(),
+      "canvas url after trigger",
+    );
+    expect(untouched.canvas_base_url).toBe("https://umamherst.instructure.com");
+
+    await pgQuery(
+      `do $pluto$
+       begin
+         perform set_config('row_security', 'off', true);
+         perform set_config('request.jwt.claim.role', 'service_role', true);
+         perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+         update public.profiles
+           set canvas_base_url = 'https://canvas.example.edu'
+           where id = '${victimId}';
+       end
+       $pluto$;`,
+    );
+    const cleared = one(
+      await service
+        .from("profiles")
+        .update({ phone: null, canvas_base_url: null, canvas_token_encrypted: null })
+        .eq("id", victim!.id)
+        .select("phone, canvas_base_url, canvas_token_encrypted")
+        .single(),
+      "clear server-owned profile columns",
+    );
+    expect(cleared).toMatchObject({ phone: null, canvas_base_url: null, canvas_token_encrypted: null });
+  });
 });
+
+function assertUuid(id: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    throw new Error(`refusing to interpolate id ${id}`);
+  }
+  return id;
+}
+
+/** `.single()` is typed as possibly null. `must` preserves that, so narrow it here. */
+function one<T extends Record<string, unknown>>(
+  res: { data: T | null; error: { message: string } | null },
+  label: string,
+): T {
+  if (res.error || res.data == null) throw new Error(`${label}: ${res.error?.message ?? "no row"}`);
+  return res.data;
+}
