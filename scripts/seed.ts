@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import pg from "pg";
 import { loadLocalEnv, repoRoot, requireEnv } from "./lib/env";
+import type { PlutoDb } from "@pluto/core/context";
+import { seedLectureFiles } from "./lib/seed-files";
 import { DEMO_STUDENT_ID, OTHER_STUDENT_ID } from "./lib/seed-ids";
 
 const STATEMENT_TIMEOUT_MS = 30_000;
@@ -24,8 +26,8 @@ export interface SeedContext {
  * Seam for the ingest task: upload the synthetic lecture PDFs to the `notes` bucket
  * (`<student_id>/<file_id>.pdf`), insert `files` rows and run ingest. Must stay idempotent.
  */
-export async function seedFiles(_ctx: SeedContext): Promise<void> {
-  // Intentionally empty until the ingest task lands.
+export async function seedFiles(ctx: SeedContext): Promise<void> {
+  await seedLectureFiles(ctx.admin as PlutoDb);
 }
 
 async function runSeedSql(dbUrl: string): Promise<void> {

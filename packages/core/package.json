@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
+    "unpdf": "^2.2.0",
     "zod": "^4.6.7"
   }
 }
