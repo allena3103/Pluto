@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@pluto/core/database.types";
 import type { PlutoDb } from "@pluto/core/context";
+import { supabaseIssuer } from "./metadata";
 import { supabaseFetch } from "./supabase-fetch";
 
 /** Seed demo student. The route uses this when `PLUTO_DEMO_STUDENT_ID` is unset. */
@@ -32,12 +33,14 @@ export type AuthSuccess = {
   ok: true;
   studentId: string;
   db: PlutoDb;
-  method: "demo" | "demo-url";
+  method: "demo" | "demo-url" | "oauth";
 };
 
 export type AuthFailure = {
   ok: false;
   reason: "unauthorized" | "not_found";
+  /** True when a bearer token was sent and rejected (the 401 adds `error="invalid_token"`). */
+  tokenRejected?: boolean;
 };
 
 /** Set when the request is the URL-token method. The header is not consulted. */
@@ -130,14 +133,90 @@ export function authenticateDemoUrl(urlToken: string, config: McpAuthConfig): Au
   };
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Only these Supabase claims are read. Everything else in the token is ignored. */
+type VerifiedClaims = {
+  sub?: unknown;
+  role?: unknown;
+  exp?: unknown;
+  iss?: unknown;
+};
+
+/** Anon-key client with no session storage. With `accessToken`, every request runs as that user under RLS. */
+function createAnonClient(config: McpAuthConfig, accessToken?: string): PlutoDb {
+  return createClient<Database>(config.supabaseUrl, config.supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      fetch: supabaseFetch,
+      ...(accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : {}),
+    },
+  });
+}
+
+/**
+ * Claim checks after the signature is verified. Exported for unit tests.
+ * Returns the student id, or undefined when any check fails.
+ */
+export function studentIdFromClaims(claims: VerifiedClaims, config: McpAuthConfig, nowMs = Date.now()): string | undefined {
+  if (typeof claims.sub !== "string" || !UUID_PATTERN.test(claims.sub)) return undefined;
+  if (claims.role !== "authenticated") return undefined;
+  if (typeof claims.exp !== "number" || !Number.isFinite(claims.exp) || claims.exp * 1000 <= nowMs) return undefined;
+  if (claims.iss !== supabaseIssuer(config.supabaseUrl)) return undefined;
+  return claims.sub;
+}
+
+/**
+ * Supabase access token (from the OAuth 2.1 server or a normal sign-in).
+ * `auth.getClaims` verifies the signature against the project JWKS for asymmetric
+ * keys and falls back to the Auth server for HS256. Any error, a missing `sub`,
+ * a role other than `authenticated` (so anon and service-role keys fail), an
+ * expired token or a foreign issuer is rejected. The token is never logged.
+ * The data client is anon key + the user's token: RLS applies, never the service role.
+ */
+export async function authenticateSupabaseJwt(token: string, config: McpAuthConfig): Promise<AuthResult> {
+  const rejected: AuthFailure = { ok: false, reason: "unauthorized", tokenRejected: true };
+  // A JWT is three base64url segments. Anything else is not worth a network call.
+  if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) return rejected;
+
+  let claims: VerifiedClaims;
+  try {
+    const verifier = createAnonClient(config);
+    const { data, error } = await verifier.auth.getClaims(token);
+    if (error || !data?.claims) return rejected;
+    claims = data.claims as VerifiedClaims;
+  } catch {
+    // Do not log the error: some auth errors quote the request.
+    console.error("mcp jwt verification failed");
+    return rejected;
+  }
+
+  const studentId = studentIdFromClaims(claims, config);
+  if (!studentId) return rejected;
+
+  return {
+    ok: true,
+    studentId,
+    db: createAnonClient(config, token),
+    method: "oauth",
+  };
+}
+
 /**
  * Authenticate an MCP request.
  * With `mode.urlToken`, only the demo-url method runs.
- * Otherwise: demo bearer, then (later) Supabase JWT.
+ * Otherwise: demo bearer first (unchanged), then a Supabase access token.
+ * Tokens are read from the Authorization header only.
  */
-export function authenticate(request: Request, config: McpAuthConfig, mode?: McpAuthMode): AuthResult {
+export async function authenticate(request: Request, config: McpAuthConfig, mode?: McpAuthMode): Promise<AuthResult> {
   if (mode) return authenticateDemoUrl(mode.urlToken, config);
   const demo = authenticateDemo(request, config);
   if (demo) return demo;
-  return { ok: false, reason: "unauthorized" };
+  const token = bearerToken(request);
+  if (token === undefined) return { ok: false, reason: "unauthorized" };
+  return authenticateSupabaseJwt(token, config);
 }
