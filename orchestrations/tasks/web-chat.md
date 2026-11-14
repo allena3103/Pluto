@@ -1,14 +1,17 @@
 # Coder task: web-chat (chat screen)
 
-Branch `agent/web-chat`, worktree `C:/Pluto-web-chat`, PR into **`agent/web`**. Port **3104**. Orchestrator: web. Build step 5 (UI half).
+Branch `agent/web-chat`, worktree `C:/Pluto-web-chat`, PR into **`agent/web`**. Port **3104**. Orchestrator: web. Build step 5 (UI half). Model: Cursor `composer-2.5`.
 
 A Claude-style chat on a phone. The agent route (`POST /api/chat`) belongs to the assistant slice: you build the client against the contract, not against their code.
+
+## Base branch (2026-11-14 restart)
+Your branch is cut from `agent/web`, which does **not** have PR #23 (login, shadcn, app nav). Do not branch from `agent/web-shell`, do not edit that PR, and do not import `@/components/ui/*` or `apps/web/lib/safe-next.ts` — those files are not on your branch. Style with Tailwind utility classes, in the same spirit as `apps/web/components/grades/`. Do not edit `apps/web/package.json` or the lockfile. Do not edit `(app)/layout.tsx`.
 
 ## Read first
 - `CLAUDE.md`, `orchestrations/files/BRIEF.md`, `orchestrations/plans/web.md`.
 - `apps/web/AGENTS.md`: **this is Next 16, not the Next you know.** Read the relevant guides in `node_modules/next/dist/docs/` (resolve from `apps/web`) first.
     10|- `packages/core/src/contract.ts`: `ChatRequest`, `ChatStreamEvent`, `CHAT_STREAM_CONTENT_TYPE` (`application/x-ndjson`), `ENDPOINTS.chat`, and `deep-links.ts` (`notePath`). **Never edit `packages/core/**` or `docs/plan.md`.**
-- Shell landed by `web-shell`: `apps/web/components/ui/**`, nav, theme tokens, `(app)` layout and error boundaries. Reuse them; do not restyle them.
+- The `(app)` layout on this branch is the foundation placeholder (a header and a padded main). Your page renders inside it. Grades (`apps/web/app/(app)/grades/`) is the visual reference. Do not restyle shared files.
 
 The stream contract, exactly: `POST /api/chat` with `{ sessionId?, message }` returns newline-delimited JSON, **one `ChatStreamEvent` per line**, ending with exactly one `done` or one `error`:
 - `{ type: "text", delta }` — append in order.
