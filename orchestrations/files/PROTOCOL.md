@@ -32,14 +32,19 @@ herdr agent prompt $NAME "Read CLAUDE.md, orchestrations/files/BRIEF.md and orch
 - You have no background-job notifications. While coders or reviewers are running, block in the foreground with `herdr agent wait <name> --timeout 900000` (repeat as needed) and keep your turn going; do not end your turn while your own agents are working.
 - When everything left is waiting on grokbot (PRs open, CI green, nothing running), end your turn with one line starting `WAITING_GROKBOT:` listing the PR numbers. The director watches GitHub and prompts you when they merge or get review comments.
 - Your Cursor account is whatever `CURSOR_API_KEY` is in your environment (empty means the default logged-in account). Never print the key, never write it to a file in a repo, and pass it to coder tabs only via `--env` as in section 2. Headless reviewers inherit it automatically.
-- Model for coders: per 2b. You may pick `claude-opus-5-thinking-high` for a coder only for the hardest task in your slice.
+- Model for coders: per 2b.
 
 ## 2b. Usage policy: Claude vs Cursor
 Claude coders, reviewers and orchestrators all share Allen's one Claude 5-hour meter (shown in every Claude tab's status bar). Hitting 100% stalls every Claude agent, including you, until it resets.
-- Default new coders to Cursor: `herdr agent start $NAME --kind cursor --pane $PANE -- --force --trust --model <model>`. Good picks: `gpt-5.3-codex` (backend/logic), `composer-2.5` (fast UI and mechanical work), `claude-sonnet-5-thinking-high` (tricky mixed work, billed to Cursor, not the Claude meter).
-- Reviewers run on Cursor by default: `cursor-agent -p --force --trust --model gpt-5.3-codex "<same reviewer prompt>"`. A different model family from the coder is preferred.
+- **Model availability changed (2026-11-14 07:00).** The Cursor CLI is now logged into Allen's second account, which only includes `composer-2.5`, `auto` and the Grok models. `gpt-5.3-codex`, Sonnet 5, Opus 5 and GPT-5.6 fail with "not included in your weekly usage". Use:
+  - planners: `grok-4.7-high`
+  - coders: `composer-2.5` (UI, mechanical) or `grok-4.7-medium` (logic); `grok-4.7-high` for security-sensitive fixes
+  - fresh reviewers: `grok-4.7-high`, via `cursor-agent -p --force --trust --model grok-4.7-high "<same reviewer prompt>"`
 - Use a Claude coder only for work that clearly needs it, and only while your status bar shows the 5-hour meter under 60%.
 - Cursor coders get the same brief and protocol; their pane is still checked with `herdr agent read`. If `herdr agent wait` never reports idle for a Cursor agent, read the pane to judge completion.
+
+## 2e. Branch ancestry
+Grokbot squash-merges, so after a milestone PR lands in `agent/pluto`, your slice branch and `agent/pluto` no longer share history and a plain merge shows add/add conflicts. Sync through a dedicated PR: branch `agent/<orch>-sync` from your slice branch, `git merge origin/agent/pluto`, resolve every file you don't own by taking `agent/pluto`'s version (`git checkout --theirs`), keep your own files, run all checks, PR into `agent/<orch>`. Never mix a sync into a feature PR.
 
 ## 2c. Memory cap (16 GB machine, shared by everyone)
 The machine has 16 GB and already ran out once (background shells were killed).
