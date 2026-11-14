@@ -2,7 +2,7 @@ import { DeepLink, TOOL_NAMES } from "@pluto/core/contract";
 import { ToolError } from "@pluto/core/tools/index";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildToolDeclarations } from "../src/declarations";
-import { DEFAULT_GEMINI_MODEL, runAgent, type AgentModelClient } from "../src/index";
+import { DEFAULT_GEMINI_FAST_MODEL, DEFAULT_GEMINI_MODEL, runAgent, type AgentModelClient } from "../src/index";
 
 const FILE_ID = "11111111-1111-4111-8111-111111111111";
 const DEEP_LINK = `http://localhost:3401/notes/${FILE_ID}?page=2`;
@@ -442,6 +442,27 @@ describe("gemini agent", () => {
     } finally {
       if (previous === undefined) delete process.env.GEMINI_MODEL;
       else process.env.GEMINI_MODEL = previous;
+    }
+  });
+
+  it("sends SMS to the fast tier (GEMINI_FAST_MODEL, otherwise its default), never the web model", async () => {
+    const previous = { web: process.env.GEMINI_MODEL, fast: process.env.GEMINI_FAST_MODEL };
+    const sms = async () => {
+      const rec = recordingClient();
+      await runAgent({ llm: "gemini", channel: "sms", message: "hello", runTool: async () => ({}), client: rec.client });
+      return rec.requests[0]?.model;
+    };
+    try {
+      process.env.GEMINI_MODEL = "web-model";
+      process.env.GEMINI_FAST_MODEL = " fast-from-env ";
+      expect(await sms()).toBe("fast-from-env");
+      delete process.env.GEMINI_FAST_MODEL;
+      expect(await sms()).toBe(DEFAULT_GEMINI_FAST_MODEL);
+    } finally {
+      for (const [key, value] of [["GEMINI_MODEL", previous.web], ["GEMINI_FAST_MODEL", previous.fast]] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
     }
   });
 });

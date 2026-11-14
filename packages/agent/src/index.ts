@@ -13,6 +13,7 @@ import {
 } from "./types";
 
 export {
+  DEFAULT_GEMINI_FAST_MODEL,
   DEFAULT_GEMINI_MODEL,
   MAX_TOOL_ROUNDS,
   type AgentCitation,
