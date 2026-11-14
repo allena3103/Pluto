@@ -108,7 +108,7 @@ describe("mock agent", () => {
       runTool,
     });
     expect(runTool).toHaveBeenCalledWith("search_notes", {
-      query: "What does History 105 say about the treaty",
+      query: "treaty",
       limit: 3,
       course: "History 105",
     });
