@@ -97,6 +97,64 @@ describe("canvas http client", () => {
     expect(call).toBe(2);
   });
 
+  it("sleeps for a Retry-After of exactly 60 seconds", async () => {
+    const sleeps: number[] = [];
+    let call = 0;
+    const fetchImpl: typeof fetch = async () => {
+      call += 1;
+      if (call === 1) {
+        return new Response(JSON.stringify({ error: "throttled" }), {
+          status: 429,
+          headers: { "Retry-After": "60" },
+        });
+      }
+      return new Response(JSON.stringify([{ id: "ok" }]), { status: 200 });
+    };
+
+    const result = await buildClient(fetchImpl, async (ms) => {
+      sleeps.push(ms);
+    }).getPaginatedArray({
+      path: "/api/v1/courses",
+      endpointName: "courses",
+    });
+
+    expect(result).toEqual([{ id: "ok" }]);
+    expect(sleeps).toEqual([60_000]);
+    expect(call).toBe(2);
+  });
+
+  it("throws when Retry-After exceeds 60 seconds without sleeping that long", async () => {
+    const sleeps: number[] = [];
+    let call = 0;
+    const fetchImpl: typeof fetch = async () => {
+      call += 1;
+      return new Response(JSON.stringify({ error: "throttled" }), {
+        status: 429,
+        headers: { "Retry-After": "3600" },
+      });
+    };
+
+    let error: unknown;
+    try {
+      await buildClient(fetchImpl, async (ms) => {
+        sleeps.push(ms);
+      }).getPaginatedArray({
+        path: "/api/v1/courses",
+        endpointName: "courses",
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(CanvasRateLimitError);
+    const rateLimit = error as CanvasRateLimitError;
+    expect(rateLimit.message).toContain("retry delay exceeded 60 seconds");
+    expect(rateLimit.message.includes(TOKEN)).toBe(false);
+    expect(call).toBe(1);
+    expect(sleeps.some((ms) => ms >= 60_000)).toBe(false);
+    expect(sleeps).toEqual([]);
+  });
+
   it("retries 403 with rate limit body but not plain 403", async () => {
     let call = 0;
     const retryFetch: typeof fetch = async () => {

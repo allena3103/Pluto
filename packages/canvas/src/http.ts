@@ -11,6 +11,7 @@ const DEFAULT_MAX_PAGES = 20;
 const MAX_ATTEMPTS = 4;
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_JITTER_MAX_MS = 250;
+const MAX_RETRY_DELAY_MS = 60_000;
 const ORIGIN_MISMATCH_MESSAGE =
   "Canvas pagination link origin does not match the configured base URL.";
 
@@ -240,6 +241,7 @@ async function requestPage(options: {
 
       const retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"));
       const waitMs = retryAfterMs ?? computeBackoffMs(attempt);
+      assertRetryDelay(waitMs, response.status, options.path);
       await options.sleep(waitMs);
       continue;
     } catch (error) {
@@ -268,6 +270,7 @@ async function requestPage(options: {
       }
 
       const waitMs = computeBackoffMs(attempt);
+      assertRetryDelay(waitMs, 500, options.path);
       await options.sleep(waitMs);
     }
   }
@@ -334,6 +337,16 @@ function isRateLimit403(headers: Headers, bodyText: string): boolean {
     }
   }
   return false;
+}
+
+function assertRetryDelay(waitMs: number, status: number, requestPath: string): void {
+  if (waitMs > MAX_RETRY_DELAY_MS) {
+    throw new CanvasRateLimitError({
+      status,
+      requestPath,
+      message: "Canvas retry delay exceeded 60 seconds.",
+    });
+  }
 }
 
 function parseRetryAfterMs(value: string | null): number | null {
