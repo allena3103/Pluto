@@ -145,6 +145,11 @@ describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
     }
     const links = rowsOrDenied(await victim!.client.from("magic_links").select("*"), "victim -> magic_links");
     expect(links).toEqual([]);
+    const linkCodes = rowsOrDenied(
+      await victim!.client.from("phone_link_codes").select("*"),
+      "victim -> phone_link_codes",
+    );
+    expect(linkCodes).toEqual([]);
   });
 
   it("other students cannot insert rows owned by the demo student or the victim", async () => {
@@ -197,7 +202,7 @@ describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
     }
 
     // Students cannot write the service-only tables even for themselves.
-    for (const table of ["file_pages", "alerts", "study_blocks", "sms_messages", "magic_links"]) {
+    for (const table of ["file_pages", "alerts", "study_blocks", "sms_messages", "magic_links", "phone_link_codes"]) {
       const res = await victim!.client.from(table).update({ created_at: EPOCH }).eq("student_id", victim!.id).select();
       expect(res.error?.code, `victim update own ${table}`).toBe("42501");
     }

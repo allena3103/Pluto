@@ -19,13 +19,16 @@ export const OWNER_COLUMN: Record<string, string> = {
   chat_sessions: "student_id",
   chat_messages: "student_id",
   magic_links: "student_id",
+  phone_link_codes: "student_id",
   alerts: "student_id",
   study_blocks: "student_id",
   sms_messages: "student_id",
 };
 
-/** Tables a signed-in student may read (magic_links is service role only). */
-export const STUDENT_READABLE = Object.keys(OWNER_COLUMN).filter((t) => t !== "magic_links");
+/** Tables a signed-in student may read (magic_links and phone_link_codes are service role only). */
+export const STUDENT_READABLE = Object.keys(OWNER_COLUMN).filter(
+  (t) => t !== "magic_links" && t !== "phone_link_codes",
+);
 
 function client(key: string): SupabaseClient {
   return createClient(dbEnv().url, key, {
@@ -134,6 +137,7 @@ export interface OwnedRows {
   chatSessionId: string;
   chatMessageId: string;
   magicLinkId: string;
+  phoneLinkCodeId: string;
   alertId: string;
   studyBlockId: string;
   smsMessageId: string;
@@ -172,6 +176,10 @@ export async function createRowInEveryTable(service: SupabaseClient, studentId: 
     page: 1,
     expires_at: new Date(Date.now() + 900_000).toISOString(),
   });
+  const phoneLinkCodeId = await one("phone_link_codes", {
+    code_hash: randomBytes(32).toString("hex"),
+    expires_at: new Date(Date.now() + 900_000).toISOString(),
+  });
   const alertId = await one("alerts", {
     kind: "date_change",
     assignment_id: assignmentId,
@@ -196,6 +204,7 @@ export async function createRowInEveryTable(service: SupabaseClient, studentId: 
     chatSessionId,
     chatMessageId,
     magicLinkId,
+    phoneLinkCodeId,
     alertId,
     studyBlockId,
     smsMessageId,
@@ -227,6 +236,7 @@ export function insertPayloads(target: {
     chat_sessions: { student_id: s, channel: "web", title: "intruder" },
     chat_messages: { student_id: s, session_id: sessionId, role: "user", text: "intruder", channel: "web" },
     magic_links: { student_id: s, token_hash: randomBytes(32).toString("hex"), file_id: fileId, page: 1, expires_at: soon },
+    phone_link_codes: { student_id: s, code_hash: randomBytes(32).toString("hex"), expires_at: soon },
     alerts: { student_id: s, kind: "crunch_week", message: "intruder" },
     study_blocks: { student_id: s, alert_id: alertId, title: "intruder", starts_at: soon, ends_at: later },
     sms_messages: { student_id: s, direction: "inbound", body: "intruder" },
