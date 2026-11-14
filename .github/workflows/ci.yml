@@ -1,0 +1,36 @@
+name: CI
+on:
+  push:
+  pull_request:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      # Database tests (RLS isolation, storage policies, search) run against a real local Supabase
+      # stack started in the job. A fresh `supabase start` applies every migration and supabase/seed.sql.
+      # They are never skipped in CI: PLUTO_SKIP_DB_TESTS is not set here.
+      - name: Start Supabase (migrations + seed)
+        run: npx supabase start -x studio,imgproxy,realtime,edge-runtime,logflare,vector,postgres-meta,supavisor,mailpit
+      - name: Write apps/web/.env.local from the local stack
+        run: npm run env:local
+      - name: Seed (also proves the seed is re-runnable)
+        run: npm run seed
+      - name: Tests (unit + database)
+        run: npm test
+      - name: Smoke
+        run: npm run smoke
+      - name: Stop Supabase
+        if: always()
+        run: npx supabase stop --no-backup
