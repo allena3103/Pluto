@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@pluto/core": "*",
+    "@pluto/mcp": "*",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.0",
     "clsx": "^2.1.1",
