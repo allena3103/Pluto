@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/safe-next";
@@ -34,6 +35,15 @@ export default async function LoginPage({
         </CardHeader>
         <CardContent>
           <LoginForm next={next} expiredLink={params.error === "link"} />
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            New to Pluto?{" "}
+            <Link
+              href={next === "/" ? "/signup" : `/signup?next=${encodeURIComponent(next)}`}
+              className="font-medium text-foreground underline"
+            >
+              Create an account
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </main>
