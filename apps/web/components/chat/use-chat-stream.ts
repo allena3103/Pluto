@@ -231,7 +231,7 @@ export function useChatStream() {
         } else {
           setPendingRetryMessage(null);
         }
-      } catch (err) {
+      } catch {
         if (controller.signal.aborted) {
           setMessages((prev) =>
             prev.map((m) =>
