@@ -11,17 +11,18 @@ Restarted 2026-11-14 on Cursor `grok-4.7-high`. This revision follows the direct
 | PR | Branch | State | What we do |
 | --- | --- | --- | --- |
 | #13 | `agent/web-grades` | **Merged** (coder self-merged; see `orchestrations/escalations/web-1.md`) | Leave it. Grades and deadlines are on `agent/web`. The Postgres-error leak noted in web-1 waits for the polish pass. |
-| #23 | `agent/web-shell` | **Open**, CI green. Director is running the fresh re-review now. | **Do not touch** the branch, the worktree, the herdr tab, or the PR. |
-| #24 | `agent/web-notes` | **Draft**, CI green, mergeable. | Follows #23. Do not prompt that coder and do not edit the branch. |
+| #23 | `agent/web-shell` | **Merged** into `agent/web` (`cc6feb5`). CI on `agent/web` green. | Leave the worktree. A fix round restarts a coder there. |
+| #34 | `agent/web-signup` | **Merged** into `agent/web` (`a9e51a2`). CI green. Fresh review was `VERDICT: APPROVE`. | Tab closed. A fix round restarts in `C:/Pluto-web-signup`. |
+| #24 | `agent/web-notes` | **Draft**. It was waiting on #23, which has now merged. | Do not prompt that coder and do not edit the branch. The director said #24 follows #23. |
 | — | `origin/agent/foundation` | `consumeMagicLink` is here (`packages/core/src/magic-links.ts`) | Not on `agent/web` and not on `origin/agent/pluto`. |
 
 `agent/web` and `origin/agent/pluto` diverged at the F1 squash (`87fbb9f`). Protocol 2e: a later sync is its own PR (`agent/web-sync` into `agent/web`), never mixed into a feature PR. A sync today would not unblock magic links, because those commits are not on `agent/pluto` yet. Do not edit `docs/plan.md` or `orchestrations/files/**`.
 
 Coders: Cursor only, `composer-2.5` (UI) or `grok-4.7-medium` (logic). Fresh reviewers, when required: `grok-4.7-high`. Max **1-2** coders at once. Under 2 GB free RAM, spawn nobody, except the director's 10:08 instruction to start one coder at about 1.7 GB.
 
-W7 `web-signup` is done. PR [#34](https://github.com/allena3103/Pluto/pull/34) is open into `agent/web`, CI `check` green, fresh review `VERDICT: APPROVE` (comment on the PR). Not merged. The coder tab is closed; a grokbot fix restarts in `C:/Pluto-web-signup`. Dev server on 3106 is stopped.
+W7 `web-signup` is merged (PR #34). Local `npm test` can still fail on the shared database because `phone_link_codes` is not in this branch; CI's fresh database passed. Dev server on 3106 is stopped.
 
-W4 `web-chat` starts once this note is pushed, on Cursor `composer-2.5`, now that free RAM is back above 2 GB and signup is the only finished coder. Close a coder's herdr tab as soon as grokbot merges its PR. The director closed the idle web-shell and web-notes tabs; their worktrees stay, and a fix round restarts a coder in the same worktree.
+W4 `web-chat` is the one coder to start, on Cursor `composer-2.5`, from the `agent/web` tip that contains #23 and #34. Close a coder's herdr tab as soon as grokbot merges its PR. Shell and notes worktrees stay. A fix round restarts a coder in the same worktree.
 
 ## Timeline (BRIEF, Sat 10:00)
 
@@ -62,7 +63,7 @@ Then:
   W9 after #23 merges: link /login -> /signup, and a settings/phone entry in the shell nav
 ```
 
-W7's PR #34 is waiting on grokbot. W4 starts this turn. W8 when a slot is free. W5 only after `consumeMagicLink` is on this branch.
+#23 and #34 are merged. W4 is the running coder. W8 when a slot is free. W5 only after `consumeMagicLink` is on this branch. #24 stays with the director.
 
 ## Milestones (into `agent/pluto`, merge commit)
 
