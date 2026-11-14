@@ -15,7 +15,9 @@ const PUBLIC_PATH_PREFIXES = [
   "/_next",
 ];
 
-const PUBLIC_FILE_PATHS = ["/favicon.ico", "/manifest.webmanifest", "/sw.js"];
+// `/offline.html` is the service worker's static fallback. It has no user
+// data, so it stays public and is safe to precache while signed out.
+const PUBLIC_FILE_PATHS = ["/favicon.ico", "/manifest.webmanifest", "/sw.js", "/offline.html"];
 
 function isPublicPath(pathname: string) {
   if (PUBLIC_FILE_PATHS.includes(pathname)) {
