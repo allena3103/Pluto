@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Dialog } from "radix-ui";
 import {
+  Cable,
   CalendarClock,
   FileText,
   GraduationCap,
@@ -28,6 +29,7 @@ const PRIMARY_LINKS: readonly NavLink[] = [
   { href: "/notes", label: "Notes", icon: FileText, tint: "bg-sky-tint text-sky-700" },
   { href: "/grades", label: "Grades", icon: GraduationCap, tint: "bg-mint text-emerald-700" },
   { href: "/deadlines", label: "Deadlines", icon: CalendarClock, tint: "bg-butter text-amber-700" },
+  { href: "/mcp", label: "Connect AI", icon: Cable, tint: "bg-lilac text-violet-700" },
 ];
 
 const SETTINGS_LINKS: readonly NavLink[] = [
