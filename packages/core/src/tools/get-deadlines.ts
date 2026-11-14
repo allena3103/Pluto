@@ -1,7 +1,7 @@
 import type { ToolContext } from "../context";
 import { TOOLS, type DeadlineStatus, type ToolArgs, type ToolOutput } from "../contract";
 import { resolveCourse } from "./resolve-course";
-import { toDbToolError, toIsoNow } from "./shared";
+import { fetchAllRows, toIsoNow } from "./shared";
 
 interface DeadlineRow {
   id: string;
@@ -41,16 +41,14 @@ export async function getDeadlines(
     .gte("due_at", nowIso)
     .lte("due_at", horizonIso)
     .order("due_at", { ascending: true })
-    .order("id", { ascending: true })
-    .limit(5000);
+    .order("id", { ascending: true });
 
   if (resolvedCourse) query = query.eq("course_id", resolvedCourse.courseId);
 
-  const { data, error } = await query;
-  if (error) throw toDbToolError(error);
+  const data = await fetchAllRows<DeadlineRow>(query);
 
   return TOOLS.get_deadlines.output.parse({
-    deadlines: ((data ?? []) as DeadlineRow[]).map((row) => ({
+    deadlines: data.map((row) => ({
       assignmentId: row.id,
       courseId: row.course_id,
       courseName: row.courses.name,

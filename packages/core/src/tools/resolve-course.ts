@@ -1,6 +1,6 @@
 import type { ToolContext } from "../context";
 import { Id } from "../contract";
-import { toDbToolError } from "./shared";
+import { fetchAllRows } from "./shared";
 import { ToolError } from "./tool-error";
 
 export interface ResolvedCourse {
@@ -55,15 +55,15 @@ export function matchCourse(
 }
 
 export async function resolveCourse(ctx: ToolContext, courseRef: string): Promise<ResolvedCourse> {
-  const { data, error } = await ctx.db
-    .from("courses")
-    .select("id, name, term")
-    .eq("student_id", ctx.studentId)
-    .order("name", { ascending: true })
-    .limit(5000);
-  if (error) throw toDbToolError(error);
+  const data = await fetchAllRows<{ id: string; name: string; term: string | null }>(
+    ctx.db
+      .from("courses")
+      .select("id, name, term")
+      .eq("student_id", ctx.studentId)
+      .order("name", { ascending: true }),
+  );
 
-  const courses: ResolvedCourse[] = (data ?? []).map((row) => ({
+  const courses: ResolvedCourse[] = data.map((row) => ({
     courseId: row.id,
     name: row.name,
     term: row.term,
