@@ -22,7 +22,9 @@ Coders: Cursor only, `composer-2.5` (UI) or `grok-4.7-medium` (logic). Fresh rev
 
 W7 `web-signup` is merged (PR #34). Local `npm test` can still fail on the shared database because `phone_link_codes` is not in this branch; CI's fresh database passed. Dev server on 3106 is stopped.
 
-W4 `web-chat` is running: Cursor `composer-2.5`, worktree `C:/Pluto-web-chat`, branch `agent/web-chat`, herdr tab `wF:tZ`. The first three starts died with `EPERM` renaming `cli-config.json`; the fourth stayed up. Close a coder's herdr tab as soon as grokbot merges its PR. Shell and notes worktrees stay. A fix round restarts a coder in the same worktree.
+W4 `web-chat` opened PR [#36](https://github.com/allena3103/Pluto/pull/36). CI `check` is green. No `security-review` label. The diff is only `apps/web/app/(app)/chat/**`, `apps/web/components/chat/**`, and `apps/web/test/ndjson-line-buffer.test.ts`. Dev server on 3104 is stopped. The coder tab is closed; a grokbot fix restarts in `C:/Pluto-web-chat`.
+
+W8 waits. Free RAM after closing the chat tab was 1.75 GB. Shell and notes worktrees stay. A fix round restarts a coder in the same worktree.
 
 ## Timeline (BRIEF, Sat 10:00)
 
@@ -63,7 +65,7 @@ Then:
   W9 after #23 merges: link /login -> /signup, and a settings/phone entry in the shell nav
 ```
 
-#23 and #34 are merged. W4 is running. W8 when a slot is free. W5 only after `consumeMagicLink` is on this branch. #24 stays with the director. After the merges, typecheck and lint passed here. `npm test` still has one local failure: `phone_link_codes` is on the shared database and not in this branch. CI on the merge commits was green.
+#23 and #34 are merged. #36 is waiting on grokbot. W8 starts when free RAM is at least 2 GB. W5 only after `consumeMagicLink` is on this branch. #24 stays with the director. After the merges, typecheck and lint passed here. `npm test` still has one local failure: `phone_link_codes` is on the shared database and not in this branch. CI on the merge commits was green.
 
 ## Milestones (into `agent/pluto`, merge commit)
 
