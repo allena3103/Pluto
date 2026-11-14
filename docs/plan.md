@@ -125,14 +125,14 @@ After every step, run the end-to-end smoke test on the demo student before start
 
 ## Working agreement
 
-Every change is written by one coder agent and checked by a fresh reviewer agent that has never seen the work, with two review rounds at most. Full process: `orchestrations/files/PROTOCOL.md`.
+Every change is written by one coder agent and reviewed and merged by grokbot (Allen's GitHub reviewer). Security-sensitive changes also get a fresh reviewer agent that has never seen the work. Full process: `orchestrations/files/PROTOCOL.md`.
 
 1. **Coder agent.** One session per task in its own worktree and herdr tab, given CLAUDE.md, this contract and that one task.
 2. **Self-check.** Before a pull request, typecheck, lint and tests pass, and the coder lists which contract items it touched.
-3. **Reviewer agent.** A fresh headless session gets only the project goals, the contract and the diff, using REVIEW.md. It runs the checks and reports BLOCKING or NON-BLOCKING. It does not fix anything.
+3. **Fresh reviewer, security PRs only.** PRs touching migrations/RLS, auth, magic links, the SMS webhook, service-role or internal-secret routes, or Canvas token encryption are labeled `security-review` and get a fresh headless reviewer (only goals, contract and diff, using REVIEW.md) before grokbot. It reports BLOCKING or NON-BLOCKING and fixes nothing.
 4. **Blocking means** a bug, a contract mismatch, a missing auth or row-level-security check, or a secret in code. Style and naming never block.
-5. **Limit.** One fix round and one re-review. Still open: the orchestrator decides non-security items; security and contract items go to the director, then Allen.
-6. **Merge.** Coder PRs merge into the orchestrator branch (orchestrator merges). Orchestrator PRs merge into `agent/pluto` (director merges after grokbot review and re-running checks). `agent/pluto` into `main`: director opens the PR, Allen merges.
+5. **Limit.** One fix round and one re-review. Still open: security and contract items go to the director, then Allen.
+6. **Merge.** Grokbot merges coder PRs into orchestrator branches and milestone PRs into `agent/pluto`, only when CI is green (and the fresh review approved, if labeled). After each merge the owner reruns the checks on the merged branch. `agent/pluto` into `main`: director opens the PR, Allen merges.
 7. **Contract changes.** Only the director edits this doc, then the code follows.
 
 Before kickoff, confirm that the event allows AI-assisted coding; this plan assumes it does.
@@ -174,3 +174,5 @@ Director-owned. Newest last.
 | 2026-11-13 | `packages/core` owns shared helpers used by several surfaces: magic links, `sendSms` (simulator + Sendblue), ICS builder, deep links. Deep-link format `/notes/<fileId>?page=<n>`, 1-based. |
 | 2026-11-13 | Mocks for keyless development: `PLUTO_LLM=mock`, `SMS_PROVIDER=simulator`, `CANVAS_MODE=fixtures`. |
 | 2026-11-13 | Agent loop (web chat + SMS) uses the Google Gemini API instead of the Anthropic API (Gemini is a sponsor). Env: `GEMINI_API_KEY`, `GEMINI_MODEL`; `PLUTO_LLM=mock|gemini`. Claude stays the MCP client in the demo. |
+| 2026-11-13 | `/api/alerts/demo` accepts either the signed-in student's session (studentId must equal the session user) or `INTERNAL_API_SECRET` (for a timer). |
+| 2026-11-14 | Grokbot reviews, UI-tests and merges every PR (coder and milestone). Fresh reviewer agents only for `security-review` PRs (migrations/RLS, auth, magic links, SMS webhook, service-role/internal-secret routes, Canvas token encryption). Merge gate is CI green (+ APPROVE if labeled); GitHub can't enforce it on this private free repo. CI runs the database tests against a Supabase stack. |
