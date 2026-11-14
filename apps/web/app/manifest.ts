@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "AI academic manager",
     start_url: "/",
     display: "standalone",
-    background_color: "#ffffff",
-    theme_color: "#0f172a",
+    background_color: "#fff8ee",
+    theme_color: "#fff8ee",
     icons: [
       {
         src: "/icon-192.png",

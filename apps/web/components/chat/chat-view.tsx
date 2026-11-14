@@ -2,10 +2,58 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AlertCircle,
+  ArrowUp,
+  BookOpen,
+  CalendarClock,
+  FileText,
+  GraduationCap,
+  RotateCcw,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
 import { notePath } from "@pluto/core/deep-links";
-import { Button } from "@/components/ui/button";
+import { type MascotMood, PlutoMascot } from "@/components/mascot/pluto-mascot";
+import { useMascotMood } from "@/components/mascot/use-mascot-mood";
 import { cn } from "@/lib/utils";
+import { NEW_CHAT_EVENT } from "./new-chat";
 import { type ChatCitation, type ChatMessage, useChatStream } from "./use-chat-stream";
+
+const SUGGESTIONS: readonly { text: string; icon: LucideIcon; className: string }[] = [
+  {
+    text: "What's due this week?",
+    icon: CalendarClock,
+    className: "bg-butter text-amber-900 hover:bg-[#ffe9a8] [&_svg]:text-amber-600",
+  },
+  {
+    text: "How am I doing in my classes?",
+    icon: GraduationCap,
+    className: "bg-mint/70 text-emerald-900 hover:bg-mint [&_svg]:text-emerald-600",
+  },
+  {
+    text: "Make me a study guide from my latest notes",
+    icon: Sparkles,
+    className: "bg-peach text-[#8a3a22] hover:bg-[#ffd6c0] [&_svg]:text-[#ff6b4a]",
+  },
+  {
+    text: "Summarize my last lecture",
+    icon: BookOpen,
+    className: "bg-sky-tint/80 text-sky-900 hover:bg-sky-tint [&_svg]:text-sky-600",
+  },
+];
+
+const COMPOSER_MAX_HEIGHT = 200;
+
+function firstNameOf(name: string | null): string | null {
+  const trimmed = name?.trim();
+  if (!trimmed) return null;
+  const base = trimmed.includes("@")
+    ? (trimmed.split("@")[0] ?? "").split(/[._+-]/)[0] ?? ""
+    : trimmed.split(/\s+/)[0] ?? "";
+  if (!base) return null;
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
 
 function formatCitationLabel(citation: ChatCitation): string {
   if (citation.title) {
@@ -21,7 +69,7 @@ function citationHref(citation: ChatCitation): string {
 function AssistantText({ text }: { text: string }) {
   const paragraphs = text.split(/\n\n+/);
   return (
-    <div className="space-y-2 break-words">
+    <div className="space-y-3 break-words">
       {paragraphs.map((para, index) => (
         <p key={index} className="whitespace-pre-wrap">
           {para}
@@ -31,48 +79,114 @@ function AssistantText({ text }: { text: string }) {
   );
 }
 
-function MessageBody({ message }: { message: ChatMessage }) {
-  if (message.role === "user") {
-    return <p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>;
-  }
+const BUSY_CAPTIONS: Partial<Record<MascotMood, string>> = {
+  thinking: "Thinking…",
+  working: "Digging through your notes…",
+};
 
+/** `liveMood` is set only on the latest assistant message; older avatars stay still. */
+function AssistantMessage({ message, liveMood }: { message: ChatMessage; liveMood?: MascotMood }) {
+  const caption = liveMood && message.content === "" ? BUSY_CAPTIONS[liveMood] : undefined;
   return (
-    <div className="space-y-2">
-      {message.pending && message.content === "" && (
-        <p className="text-sm text-muted-foreground" aria-live="polite">
-          <span className="inline-flex items-center gap-1">
-            <span className="sr-only">Assistant is typing</span>
-            <span className="animate-pulse">●</span>
-            <span className="animate-pulse [animation-delay:150ms]">●</span>
-            <span className="animate-pulse [animation-delay:300ms]">●</span>
-          </span>
-        </p>
-      )}
-      {message.content !== "" && <AssistantText text={message.content} />}
-      {message.error && (
-        <p className="text-sm text-destructive" role="alert">
-          {message.error}
-        </p>
-      )}
-      {message.citations.length > 0 && (
-        <ul className="flex flex-wrap gap-2 pt-1">
-          {message.citations.map((citation) => (
-            <li key={`${citation.fileId}-${citation.page}-${citation.deepLink}`}>
-              <Link
-                href={citationHref(citation)}
-                className="inline-flex max-w-full items-center rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
-              >
-                <span className="truncate">{formatCitationLabel(citation)}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="flex gap-3">
+      <PlutoMascot mood={liveMood ?? "happy"} size={36} animated={liveMood !== undefined} className="-mt-1" />
+      <div className="min-w-0 flex-1 space-y-3 pt-1 text-[0.97rem] leading-relaxed text-foreground">
+        {caption && (
+          <p className="flex h-7 items-center text-sm font-bold text-muted-foreground" aria-live="polite">
+            <span className="sr-only">Assistant is typing. </span>
+            {caption}
+          </p>
+        )}
+        {message.content !== "" && <AssistantText text={message.content} />}
+        {message.error && (
+          <p
+            className="inline-flex items-start gap-2 rounded-2xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
+            role="alert"
+          >
+            <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+            {message.error}
+          </p>
+        )}
+        {message.citations.length > 0 && (
+          <ul className="flex flex-wrap gap-2" aria-label="Sources">
+            {message.citations.map((citation) => (
+              <li key={`${citation.fileId}-${citation.page}-${citation.deepLink}`} className="max-w-full">
+                <Link
+                  href={citationHref(citation)}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-input bg-card px-3 py-1.5 text-xs font-bold text-foreground shadow-warm-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent hover:text-accent-foreground"
+                >
+                  <FileText className="size-3.5 shrink-0 text-primary" aria-hidden />
+                  <span className="truncate">{formatCitationLabel(citation)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
 
-export function ChatView() {
+function UserMessage({ message }: { message: ChatMessage }) {
+  return (
+    <div className="flex justify-end pl-10">
+      <p className="max-w-full rounded-3xl rounded-br-lg bg-[linear-gradient(135deg,#ffe3d3,#ffeccd)] px-4 py-2.5 text-[0.97rem] leading-relaxed font-semibold whitespace-pre-wrap break-words text-[#5a2a1a] shadow-warm-sm">
+        {message.content}
+      </p>
+    </div>
+  );
+}
+
+type ComposerProps = {
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  value: string;
+  onChange: (value: string) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  disabled: boolean;
+  canSend: boolean;
+  large?: boolean;
+};
+
+function Composer({ textareaRef, value, onChange, onKeyDown, onSubmit, disabled, canSend, large }: ComposerProps) {
+  return (
+    <form
+      onSubmit={onSubmit}
+      className={cn(
+        "flex items-end gap-2 rounded-[1.75rem] border border-input bg-card py-2 pr-2 pl-5 shadow-warm transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-4 focus-within:ring-ring/15",
+        large && "md:rounded-[2rem] md:py-3 md:pr-3 md:pl-6",
+      )}
+    >
+      <label className="sr-only" htmlFor="chat-composer">
+        Message
+      </label>
+      <textarea
+        id="chat-composer"
+        ref={textareaRef}
+        rows={1}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        disabled={disabled}
+        placeholder={large ? "Ask Pluto anything…" : "Message Pluto…"}
+        className={cn(
+          "min-h-10 w-full min-w-0 flex-1 resize-none bg-transparent py-2 text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed disabled:opacity-60",
+          large && "md:min-h-14 md:text-lg",
+        )}
+      />
+      <button
+        type="submit"
+        disabled={!canSend}
+        aria-label="Send message"
+        className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-sunrise text-white shadow-warm transition-all hover:-translate-y-0.5 hover:shadow-warm-lg active:scale-95 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted disabled:bg-none disabled:text-muted-foreground disabled:shadow-none disabled:hover:translate-y-0"
+      >
+        <ArrowUp className="size-5" strokeWidth={2.75} aria-hidden />
+      </button>
+    </form>
+  );
+}
+
+export function ChatView({ name }: { name: string | null }) {
   const {
     messages,
     composerText,
@@ -81,24 +195,27 @@ export function ChatView() {
     sendMessage,
     retryLast,
     canRetry,
+    reset,
   } = useChatStream();
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [stickToBottom, setStickToBottom] = useState(true);
+  const firstName = firstNameOf(name);
+  const isEmpty = messages.length === 0;
+  const mood = useMascotMood(messages, composerText);
+  const lastAssistantId = messages.findLast((m) => m.role === "assistant")?.id;
 
   const resizeComposer = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    const lineHeight = 20;
-    const maxHeight = lineHeight * 5 + 16;
-    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
   }, []);
 
   useEffect(() => {
     resizeComposer();
-  }, [composerText, resizeComposer]);
+  }, [composerText, isEmpty, resizeComposer]);
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -111,6 +228,15 @@ export function ChatView() {
     if (!stickToBottom) return;
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [messages, stickToBottom]);
+
+  useEffect(() => {
+    const onNewChat = () => {
+      reset();
+      setStickToBottom(true);
+    };
+    window.addEventListener(NEW_CHAT_EVENT, onNewChat);
+    return () => window.removeEventListener(NEW_CHAT_EVENT, onNewChat);
+  }, [reset]);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,70 +252,103 @@ export function ChatView() {
     }
   };
 
+  const composer = (
+    <Composer
+      textareaRef={textareaRef}
+      value={composerText}
+      onChange={setComposerText}
+      onKeyDown={onKeyDown}
+      onSubmit={onSubmit}
+      disabled={isStreaming}
+      canSend={!isStreaming && composerText.trim() !== ""}
+      large={isEmpty}
+    />
+  );
+
+  if (isEmpty) {
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-y-auto">
+        <div className="m-auto w-full max-w-2xl px-4 py-8 md:py-12">
+          <div className="flex flex-col items-center text-center">
+            <PlutoMascot mood={mood} size={120} label={`Pluto is ${mood}`} />
+            <h1 className="mt-5 text-[1.75rem] leading-tight font-black tracking-tight text-balance text-foreground md:text-[2.5rem]">
+              Hey {firstName ?? "there"}!{" "}
+              <span className="block">
+                What are we <span className="text-sunrise">tackling</span> today?
+              </span>
+            </h1>
+            <p className="mt-2 text-sm font-semibold text-muted-foreground md:text-base">
+              I know your notes, grades and deadlines. Ask me anything.
+            </p>
+          </div>
+
+          <div className="mt-7 md:mt-9">{composer}</div>
+
+          <ul className="mt-5 flex flex-wrap justify-center gap-2" aria-label="Suggestions">
+            {SUGGESTIONS.map(({ text, icon: Icon, className }) => (
+              <li key={text}>
+                <button
+                  type="button"
+                  disabled={isStreaming}
+                  onClick={() => void sendMessage(text)}
+                  className={cn(
+                    "inline-flex cursor-pointer items-center gap-2 rounded-full px-4 py-2.5 text-left text-sm font-bold shadow-warm-sm transition-all hover:-translate-y-0.5 hover:shadow-warm active:scale-[0.98] focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-none disabled:opacity-60",
+                    className,
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden />
+                  {text}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="-mx-4 -mt-4 flex h-[calc(100dvh-11rem-env(safe-area-inset-bottom))] min-h-0 max-w-full flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col">
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-4 pt-4"
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
         aria-label="Chat messages"
       >
-        {messages.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground">
-            Ask about your courses, notes, or deadlines.
-          </p>
-        )}
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={cn("flex w-full max-w-full", message.role === "user" ? "justify-end" : "justify-start")}
-          >
-            <div
-              className={cn(
-                "max-w-[min(100%,20rem)] rounded-2xl px-3 py-2",
-                message.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "border border-border bg-card text-card-foreground",
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-7 px-4 pt-6 pb-4 md:px-6 md:pt-10">
+          {messages.map((message) => (
+            <div key={message.id} className="motion-safe:animate-pop-in">
+              {message.role === "user" ? (
+                <UserMessage message={message} />
+              ) : (
+                <AssistantMessage message={message} liveMood={message.id === lastAssistantId ? mood : undefined} />
               )}
-            >
-              <MessageBody message={message} />
             </div>
-          </div>
-        ))}
-        <div ref={bottomRef} className="h-px shrink-0" aria-hidden />
+          ))}
+          <div ref={bottomRef} className="h-px shrink-0" aria-hidden />
+        </div>
       </div>
 
-      <form
-        onSubmit={onSubmit}
-        className="shrink-0 border-t border-border bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
-      >
-        {canRetry && (
-          <div className="mb-2 flex justify-end">
-            <Button type="button" variant="outline" size="sm" onClick={() => retryLast()}>
-              Retry last message
-            </Button>
-          </div>
-        )}
-        <div className="flex items-end gap-2">
-          <label className="sr-only" htmlFor="chat-composer">
-            Message
-          </label>
-          <textarea
-            id="chat-composer"
-            ref={textareaRef}
-            rows={1}
-            value={composerText}
-            onChange={(e) => setComposerText(e.target.value)}
-            onKeyDown={onKeyDown}
-            disabled={isStreaming}
-            placeholder="Message Pluto…"
-            className="border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 field-sizing-content min-h-9 w-full min-w-0 flex-1 resize-none rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-          />
-          <Button type="submit" disabled={isStreaming || composerText.trim() === ""} className="shrink-0">
-            Send
-          </Button>
+      <div className="shrink-0 px-3 pt-1 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6 md:pb-5">
+        <div className="mx-auto w-full max-w-3xl">
+          {canRetry && (
+            <div className="mb-2 flex justify-center">
+              <button
+                type="button"
+                onClick={() => retryLast()}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-input bg-card px-4 py-1.5 text-sm font-bold text-foreground shadow-warm-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent hover:text-accent-foreground"
+              >
+                <RotateCcw className="size-4" aria-hidden />
+                Retry last message
+              </button>
+            </div>
+          )}
+          {composer}
+          <p className="mt-2 hidden text-center text-xs font-medium text-muted-foreground/80 sm:block">
+            Pluto can make mistakes, so double-check important dates.
+          </p>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

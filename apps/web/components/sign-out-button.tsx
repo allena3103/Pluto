@@ -5,8 +5,9 @@ import { LogOut } from "lucide-react";
 import { signOut } from "@/app/(app)/actions";
 import { clearPlutoCaches } from "@/lib/clear-pluto-caches";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-export function SignOutButton() {
+export function SignOutButton({ className }: { className?: string }) {
   const bypass = useRef(false);
   const clearing = useRef(false);
 
@@ -31,8 +32,12 @@ export function SignOutButton() {
         })();
       }}
     >
-      <Button type="submit" variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
-        <LogOut className="h-4 w-4" aria-hidden />
+      <Button
+        type="submit"
+        variant="ghost"
+        className={cn("w-full justify-start gap-3 px-3 font-semibold text-muted-foreground", className)}
+      >
+        <LogOut className="size-4" aria-hidden />
         Sign out
       </Button>
     </form>

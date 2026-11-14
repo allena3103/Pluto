@@ -1,7 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
+import { AlertCircle } from "lucide-react";
 import { signUp, type SignupState } from "./actions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const initialState: SignupState = { error: null };
 
@@ -9,64 +14,34 @@ export function SignupForm({ next }: { next: string }) {
   const [state, formAction, pending] = useActionState(signUp, initialState);
 
   return (
-    <form action={formAction} className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <form action={formAction} className="space-y-4">
       <input type="hidden" name="next" value={next} />
 
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-slate-900">
-          Name
-        </label>
-        <input
-          id="name"
-          name="name"
-          type="text"
-          autoComplete="name"
-          required
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-base text-slate-900"
-        />
+      <div className="space-y-2">
+        <Label htmlFor="name">Name</Label>
+        <Input id="name" name="name" type="text" autoComplete="name" required />
       </div>
 
-      <div className="mt-3">
-        <label htmlFor="email" className="block text-sm font-medium text-slate-900">
-          Email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-base text-slate-900"
-        />
+      <div className="space-y-2">
+        <Label htmlFor="email">Email</Label>
+        <Input id="email" name="email" type="email" autoComplete="email" required />
       </div>
 
-      <div className="mt-3">
-        <label htmlFor="password" className="block text-sm font-medium text-slate-900">
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          required
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-base text-slate-900"
-        />
+      <div className="space-y-2">
+        <Label htmlFor="password">Password</Label>
+        <Input id="password" name="password" type="password" autoComplete="new-password" required />
       </div>
 
       {state.error ? (
-        <p role="alert" className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          {state.error}
-        </p>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{state.error}</AlertDescription>
+        </Alert>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="mt-4 w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-      >
+      <Button type="submit" variant="sunrise" size="lg" disabled={pending} className="w-full">
         {pending ? "Creating account…" : "Create account"}
-      </button>
+      </Button>
     </form>
   );
 }

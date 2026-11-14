@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/safe-next";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthShell } from "@/components/auth-shell";
 import { LoginForm } from "./login-form";
 
 export default async function LoginPage({
@@ -27,25 +27,22 @@ export default async function LoginPage({
   }
 
   return (
-    <main className="flex min-h-screen w-full items-center justify-center bg-background px-4 py-10">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-xl">Sign in to Pluto</CardTitle>
-          <CardDescription>Your AI academic manager.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <LoginForm next={next} expiredLink={params.error === "link"} />
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            New to Pluto?{" "}
-            <Link
-              href={next === "/" ? "/signup" : `/signup?next=${encodeURIComponent(next)}`}
-              className="font-medium text-foreground underline"
-            >
-              Create an account
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
-    </main>
+    <AuthShell
+      title="Welcome back!"
+      description="Sign in to Pluto, your friendly study buddy."
+      footer={
+        <>
+          New to Pluto?{" "}
+          <Link
+            href={next === "/" ? "/signup" : `/signup?next=${encodeURIComponent(next)}`}
+            className="font-extrabold text-primary underline-offset-4 hover:underline"
+          >
+            Create an account
+          </Link>
+        </>
+      }
+    >
+      <LoginForm next={next} expiredLink={params.error === "link"} />
+    </AuthShell>
   );
 }

@@ -1,6 +1,8 @@
+import { GraduationCap } from "lucide-react";
 import { getGrades } from "@pluto/core/tools/get-grades";
 import { GradesView } from "@/components/grades/grades-view";
 import { createSessionToolContext } from "@/components/grades/session-tool-context";
+import { PageShell } from "@/components/page-shell";
 
 export default async function GradesPage() {
   const { user, ctx } = await createSessionToolContext();
@@ -11,9 +13,8 @@ export default async function GradesPage() {
   const data = await getGrades(ctx, {});
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-lg font-semibold text-slate-900">Grades</h1>
+    <PageShell title="Grades" description="How each class is going so far." icon={GraduationCap} tint="mint">
       <GradesView data={data} />
-    </div>
+    </PageShell>
   );
 }

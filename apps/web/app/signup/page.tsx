@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { AuthShell } from "@/components/auth-shell";
 import { signupRedirectTarget } from "./safe-next";
 import { SignupForm } from "./signup-form";
 
@@ -35,21 +36,19 @@ export default async function SignupPage({
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-white">
-      <header className="border-b border-slate-200 px-4 py-3">
-        <p className="text-base font-semibold text-slate-900">Pluto</p>
-      </header>
-      <main className="flex-1 p-4">
-        <h1 className="text-lg font-semibold text-slate-900">Create an account</h1>
-        <p className="mt-1 text-sm text-slate-600">Name, email, and a password.</p>
-        <SignupForm next={next} />
-        <p className="mt-4 text-sm text-slate-600">
+    <AuthShell
+      title="Let's get you set up!"
+      description="Name, email, and a password. That's it."
+      footer={
+        <>
           Already have an account?{" "}
-          <a href={loginHref(rawNext, next)} className="font-medium text-slate-900 underline">
+          <a href={loginHref(rawNext, next)} className="font-extrabold text-primary underline-offset-4 hover:underline">
             Sign in
           </a>
-        </p>
-      </main>
-    </div>
+        </>
+      }
+    >
+      <SignupForm next={next} />
+    </AuthShell>
   );
 }

@@ -1,4 +1,6 @@
+import { MessageSquareText } from "lucide-react";
 import { SmsSim, type SimMessage } from "@/components/sms-sim/sms-sim";
+import { PageShell } from "@/components/page-shell";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -30,19 +32,18 @@ export default async function SmsSimPage() {
   }));
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">SMS simulator</h1>
-        <p className="text-sm text-muted-foreground">
-          Texts here run the same handler as the real Pluto number. Replies are stored, not sent.
-        </p>
-      </div>
+    <PageShell
+      title="SMS simulator"
+      description="Texts here run the same handler as the real Pluto number. Replies are stored, not sent."
+      icon={MessageSquareText}
+      tint="sky"
+    >
       <SmsSim
         studentId={user.id}
         linkedPhone={profile.data?.phone ?? null}
         defaultNumber={profile.data?.phone ?? DEFAULT_TEST_NUMBER}
         messages={rows}
       />
-    </div>
+    </PageShell>
   );
 }
