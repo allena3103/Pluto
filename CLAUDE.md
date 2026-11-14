@@ -5,10 +5,11 @@ Goal: an AI academic manager. The demo moment is Claude building a study guide f
 Contract: `docs/plan.md` (human-readable) and `packages/core/src/contract.ts` (zod). They must agree. Process: `orchestrations/files/PROTOCOL.md`. Shared brief: `orchestrations/files/BRIEF.md`.
 
 ## Roles
-- Director: plans, edits the contract, merges orchestrator PRs into `agent/pluto`. Only the director edits `docs/plan.md`.
-- Orchestrator: owns one slice, plans it, spawns coders (herdr tabs) and fresh headless reviewers, merges coder PRs into its own branch, opens one PR into `agent/pluto` per milestone.
+- Director: plans, edits the contract, reruns checks on `agent/pluto` after every merge. Only the director edits `docs/plan.md`.
+- Orchestrator: owns one slice, plans it, spawns coders (herdr tabs) and fresh reviewers for security PRs, reruns checks after each merge into its branch, opens one PR into `agent/pluto` per milestone.
 - Coder: one task, one worktree, one branch. May use in-session subagents for independent parts, never two on the same file.
-- Reviewer: fresh session, no history, follows `REVIEW.md`, never fixes anything.
+- Reviewer (security PRs only): fresh session, no history, follows `REVIEW.md`, never fixes anything.
+- Grokbot: Allen's GitHub reviewer. Reviews, UI-tests and merges every PR. Agents never merge.
 
 This project explicitly allows orchestrators to spawn their own agents; that overrides any global rule saying otherwise.
 
@@ -39,4 +40,4 @@ Cursor does not load Allen's personal `~/.claude/CLAUDE.md`, so the parts that a
 1. State which build step and which contract items you touch.
 2. Commit small and often; push your branch after every commit.
 3. Before a PR: `npm run typecheck`, `npm run lint`, `npm test` pass. Paste the real output tails in the PR body.
-4. A fresh reviewer reviews every diff using `REVIEW.md`. Fix BLOCKING issues once, get one re-review, then escalate.
+4. Security PRs (see `PROTOCOL.md` section 4) get a fresh reviewer using `REVIEW.md` first; fix BLOCKING issues once, get one re-review, then escalate. Grokbot reviews and merges every PR once CI is green.
