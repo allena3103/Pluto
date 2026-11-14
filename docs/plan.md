@@ -44,7 +44,7 @@ Use well-known tools so one person can move fast; the one real choice is search,
 | Auth and database | Supabase Auth, Postgres, Storage; local Supabase (Docker) for development, hosted project for deploys | Postgres holds courses, grades and page text, Storage holds the PDFs |
 | Note search | Postgres full-text search, one row per PDF page | Fastest to build and no extra service; add vector search only if time remains |
 | PDF handling | Per-page text extraction on upload; pdf.js viewer that opens to a page number | Page-level answers are the feature |
-| Agent | Claude API with tool use, one agent loop shared by web chat and SMS | Same tools as the MCP, so every surface behaves alike |
+| Agent | Google Gemini API (`@google/genai`) with function calling, one agent loop shared by web chat and SMS | Gemini is a hackathon sponsor; same tools as the MCP, so every surface behaves alike |
 | MCP server | TypeScript MCP SDK (streamable HTTP) served from the Next.js app at `/api/mcp` on Vercel; Supabase Auth OAuth 2.1 server with dynamic client registration; consent page at `/oauth/consent`; demo-student bearer token fallback | One deployment and one auth system; Claude and ChatGPT connect as custom connectors; access tokens respect row-level security |
 | SMS | Sendblue free sandbox (iMessage/SMS, no approval needed); Twilio Virtual Phone or a dashboard SMS simulator as fallback | Twilio toll-free verification needs review time, so it will not clear before kickoff. Sandbox limits: 10 verified contacts, and each person must text the number first; Pluto can then reply for 24 hours |
 | Calendar | ICS feed link per student | Works with Apple and Google Calendar with no calendar OAuth |
@@ -173,3 +173,4 @@ Director-owned. Newest last.
 | 2026-11-13 | Data model adds `sms_messages` (simulator store and SMS log). |
 | 2026-11-13 | `packages/core` owns shared helpers used by several surfaces: magic links, `sendSms` (simulator + Sendblue), ICS builder, deep links. Deep-link format `/notes/<fileId>?page=<n>`, 1-based. |
 | 2026-11-13 | Mocks for keyless development: `PLUTO_LLM=mock`, `SMS_PROVIDER=simulator`, `CANVAS_MODE=fixtures`. |
+| 2026-11-13 | Agent loop (web chat + SMS) uses the Google Gemini API instead of the Anthropic API (Gemini is a sponsor). Env: `GEMINI_API_KEY`, `GEMINI_MODEL`; `PLUTO_LLM=mock|gemini`. Claude stays the MCP client in the demo. |

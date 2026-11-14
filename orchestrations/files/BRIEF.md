@@ -25,7 +25,7 @@ In Claude, a student types "build me a study guide from my History 105 notes fro
 - `packages/core`: `contract.ts` (zod schemas for all 7 tools and 10 endpoints), data-access functions for every tool, deep links, magic links, ingest, crunch weeks. Every surface calls these.
 - `supabase/`: migrations, `seed.sql`, `config.toml`. Postgres FTS, one row per PDF page. Storage bucket for PDFs.
 - MCP: TypeScript MCP SDK, streamable HTTP, Supabase Auth OAuth 2.1 server (dynamic client registration, consent at `/oauth/consent`), fallback bearer `PLUTO_DEMO_MCP_TOKEN`.
-- Agent: Anthropic API tool-use loop, model from `ANTHROPIC_MODEL`.
+- Agent: Google Gemini API (`@google/genai`) function-calling loop, model from `GEMINI_MODEL`.
 - SMS: Sendblue sandbox; simulator fallback.
 - Calendar: ICS feed `/cal/:token.ics`.
 

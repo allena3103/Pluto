@@ -21,8 +21,8 @@ This project explicitly allows orchestrators to spawn their own agents; that ove
 - Web: mobile first, every screen works at 390px width. Tailwind + shadcn/ui. Log in with Supabase Auth.
 - SMS: inbound text, find the student by phone, call the agent, text the answer back. Sendblue sandbox: a person must text the number first, then Pluto can reply for 24 hours. Cold outbound is untested; do not rely on it. Webhook payload gives `from_number` and `content`.
 - Canvas calls handle rate limits (429/403 with rate headers), pagination and empty responses. Seeded data must work without live sync.
-- Secrets (Canvas tokens, Sendblue keys, Anthropic key, service-role key) live in env vars only. Never commit `.env*` except `.env.example`. Never commit real course PDFs.
-- Every external call (Canvas, Sendblue, Anthropic, Supabase) has a timeout and handled errors.
+- Secrets (Canvas tokens, Sendblue keys, Gemini key, service-role key) live in env vars only. Never commit `.env*` except `.env.example`. Never commit real course PDFs.
+- Every external call (Canvas, Sendblue, Gemini, Supabase) has a timeout and handled errors.
 - Without real keys, use the mocks: `PLUTO_LLM=mock`, `SMS_PROVIDER=simulator`, `CANVAS_MODE=fixtures`.
 - Never run `supabase db reset` on the shared local stack; only the director may. Migrations are additive and use your assigned timestamp range.
 
