@@ -11,7 +11,7 @@ Models (protocol 2b, second Cursor account): coders `grok-4.7-medium` for logic 
 
 Next, in order:
 
-1. **Now.** `canvas-origin` — issue #14 only. One coder, `grok-4.7-high`. PR labeled `security-review`. Fresh review with `grok-4.7-high` after the coder is idle. Brief: `orchestrations/tasks/canvas-origin.md`.
+1. **Waiting on grokbot.** `canvas-origin` — issue #14. PR #26, labeled `security-review`. CI `check` green. Fresh review with `grok-4.7-high`: `VERDICT: APPROVE`. Brief: `orchestrations/tasks/canvas-origin.md`. Do not spawn another client coder until this merges.
 2. **After #14 merges.** `canvas-client-fixes` — issues #15–#19 in one PR, `grok-4.7-medium`, no `security-review` label. Same client files as #14, so it cannot run beside `canvas-origin`. Brief: `orchestrations/tasks/canvas-client-fixes.md`.
 3. **After that PR merges.** `canvas-sync`, then `canvas-alerts` once `sendSms`, `newFeedToken`, and `calendarFeedUrl` are on `origin/agent/pluto`. They are on `agent/foundation` (PR #10) and not on the integration branch yet. `canvas-ingest-demo` waits on sync plus `ingestFile` on `origin/agent/pluto`.
 
