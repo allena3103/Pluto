@@ -34,7 +34,6 @@ export type PaginatedRequestOptions = {
   path: string;
   searchParams?: URLSearchParams;
   endpointName: string;
-  allowForbiddenAsEmpty?: boolean;
 };
 
 type RetryDecision = {
@@ -82,7 +81,6 @@ export function createCanvasHttpClient(options: CanvasHttpClientOptions): Canvas
           fetchImpl,
           timeoutMs,
           sleep,
-          allowForbiddenAsEmpty: requestOptions.allowForbiddenAsEmpty ?? false,
         });
 
         const normalized = normalizeArrayBody(pageResult.data);
@@ -169,7 +167,6 @@ async function requestPage(options: {
   fetchImpl: typeof fetch;
   timeoutMs: number;
   sleep: (ms: number) => Promise<void>;
-  allowForbiddenAsEmpty: boolean;
 }): Promise<RequestPageResult> {
   const requestUrl = options.includeAuthHeader
     ? urlForTokenRequest(options.url, options.baseUrl, options.path, options.token)
@@ -212,9 +209,6 @@ async function requestPage(options: {
 
       const errorBody = await safeReadErrorText(response);
       const retryDecision = classifyRetry(response, errorBody);
-      if (response.status === 403 && !retryDecision.isRateLimit && options.allowForbiddenAsEmpty) {
-        return { data: [], headers: response.headers };
-      }
 
       if (!retryDecision.retryable) {
         throw new CanvasHttpError({

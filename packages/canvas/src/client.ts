@@ -128,7 +128,6 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
         const rows = await http.getPaginatedArray({
           path: courseApiPath(canvasCourseId, "files"),
           endpointName: "course files",
-          allowForbiddenAsEmpty: true,
         });
         return rows
           .map(mapCourseFile)
@@ -155,7 +154,6 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
             "include[]": "items",
             per_page: "100",
           }),
-          allowForbiddenAsEmpty: true,
         });
         return rows.flatMap(mapModuleItems).filter((item): item is CanvasModuleFileItem => item !== null);
       } catch (error) {
