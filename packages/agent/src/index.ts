@@ -43,7 +43,6 @@ export function runAgent(input: {
   runTool?: AgentToolRunner;
   createMagicLink?: CreateMagicLink;
   llm?: "mock" | "gemini";
-  model?: string;
   signal?: AbortSignal;
   client?: AgentModelClient;
 }): Promise<{ text: string; citations: AgentCitation[]; magicLinkUrl?: string }> {

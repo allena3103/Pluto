@@ -12,6 +12,10 @@ export const EMPTY_REPLY_TEXT = "I couldn't put an answer together just now. Try
 export type AgentCitation = { fileId: string; page: number; deepLink: string };
 export type AgentHistoryItem = { role: "user" | "assistant"; text: string };
 export type AgentToolRunner = (name: string, args: unknown) => Promise<unknown>;
+/**
+ * The host must mint a link only for a file that belongs to this student.
+ * This package does not check ownership.
+ */
 export type CreateMagicLink = (input: { fileId: string; page: number }) => Promise<{ url: string }>;
 
 export type AgentResult = { text: string; citations: AgentCitation[]; magicLinkUrl?: string };
@@ -55,7 +59,6 @@ export type RunAgentInput = {
   runTool?: AgentToolRunner;
   createMagicLink?: CreateMagicLink;
   llm?: "mock" | "gemini";
-  model?: string;
   signal?: AbortSignal;
   /** Injected Interactions client. When set, the Gemini path does not construct the SDK client. */
   client?: AgentModelClient;
