@@ -14,6 +14,7 @@ const PRIMARY_LINKS = [
 
 const SECONDARY_LINKS = [
   { href: "/settings/canvas", label: "Canvas", icon: Settings },
+  { href: "/settings/phone", label: "Phone", icon: Smartphone },
   { href: "/sms-sim", label: "SMS sim", icon: Smartphone },
 ] as const;
 
