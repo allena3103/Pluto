@@ -17,7 +17,11 @@ Restarted 2026-11-14 on Cursor `grok-4.7-high`. This revision follows the direct
 
 `agent/web` and `origin/agent/pluto` diverged at the F1 squash (`87fbb9f`). Protocol 2e: a later sync is its own PR (`agent/web-sync` into `agent/web`), never mixed into a feature PR. A sync today would not unblock magic links, because those commits are not on `agent/pluto` yet. Do not edit `docs/plan.md` or `orchestrations/files/**`.
 
-Coders: Cursor only, `composer-2.5` (UI) or `grok-4.7-medium` (logic). Fresh reviewers, when required: `grok-4.7-high`. Max **1-2** coders at once. Under 2 GB free RAM, spawn nobody, except the director's 10:08 instruction to start one coder at about 1.7 GB. W7 `web-signup` is running: Cursor `grok-4.7-medium`, worktree `C:/Pluto-web-signup`, branch `agent/web-signup`, herdr tab `wF:tV`. W4 starts when free RAM is at least 2 GB and W7 is still the only coder. Close a coder's herdr tab as soon as grokbot merges its PR. The director closed the idle web-shell and web-notes tabs; their worktrees stay, and a fix round restarts a coder in the same worktree.
+Coders: Cursor only, `composer-2.5` (UI) or `grok-4.7-medium` (logic). Fresh reviewers, when required: `grok-4.7-high`. Max **1-2** coders at once. Under 2 GB free RAM, spawn nobody, except the director's 10:08 instruction to start one coder at about 1.7 GB.
+
+W7 `web-signup` is done. PR [#34](https://github.com/allena3103/Pluto/pull/34) is open into `agent/web`, CI `check` green, fresh review `VERDICT: APPROVE` (comment on the PR). Not merged. The coder tab is closed; a grokbot fix restarts in `C:/Pluto-web-signup`. Dev server on 3106 is stopped.
+
+W4 `web-chat` starts once this note is pushed, on Cursor `composer-2.5`, now that free RAM is back above 2 GB and signup is the only finished coder. Close a coder's herdr tab as soon as grokbot merges its PR. The director closed the idle web-shell and web-notes tabs; their worktrees stay, and a fix round restarts a coder in the same worktree.
 
 ## Timeline (BRIEF, Sat 10:00)
 
@@ -58,7 +62,7 @@ Then:
   W9 after #23 merges: link /login -> /signup, and a settings/phone entry in the shell nav
 ```
 
-W7 is running (started 10:08 at the director's request). W4 starts when free RAM is at least 2 GB. W8 when a slot is free. W5 only after `consumeMagicLink` is on this branch.
+W7's PR #34 is waiting on grokbot. W4 starts this turn. W8 when a slot is free. W5 only after `consumeMagicLink` is on this branch.
 
 ## Milestones (into `agent/pluto`, merge commit)
 
