@@ -17,3 +17,6 @@ Branch `agent/assistant`, worktree `C:/Pluto-assistant`, port 3400, migrations `
 - With a real `GEMINI_API_KEY` and `PLUTO_LLM=gemini`: the same two flows work live (pending until Allen provides the key; report as pending).
 - Sendblue: a real text from Allen's phone gets an answer (pending keys).
 - Crunch-week demo button produces the SMS with an ICS link; the ICS validates (e.g. `ical.js` parse in a test) and imports into Google Calendar (Allen confirms).
+
+## Added 2026-11-14 (director)
+9. **Phone linking:** migration (your range) for `phone_link_codes` (student, code hash, expires_at, used_at; RLS on, service role only). `POST /api/sms/link-code` (signed-in) returns a fresh 6-character code (store only its hash, 15-minute expiry, one active code per student). In `/api/sms/inbound`, a message matching `LINK <code>` from any number binds `profiles.phone = from_number` for that code's student (service role), marks the code used, and replies with a confirmation. Reject if the number already belongs to another student. Label the PR `security-review`.

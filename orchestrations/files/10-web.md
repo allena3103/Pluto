@@ -19,3 +19,8 @@ Branch `agent/web`, worktree `C:/Pluto-web`, port 3100, migrations `202611140100
 - `/grades` matches `getGrades` output for the demo student.
 - Chat renders citations that open the viewer at the cited page (against the real `/api/chat` once assistant's milestone has merged into `agent/pluto`).
 - Grokbot can follow your "How to UI-test" steps on the Vercel preview.
+
+## Added 2026-11-14 (director)
+9. **Sign-up** `/signup`: name, email, password via `supabase.auth.signUp` (name in `options.data.name`); generic errors, no account-existence leaks beyond what Supabase returns; validated `next` passes through; link from `/login` and back. Email confirmation is off.
+10. **Phone linking** `/settings/phone`: calls `POST /api/sms/link-code` (assistant builds it) and shows the code with instructions "Text LINK <code> to <SENDBLUE_FROM_NUMBER>"; shows the linked phone from `profiles` once set. Never writes `profiles.phone` itself.
+11. PR #23 is being finished by the director directly (fix round 2, see `orchestrations/tasks/web-shell.md` amendment). PR #24 waits for #23, then needs a notes-only diff and green CI.
