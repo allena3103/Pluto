@@ -12,21 +12,31 @@ const files = readdirSync(dir)
   .filter((f) => /^\d\d-.*\.ts$/.test(f))
   .sort();
 
-let failed = 0;
-for (const file of files) {
-  const mod = (await import(pathToFileURL(join(dir, file)).href)) as { default?: () => Promise<void> };
-  if (typeof mod.default !== "function") {
-    console.error(`FAIL ${file}: no default export`);
-    failed++;
-    continue;
+async function main(): Promise<number> {
+  let failed = 0;
+  for (const file of files) {
+    const mod = (await import(pathToFileURL(join(dir, file)).href)) as { default?: () => Promise<void> };
+    if (typeof mod.default !== "function") {
+      console.error(`FAIL ${file}: no default export`);
+      failed++;
+      continue;
+    }
+    try {
+      await mod.default();
+      console.log(`PASS ${file}`);
+    } catch (err) {
+      failed++;
+      console.error(`FAIL ${file}:`, err instanceof Error ? err.message : err);
+    }
   }
-  try {
-    await mod.default();
-    console.log(`PASS ${file}`);
-  } catch (err) {
-    failed++;
-    console.error(`FAIL ${file}:`, err instanceof Error ? err.message : err);
-  }
+  console.log(`smoke: ${files.length - failed}/${files.length} files passed`);
+  return failed === 0 ? 0 : 1;
 }
-console.log(`smoke: ${files.length - failed}/${files.length} files passed`);
-process.exit(failed === 0 ? 0 : 1);
+
+main().then(
+  (code) => process.exit(code),
+  (err) => {
+    console.error("smoke runner crashed:", err);
+    process.exit(1);
+  },
+);

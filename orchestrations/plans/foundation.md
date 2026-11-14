@@ -36,9 +36,9 @@ F1 done when: `npm run typecheck && npm run lint && npm test` green on `agent/fo
 
 | Task | CLI | Owns | Depends on | Migration range | Port |
 | --- | --- | --- | --- | --- | --- |
-| `foundation-ingest` | claude | `scripts/gen-pdfs.ts`, `seed/pdfs/**`, `packages/core/src/ingest.ts` (+ test), `apps/web/app/api/ingest/**`, the files/ingest part of `scripts/seed.ts`, `package-lock.json` | db, contract, shell | `20261113100000`-`20261113105959` | 3004 |
-| `foundation-tools` | claude | `packages/core/src/tools/**`, `packages/core/test/tools/**` | db, contract | `20261113110000`-`20261113115959` | 3005 |
-| `foundation-helpers` | claude | `packages/core/src/{magic-links,sms,ics}.ts`, `packages/core/test/helpers/**` | db, contract | `20261113120000`-`20261113125959` | 3006 |
+| `foundation-ingest` | cursor (`gpt-5.3-codex`) | `scripts/gen-pdfs.ts`, `seed/pdfs/**`, `packages/core/src/ingest.ts` (+ test), `apps/web/app/api/ingest/**`, the files/ingest part of `scripts/seed.ts`, `package-lock.json` | db, contract, shell | `20261113100000`-`20261113105959` | 3004 |
+| `foundation-tools` | cursor (`gpt-5.3-codex`) | `packages/core/src/tools/**`, `packages/core/test/tools/**` | db, contract | `20261113110000`-`20261113115959` | 3005 |
+| `foundation-helpers` | cursor (`gpt-5.3-codex`) | `packages/core/src/{magic-links,sms,ics}.ts`, `packages/core/test/helpers/**` | db, contract | `20261113120000`-`20261113125959` | 3006 |
 | smoke + index | orchestrator | `scripts/smoke/00-core.ts`, `packages/core/src/index.ts` re-exports | all three merged | none | 3000 |
 
 Acceptance checks
@@ -50,7 +50,11 @@ Acceptance checks
 F2 done when `npm run smoke` is green on `agent/foundation`. Then milestone PR F2 into `agent/pluto` with `orchestrations/reports/foundation-F2.md`.
 
 ## Review
-Every coder PR gets a fresh headless reviewer (`claude -p`, clean context, `REVIEW.md`) run from the coder's worktree. One fix round, one re-review. Security or contract items still open go to `orchestrations/escalations/foundation-<n>.md`.
+Every coder PR gets a fresh headless reviewer on Cursor (`cursor-agent -p --force --trust --model gpt-5.3-codex`, clean context, `REVIEW.md`) run from the coder's worktree (PROTOCOL 2b, director decision at 77% Claude usage). One fix round, one re-review. Security or contract items still open go to `orchestrations/escalations/foundation-<n>.md`.
+
+## Usage policy
+- F1 coders (`db`, `contract`, `shell`) stay on Claude because they were already running. If one stops on a usage-limit message: it (or the orchestrator) commits and pushes, `HANDOFF.md` is written on its branch, and a Cursor tab `<name>-c` continues in the same worktree.
+- All F2 coders and all reviewers run on Cursor. Only the orchestrator uses Claude.
 
 ## Shared design choices (to list in the F1 report for the decision log)
 - Every student-owned table has `student_id uuid not null references profiles(id)`; `profiles.id = auth.users.id`.
