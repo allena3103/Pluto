@@ -100,9 +100,14 @@ describe("dedupeKey", () => {
 });
 
 describe("POST /api/sms/inbound (no database)", () => {
-  function webhookDeps(overrides: Partial<SmsWebhookDeps> = {}): SmsWebhookDeps & ReturnType<typeof unitDeps> {
+  function webhookDeps(overrides: Partial<SmsWebhookDeps> = {}) {
     const u = unitDeps({ "+15555550100": STUDENT });
-    return { ...u, ...u.deps, expectedSecret: SECRET, ...overrides };
+    const deps: SmsWebhookDeps = { ...u.deps, expectedSecret: SECRET, ...overrides };
+    return Object.assign(deps, {
+      runAgent: u.runAgent,
+      sendSms: u.sendSms,
+      findStudentByPhone: u.fake.findStudentByPhone,
+    });
   }
 
   it("is 401 with a wrong secret and does no lookup", async () => {
@@ -178,7 +183,7 @@ describe("processInboundSms (no database)", () => {
       {
         provider: "sendblue",
         fetch: fetchImpl as unknown as typeof fetch,
-        env: { SENDBLUE_API_KEY_ID: "k", SENDBLUE_API_SECRET: "s", SENDBLUE_FROM_NUMBER: "+15550000000" },
+        env: { SENDBLUE_API_KEY_ID: "k", SENDBLUE_API_SECRET: "s", SENDBLUE_FROM_NUMBER: "+15550000000" } as unknown as NodeJS.ProcessEnv,
       },
     );
     const result = await processInboundSms({ from_number: "+14135550199", content: "hi" }, u.deps);
