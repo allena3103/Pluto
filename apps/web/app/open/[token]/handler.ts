@@ -1,7 +1,7 @@
 import type { PlutoDb } from "@pluto/core/context";
 import { OPEN_RESPONSE, OpenParams } from "@pluto/core/contract";
 import { notePath } from "@pluto/core/deep-links";
-import { consumeMagicLink, type ConsumedMagicLink } from "@pluto/core/magic-links";
+import { consumeMagicLink, savedNotePath, type ConsumedMagicLink } from "@pluto/core/magic-links";
 
 export type OpenDeps = {
   /** Service-role client. Only used to consume the token and read that student's email. */
@@ -24,7 +24,8 @@ const fail = () => redirect(OPEN_RESPONSE.invalidLocation);
 
 /**
  * GET /open/:token. Consumes a one-time magic link, signs in the student it was
- * minted for, and redirects to the exact notes page. Every failure is the same
+ * minted for, and redirects to the exact notes page (or, for a saved-note link texted
+ * after an MCP save, to `/notes/saved/<id>`). Every failure is the same
  * redirect to `/login?error=link`. Never logs the token or the email.
  */
 export async function handleOpen(rawToken: unknown, deps: OpenDeps): Promise<Response> {
@@ -54,6 +55,8 @@ export async function handleOpen(rawToken: unknown, deps: OpenDeps): Promise<Res
       return fail();
     }
 
+    // The destination is rebuilt from the consumed row's ids, never taken from the request.
+    if (link.kind === "saved_note") return redirect(savedNotePath(link.savedNoteId));
     return redirect(notePath(link.fileId, link.page));
   } catch (err) {
     console.error("open magic link failed:", err instanceof Error ? err.name : "unknown error");

@@ -27,7 +27,7 @@ import { createSavedNoteMagicLink, savedNotePath } from "./magic-links";
 import { sendSms, type SmsProvider } from "./sms";
 import { resolveCourse } from "./tools/resolve-course";
 import { toDbToolError } from "./tools/shared";
-import { ToolError } from "./tools/tool-error";
+import { ToolError, WriteToolError } from "./tools/tool-error";
 
 const HOUR_MS = 60 * 60 * 1000;
 /** Distinct file ids looked up per query. Keeps the PostgREST URL short. */
@@ -218,7 +218,7 @@ export async function saveStudyGuide(
   const now = deps.now?.() ?? new Date();
   const recent = await countRecentMcpSaves(ctx, now);
   if (recent >= SAVE_STUDY_GUIDE_HOURLY_LIMIT) {
-    throw new ToolError(
+    throw new WriteToolError(
       "rate_limited",
       `At most ${SAVE_STUDY_GUIDE_HOURLY_LIMIT} study guides can be saved per hour. Try again later.`,
     );

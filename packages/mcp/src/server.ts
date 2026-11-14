@@ -2,10 +2,12 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { toJSONSchema, type ZodType } from "zod";
-import { TOOLS, TOOL_NAMES, type ToolName } from "@pluto/core/contract";
+import { TOOLS, TOOL_NAMES, WRITE_TOOLS, WRITE_TOOL_NAMES, type ToolName, type WriteToolName } from "@pluto/core/contract";
 import type { ToolContext } from "@pluto/core/context";
+import { saveStudyGuide, type SaveStudyGuideDeps } from "@pluto/core/save-study-guide";
 import { TOOL_HANDLERS, ToolError } from "@pluto/core/tools/index";
-import { SERVER_INSTRUCTIONS, TOOL_DESCRIPTIONS } from "./descriptions";
+import { WriteToolError } from "@pluto/core/tools/tool-error";
+import { SERVER_INSTRUCTIONS, TOOL_DESCRIPTIONS, WRITE_TOOL_DESCRIPTIONS } from "./descriptions";
 
 const GENERIC_TOOL_ERROR = "The tool failed.";
 
@@ -22,6 +24,10 @@ type ToolJsonSchema = {
 
 function isToolName(name: string): name is ToolName {
   return (TOOL_NAMES as readonly string[]).includes(name);
+}
+
+function isWriteToolName(name: string): name is WriteToolName {
+  return (WRITE_TOOL_NAMES as readonly string[]).includes(name);
 }
 
 function toolJsonSchema(schema: ZodType, io: "input" | "output"): ToolJsonSchema {
@@ -58,13 +64,12 @@ function errorName(error: unknown): string {
 }
 
 async function callTool(
-  name: ToolName,
-  ctx: ToolContext,
-  args: unknown,
+  name: ToolName | WriteToolName,
+  run: () => Promise<Record<string, unknown>>,
   redactErrors: boolean,
 ): Promise<CallToolResult> {
   try {
-    const result = await TOOL_HANDLERS[name](ctx, args);
+    const result = await run();
     return {
       content: [{ type: "text", text: JSON.stringify(result) }],
       structuredContent: result,
@@ -74,6 +79,9 @@ async function callTool(
       if (error.code === "db_error") {
         console.error(`mcp tool ${name} db_error`, dbErrorCause(error, redactErrors));
       }
+      return toolErrorResult(`${error.code}: ${error.message}`);
+    }
+    if (error instanceof WriteToolError) {
       return toolErrorResult(`${error.code}: ${error.message}`);
     }
     if (redactErrors) {
@@ -88,13 +96,22 @@ async function callTool(
 export type PlutoMcpServerOptions = {
   /** URL-token mode: log the tool name and error.name only, never the error object or its message. */
   redactErrors?: boolean;
+  /**
+   * Dependencies for `save_study_guide` (lazy service-role factory for the text step,
+   * SMS settings). Without them the tool is still listed but every call fails generically.
+   */
+  write?: SaveStudyGuideDeps;
 };
+
+/** Write tools are not read-only, not destructive (they only add), and not idempotent (each call adds a note). */
+const WRITE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false } as const;
 
 /**
  * One MCP server for a single request.
  * Tools are registered on the low-level `Server` with `z.toJSONSchema` so the
  * refined `GetNotePagesInput` still publishes `fileId`, `firstPage`, and `lastPage`.
- * Every call runs `TOOL_HANDLERS`, which validates input and output.
+ * Read tools run `TOOL_HANDLERS`, which validates input and output; `save_study_guide`
+ * runs core `saveStudyGuide`, which does the same. Both share one error path.
  */
 export function createPlutoMcpServer(ctx: ToolContext, options?: PlutoMcpServerOptions): Server {
   const redactErrors = options?.redactErrors === true;
@@ -107,17 +124,38 @@ export function createPlutoMcpServer(ctx: ToolContext, options?: PlutoMcpServerO
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: TOOL_NAMES.map((name) => ({
-      name,
-      description: TOOL_DESCRIPTIONS[name],
-      inputSchema: toolJsonSchema(TOOLS[name].input, "input"),
-      outputSchema: toolJsonSchema(TOOLS[name].output, "output"),
-      annotations: { readOnlyHint: true as const },
-    })),
+    tools: [
+      ...TOOL_NAMES.map((name) => ({
+        name,
+        description: TOOL_DESCRIPTIONS[name],
+        inputSchema: toolJsonSchema(TOOLS[name].input, "input"),
+        outputSchema: toolJsonSchema(TOOLS[name].output, "output"),
+        annotations: { readOnlyHint: true as const },
+      })),
+      ...WRITE_TOOL_NAMES.map((name) => ({
+        name,
+        description: WRITE_TOOL_DESCRIPTIONS[name],
+        inputSchema: toolJsonSchema(WRITE_TOOLS[name].input, "input"),
+        outputSchema: toolJsonSchema(WRITE_TOOLS[name].output, "output"),
+        annotations: WRITE_ANNOTATIONS,
+      })),
+    ],
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const name = request.params.name;
+    const args = request.params.arguments ?? {};
+    if (isWriteToolName(name)) {
+      const write = options?.write;
+      return callTool(
+        name,
+        async () => {
+          if (!write) throw new Error("write tool dependencies are not configured");
+          return saveStudyGuide(ctx, args, write);
+        },
+        redactErrors,
+      );
+    }
     if (!isToolName(name)) {
       if (redactErrors) {
         console.error("mcp tool is not in the contract");
@@ -126,7 +164,7 @@ export function createPlutoMcpServer(ctx: ToolContext, options?: PlutoMcpServerO
       }
       return toolErrorResult(GENERIC_TOOL_ERROR);
     }
-    return callTool(name, ctx, request.params.arguments ?? {}, redactErrors);
+    return callTool(name, () => TOOL_HANDLERS[name](ctx, args), redactErrors);
   });
 
   return server;
