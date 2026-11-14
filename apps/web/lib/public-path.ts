@@ -1,5 +1,6 @@
 const PUBLIC_PATH_PREFIXES = [
   "/login",
+  "/signup",
   "/open",
   "/oauth",
   "/.well-known",
@@ -9,7 +10,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/_next",
 ];
 
-const PUBLIC_FILE_PATHS = ["/favicon.ico", "/manifest.webmanifest", "/sw.js"];
+const PUBLIC_FILE_PATHS = ["/favicon.ico", "/manifest.webmanifest", "/sw.js", "/offline.html"];
 
 // Files in `public/` are served from the site root as a single segment (`/logo.png`).
 // A nested path such as `/notes/x.png` is an app route and stays behind the session guard.
