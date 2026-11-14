@@ -2,7 +2,7 @@ import { GradesRequest, GradesResponse } from "@pluto/core/contract";
 import { getGrades } from "@pluto/core/tools/get-grades";
 import { ToolError } from "@pluto/core/tools/tool-error";
 import { createClient } from "@/lib/supabase/server";
-import { getServerEnv } from "@/lib/env";
+import { getServerEnv } from "@/lib/env.server";
 import { makeToolContext } from "@pluto/core/context";
 import { httpStatusForToolError } from "@/components/grades/tool-error-status";
 
