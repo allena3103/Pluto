@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@pluto/core/database.types";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicSupabaseEnv } from "@/lib/env";
+import { headersWithPlutoPath, loginRedirectForPath } from "@/lib/safe-next";
 import { supabaseFetch } from "@/lib/supabase/fetch";
 
 const PUBLIC_PATH_PREFIXES = [
@@ -16,7 +17,9 @@ const PUBLIC_PATH_PREFIXES = [
   "/_next",
 ];
 
-const PUBLIC_FILE_PATHS = ["/favicon.ico", "/manifest.webmanifest", "/sw.js"];
+// `/offline.html` is the service worker's static fallback. It has no user
+// data, so it stays public and is safe to precache while signed out.
+const PUBLIC_FILE_PATHS = ["/favicon.ico", "/manifest.webmanifest", "/sw.js", "/offline.html"];
 
 function isPublicPath(pathname: string) {
   if (PUBLIC_FILE_PATHS.includes(pathname)) {
@@ -30,12 +33,17 @@ function isPublicPath(pathname: string) {
   return PUBLIC_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({
+/** Forward the request with `x-pluto-path` overwritten from the real URL. */
+function nextWithPath(request: NextRequest) {
+  return NextResponse.next({
     request: {
-      headers: request.headers,
+      headers: headersWithPlutoPath(request.headers, request.nextUrl.pathname, request.nextUrl.search),
     },
   });
+}
+
+export async function proxy(request: NextRequest) {
+  let response = nextWithPath(request);
 
   const { url, anonKey } = getPublicSupabaseEnv();
   const supabase = createServerClient<Database>(url, anonKey, {
@@ -51,11 +59,7 @@ export async function proxy(request: NextRequest) {
           request.cookies.set(name, value);
         });
 
-        response = NextResponse.next({
-          request: {
-            headers: request.headers,
-          },
-        });
+        response = nextWithPath(request);
 
         cookiesToSet.forEach(({ name, value, options }) => {
           response.cookies.set(name, value, options);
@@ -75,9 +79,10 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!user && !isPublicPath(request.nextUrl.pathname)) {
-    const loginUrl = new URL("/login", request.url);
-    const nextPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
-    loginUrl.searchParams.set("next", nextPath || "/");
+    const loginUrl = new URL(
+      loginRedirectForPath(`${request.nextUrl.pathname}${request.nextUrl.search}`),
+      request.url,
+    );
     const redirectResponse = NextResponse.redirect(loginUrl);
     response.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie);
