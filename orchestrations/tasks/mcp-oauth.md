@@ -42,7 +42,7 @@ Do not touch `/login`, `proxy.ts`, `lib/**`, `packages/core/**` or `supabase/**`
 
 ## Acceptance checks (paste real output tails in the PR)
 ```bash
-npm install && npm run env:local -- --port 3302
+npm install && npm run env:local -- --port 3302   # for the Inspector round trip use port 3000 instead (director decision: Supabase site_url is localhost:3000; check nothing else is listening there first)
 npm run typecheck && npm run lint && npm test
 npm run build -w @pluto/web
 npm run dev   # port 3302, then:
@@ -51,7 +51,7 @@ curl -si -X POST http://localhost:3302/api/mcp -H "Content-Type: application/jso
 curl -si "http://localhost:3302/oauth/consent?authorization_id=abc" | head -5                              # signed out: redirect to /login?next=...
 # real token: sign in demo@pluto.test via the Supabase REST API (password in .env.example), then tools/call list_courses with it -> 3 demo courses
 ```
-Then the full round trip: MCP Inspector (`npx @modelcontextprotocol/inspector`, transport Streamable HTTP, URL `http://localhost:3302/api/mcp`, no token) should register, open the consent page, and after Approve list 7 tools. If the local Supabase site URL (`supabase/config.toml` `site_url`) points at another port so the consent redirect lands elsewhere, do not edit `supabase/**`: report exactly what you saw and which setting is involved. Stop the dev server and Inspector when done.
+Then the full round trip: MCP Inspector (`npx @modelcontextprotocol/inspector`, transport Streamable HTTP, URL `http://localhost:3302/api/mcp`, no token) should register, open the consent page, and after Approve list 7 tools. Run this round trip with the app on port 3000 (`npm run env:local -- --port 3000`), because the local Supabase `site_url` is `http://localhost:3000`; never edit `supabase/**`. Stop the dev server and Inspector when done.
 
 ## Rules
 - Security-sensitive task: when in doubt, reject the request. Never widen auth to make a test pass.
