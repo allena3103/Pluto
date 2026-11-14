@@ -1,0 +1,18 @@
+[
+  {
+    "id": "seed-103",
+    "name": "Midterm Exam",
+    "due_at": "2026-12-03T04:59:00Z",
+    "points_possible": 200,
+    "assignment_group_id": "seed-hist-exams",
+    "submission": { "score": null, "workflow_state": "unsubmitted", "submitted_at": null }
+  },
+  {
+    "id": "seed-104",
+    "name": "Reading Response 6",
+    "due_at": "2026-12-04T04:59:00Z",
+    "points_possible": 20,
+    "assignment_group_id": "seed-hist-responses",
+    "submission": { "score": 19, "workflow_state": "graded", "submitted_at": "2026-12-04T03:00:00Z" }
+  }
+]

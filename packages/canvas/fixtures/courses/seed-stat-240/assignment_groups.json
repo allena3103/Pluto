@@ -1,0 +1,5 @@
+[
+  { "id": "seed-stat-psets", "name": "Problem Sets", "group_weight": 30 },
+  { "id": "seed-stat-project", "name": "Project", "group_weight": 20 },
+  { "id": "seed-stat-exams", "name": "Exams", "group_weight": 50 }
+]
