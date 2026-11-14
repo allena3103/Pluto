@@ -3,23 +3,32 @@
 Orchestrator: canvas. Branch `agent/canvas`, worktree `C:/Pluto-canvas`, port 3200, migrations `20261114020000`-`20261114025959`.
 Build steps covered: 9 (deadline-change half) and 10 (live Canvas sync). Task file: `orchestrations/files/20-canvas.md`.
 
-## Status (restart 2026-11-14, Cursor grok-4.7-high)
+## Status (Sat 10:15 director update, commit `20d5a90` on `origin/agent/pluto`)
 
-Merged into `agent/canvas`: PR #12 (typed client), PR #21 (fixture due dates), PR #22 (token encryption, settings page, service-role profile write). C0 and tasks 1–2 are done.
+Merged into `agent/canvas`: PR #12 (typed client), PR #21 (fixture due dates), PR #22 (token route, service-role profile write), PR #26 (pagination origin check, issue #14). Pulled to `d3f69cb`. The `canvas-origin` tab is already closed.
 
-Models (protocol 2b, second Cursor account): coders `grok-4.7-medium` for logic and `grok-4.7-high` for security fixes; fresh reviewers `grok-4.7-high`. `gpt-5.3-codex` and Claude 5 are not available on this account.
+Timeline row for this slice (BRIEF on `origin/agent/pluto`): **Sat 23:00 EST — live Canvas sync with Allen's token (`CANVAS_API_TOKEN` in `C:/Pluto/.env.secrets`) and the deadline-change alert.** That row is not done. Do not open a milestone PR until a fixtures sync plus the alert path works, then a live sync against that token has been run or reported pending with the reason.
+
+Milestone mechanics (protocol 2e and 6): about every 2 hours, or as soon as that row works. First a sync PR (`agent/canvas-sync` from this branch, `git merge origin/agent/pluto`, keep canvas-owned files, take `agent/pluto` for everything else, PR into `agent/canvas`). Never mix that sync into a feature PR. Then the milestone PR `--base agent/pluto --head agent/canvas` asks grokbot for a **merge commit, not squash**. This orchestrator never merges.
+
+`sendSms`, `newFeedToken`, `calendarFeedUrl`, and `ingestFile` are not on `origin/agent/pluto` as of `20d5a90`. Sync can be built before they land (the notifier may 404). The alert route cannot.
+
+Models: coders `grok-4.7-medium` for logic, `grok-4.7-high` for security fixes. Fresh reviewers `grok-4.7-high`. Max 1–2 coders.
 
 Next, in order:
 
-1. **Waiting on grokbot.** `canvas-origin` — issue #14. PR #26, labeled `security-review`. CI `check` green. Fresh review with `grok-4.7-high`: `VERDICT: APPROVE`. Brief: `orchestrations/tasks/canvas-origin.md`. Do not spawn another client coder until this merges.
-2. **After #14 merges.** `canvas-client-fixes` — issues #15–#19 in one PR, `grok-4.7-medium`, no `security-review` label. Same client files as #14, so it cannot run beside `canvas-origin`. Brief: `orchestrations/tasks/canvas-client-fixes.md`.
-3. **After that PR merges.** `canvas-sync`, then `canvas-alerts` once `sendSms`, `newFeedToken`, and `calendarFeedUrl` are on `origin/agent/pluto`. They are on `agent/foundation` (PR #10) and not on the integration branch yet. `canvas-ingest-demo` waits on sync plus `ingestFile` on `origin/agent/pluto`.
+1. **Now.** `canvas-client-fixes` — issues #15–#19 in one PR, `grok-4.7-medium`, no `security-review` label. Brief: `orchestrations/tasks/canvas-client-fixes.md`. Issue #14 is on this branch.
+2. **After that PR merges.** `canvas-sync` (service role for every write; `CANVAS_API_TOKEN` is the live fallback when the student has no stored token). Then `canvas-alerts` once the F2 helpers are on `origin/agent/pluto`. Then `canvas-ingest-demo`.
+3. **When the 23:00 row works.** Sync PR, then the milestone PR with a merge-commit request.
+
+### Discard: `C:/Pluto-canvas-token` uncommitted files
+`packages/canvas/src/token-settings.ts`, `packages/canvas/test/token-settings/`, and the uncommitted `apps/web/app/api/canvas/token/route.ts` edit stay uncommitted and do not get a PR. They refactor the pre-#22 route. The merged route already writes with the service role, catches encrypt and admin failures, and restricts the host to one `*.instructure.com` label. The uncommitted normalizer only checks `hostname.endsWith(".instructure.com")`, so landing it would loosen that check. Left on disk in that worktree so the files are not deleted out from under the old branch.
 
 Service-role rule (decision log on `origin/agent/pluto`, 2026-11-14, PR #9 hardening; confirmed in the restart): students cannot insert or update `files` rows, and students may update only `profiles.name`. They cannot write `canvas_token_encrypted` or `canvas_base_url`. Every sync write (courses, grade groups, assignments, files) and every token-column write uses the service-role client inside a server route, after the route has authenticated the caller, and every query is scoped to that one `student_id`. The session client is for `auth.getUser()` only. PR #22 already stores the token this way. Do not reopen it.
 
 `docs/plan.md` on this branch does not yet contain that decision-log row. Do not edit `docs/plan.md`. A sync from `origin/agent/pluto` is a separate `agent/canvas-sync` PR (protocol 2e) and must not be mixed into a feature PR. The stale worktree `C:/Pluto-canvas-sync` is the old escalation commit, not that sync.
 
-Max two coders (protocol 2c). Free RAM at this restart was about 0.7 GB, under the 2 GB spawn floor, so only the #14 coder starts. The client-fixes coder waits for the merge and for free RAM.
+Max two coders (protocol 2c). At this update one coder runs: `canvas-client-fixes`. Free RAM was about 1.9 GB.
 
 Contract items touched: `POST /api/alerts/deadline-change` (`AlertDeadlineChangeRequest`, `AlertResponse`), `INTERNAL_SECRET_HEADER`, and the `courses` / `grade_groups` / `assignments` / `files` tables that every tool reads. No new tools, no contract edits. `packages/core` is read-only for this slice: if something is missing there, stop and tell the director.
 
@@ -60,7 +69,7 @@ Rules for every canvas coder:
 | 4 | `canvas-alerts` | cursor `grok-4.7-medium` | `apps/web/app/api/alerts/deadline-change/**`, `packages/canvas/src/deadline-alert.ts`, `packages/canvas/test/alerts/**` | F2 helpers on `origin/agent/pluto` | `20261114023000`-`20261114024959` (only if needed) | 3204 | yes |
 | 5 | `canvas-ingest-demo` | cursor `grok-4.7-medium` | `packages/canvas/src/{files-sync,demo-trigger}.ts`, `packages/canvas/test/files/**`, `packages/canvas/fixtures/demo/**`, `apps/web/app/api/canvas/demo-date-change/**` | 3 merged + F2 ingest | none | 3205 | yes |
 
-Waves (max 2 coders, protocol 2c): **A** = 1b alone (1c shares `http.ts`). **B** = 1c alone. **C** = 3, then 4 when F2 helpers are on `origin/agent/pluto`. **D** = 5. Tasks 1 and 2 are merged.
+Waves (max 2 coders, protocol 2c): tasks 1, 2, and 1b are merged. **Now** = 1c alone. **Next** = 3, then 4 when F2 helpers are on `origin/agent/pluto`, then 5. The 23:00 milestone PR follows a sync PR and asks grokbot for a merge commit.
 
 ### 1. canvas-client
 Typed, Supabase-free Canvas REST client. `createCanvasClient({ baseUrl, token, mode, fetch?, now? })` with `listCourses`, `listAssignmentGroups(courseId)`, `listAssignments(courseId)` (with `include[]=submission`), `listCourseFiles(courseId)`, `listModuleItems(courseId)` for week labels.

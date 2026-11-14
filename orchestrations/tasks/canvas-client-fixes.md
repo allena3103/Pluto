@@ -4,7 +4,7 @@ Branch `agent/canvas-client-fixes`, worktree `C:/Pluto-canvas-client-fixes`, bas
 
 You are a Cursor coder on `grok-4.7-medium`. Read `CLAUDE.md`, `orchestrations/files/BRIEF.md`, `orchestrations/files/PROTOCOL.md`, and `orchestrations/plans/canvas.md` first.
 
-Do not start this task until `agent/canvas` contains the merged issue #14 origin check (`canvas-origin`). If `packages/canvas/src/http.ts` does not yet refuse a foreign `Link` origin, stop and tell the canvas orchestrator. Rebase onto the latest `agent/canvas` before you edit. Keep that origin check. Do not weaken its tests.
+Issue #14 is merged (PR #26). `packages/canvas/src/http.ts` on `agent/canvas` already refuses a foreign `Link` origin. Keep that check. Do not weaken its tests. Base your branch on current `agent/canvas`.
 
 ## Goal
 Close the five follow-ups from the review of PR #12, without overlapping the already-merged origin check:
