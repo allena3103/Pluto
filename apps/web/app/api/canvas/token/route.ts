@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeCanvasBaseUrl } from "@pluto/canvas/host";
 import { encryptCanvasToken } from "@pluto/canvas/token-crypto";
 
 export const runtime = "nodejs";
@@ -11,45 +12,10 @@ const saveTokenSchema = z.object({
   baseUrl: z.string().trim().min(1),
 });
 
-// *.instructure.com — exactly one DNS label. The apex is not a Canvas host.
-const INSTRUCTURE_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.instructure\.com$/;
-
 type CanvasProfileUpdate = {
   canvas_token_encrypted: string | null;
   canvas_base_url: string | null;
 };
-
-function normalizeCanvasBaseUrl(baseUrl: string): string {
-  let parsed: URL;
-  try {
-    parsed = new URL(baseUrl);
-  } catch {
-    throw new Error("Base URL must be a valid URL");
-  }
-
-  if (parsed.protocol !== "https:") {
-    throw new Error("Base URL must use https");
-  }
-
-  if (parsed.username || parsed.password) {
-    throw new Error("Base URL must be a plain host with no path, query, or fragment");
-  }
-
-  if (parsed.port !== "") {
-    throw new Error("Base URL must not include a port");
-  }
-
-  if ((parsed.pathname && parsed.pathname !== "/") || parsed.search || parsed.hash) {
-    throw new Error("Base URL must be a plain host with no path, query, or fragment");
-  }
-
-  const hostname = parsed.hostname.toLowerCase().replace(/\.$/, "");
-  if (!INSTRUCTURE_HOST.test(hostname)) {
-    throw new Error("Base URL must be an https instructure.com host");
-  }
-
-  return `https://${hostname}`;
-}
 
 function json(data: unknown, status = 200): Response {
   return Response.json(data, { status });

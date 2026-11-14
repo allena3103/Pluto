@@ -1,7 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { AlertDeadlineChangeRequest, INTERNAL_SECRET_HEADER } from "@pluto/core/contract";
-import { createCanvasClient } from "@pluto/canvas/client";
+import { createCanvasClient, type CanvasClient } from "@pluto/canvas/client";
+import { prepareLiveCanvasClient } from "@pluto/canvas/host";
 import { createDiskFixturesFetch, syncCanvas, type DueDateChange, type SyncResult } from "@pluto/canvas/sync";
 import { decryptCanvasToken } from "@pluto/canvas/token-crypto";
 import { CanvasAuthError, CanvasRateLimitError, CanvasTimeoutError } from "@pluto/canvas/types";
@@ -116,18 +117,6 @@ function canvasMode(): "live" | "fixtures" {
   return process.env.CANVAS_MODE === "live" ? "live" : "fixtures";
 }
 
-function canvasOrigin(value: string | null | undefined): string | null {
-  if (!value?.trim()) return null;
-  try {
-    const url = new URL(value.trim());
-    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    if (url.username || url.password) return null;
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
 function canvasFailure(error: unknown): Response | null {
   if (error instanceof CanvasAuthError) return json({ error: "Canvas rejected the access token" }, 400);
   if (error instanceof CanvasRateLimitError) return json({ error: "Canvas rate limit exceeded" }, 502);
@@ -199,38 +188,38 @@ export async function POST(request: Request): Promise<Response> {
   if (profileError) return json({ error: "Failed to load Canvas connection" }, 500);
 
   const ciphertext = profile?.canvas_token_encrypted ?? null;
-  const mode = canvasMode();
+  const envToken = process.env.CANVAS_API_TOKEN ?? "";
   let token = "";
-  let baseUrl = canvasOrigin(profile?.canvas_base_url) ?? canvasOrigin(process.env.CANVAS_BASE_URL);
+  let client: CanvasClient;
 
-  if (mode === "live") {
-    if (ciphertext) {
-      try {
-        token = decryptCanvasToken(ciphertext);
-      } catch {
-        return json({ error: "Stored Canvas token could not be decrypted" }, 400);
-      }
-    }
-    if (!token) token = process.env.CANVAS_API_TOKEN?.trim() ?? "";
-    if (!token || !baseUrl) {
-      return json(
-        { error: "Canvas is not connected. Save a token or set CANVAS_API_TOKEN and CANVAS_BASE_URL." },
-        400,
-      );
-    }
-  } else if (!baseUrl) {
-    baseUrl = FIXTURES_BASE_URL;
+  if (canvasMode() === "live") {
+    // Credentials come as a pair: profile token + validated profile URL, or
+    // env token + env URL for the demo student only. Never mixed.
+    const live = prepareLiveCanvasClient(
+      {
+        studentId,
+        profileBaseUrl: profile?.canvas_base_url,
+        profileTokenCiphertext: ciphertext,
+        envToken,
+        envBaseUrl: process.env.CANVAS_BASE_URL,
+      },
+      { decrypt: decryptCanvasToken },
+    );
+    if (!live.ok) return json({ error: live.error }, live.status);
+    token = live.token;
+    client = live.client;
+  } else {
+    client = createCanvasClient({
+      baseUrl: FIXTURES_BASE_URL,
+      token,
+      mode: "fixtures",
+      fetch: createDiskFixturesFetch(FIXTURES_BASE_URL),
+    });
   }
 
-  const secrets = [token, ciphertext ?? "", process.env.CANVAS_API_TOKEN ?? "", internalSecret];
+  const secrets = [token, ciphertext ?? "", envToken, internalSecret];
 
   try {
-    const client = createCanvasClient({
-      baseUrl,
-      token,
-      mode,
-      fetch: mode === "fixtures" ? createDiskFixturesFetch(baseUrl) : undefined,
-    });
     const result: SyncResult = await syncCanvas({
       db: admin,
       studentId,
