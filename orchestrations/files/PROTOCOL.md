@@ -24,6 +24,7 @@ herdr agent prompt $NAME "Read CLAUDE.md, orchestrations/files/BRIEF.md and orch
 ```
 - Panes open in PowerShell; run the snippet above from your own Bash tool, not inside the pane.
 - If `agent start` returns `agent_not_ready`, run `herdr agent read $NAME --source visible --lines 30`. If it is Claude's "trust this folder" prompt for a `C:/Pluto-*` worktree, accept it (`herdr agent send-keys $NAME down` then `enter`); Allen approved that. Any other approval prompt (MCP servers, new access): do not answer; tell the director.
+- Cursor panes sometimes paste a prompt without submitting it (`agent_prompt_stalled`, screen shows `[Pasted text ...]`). Then run `herdr agent send-keys $NAME enter` once and check it went `working`.
 - Never answer an approval prompt that grants new access (MCP servers, etc.). If a coder is `blocked`, read it with `herdr agent read`; if it needs Allen, tell the director.
 - Track each coder with a background `herdr agent wait $NAME` (no polling). On wake, `herdr agent read $NAME --source recent-unwrapped --lines 80` to see whether it is really done or just paused. Cursor planners: see 2d.
 
