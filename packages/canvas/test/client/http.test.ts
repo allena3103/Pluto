@@ -170,6 +170,169 @@ describe("canvas http client", () => {
     }
   });
 
+  it("refuses a next link whose origin is not the configured base URL", async () => {
+    let call = 0;
+    const seen: string[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      call += 1;
+      seen.push(String(input));
+      return new Response(JSON.stringify([{ id: 1 }]), {
+        status: 200,
+        headers: { Link: `<https://evil.example/steal>; rel="next"` },
+      });
+    };
+
+    let error: unknown;
+    try {
+      await buildClient(fetchImpl).getPaginatedArray({
+        path: "/api/v1/courses",
+        endpointName: "courses",
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(call).toBe(1);
+    expect(seen.some((url) => url.includes("evil.example"))).toBe(false);
+    expect(error).toBeInstanceOf(CanvasHttpError);
+    const httpError = error as CanvasHttpError;
+    expect(httpError.status).toBe(400);
+    expect(String(httpError.message).includes(TOKEN)).toBe(false);
+    expect(String(httpError.requestPath).includes(TOKEN)).toBe(false);
+    expect(String(httpError.message).includes("evil.example")).toBe(false);
+    expect(String(httpError.requestPath).includes("evil.example")).toBe(false);
+  });
+
+  it("refuses a next link that embeds a username or password", async () => {
+    const rejected = "https://user:pass@canvas.local/api/v1/courses?page=2";
+    let call = 0;
+    const seen: string[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      call += 1;
+      seen.push(String(input));
+      return new Response(JSON.stringify([{ id: 1 }]), {
+        status: 200,
+        headers: { Link: `<${rejected}>; rel="next"` },
+      });
+    };
+
+    let error: unknown;
+    try {
+      await buildClient(fetchImpl).getPaginatedArray({
+        path: "/api/v1/courses",
+        endpointName: "courses",
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(call).toBe(1);
+    expect(seen.some((url) => url.includes("user:pass"))).toBe(false);
+    expect(error).toBeInstanceOf(CanvasHttpError);
+    const httpError = error as CanvasHttpError;
+    expect(httpError.status).toBe(400);
+    expect(String(httpError.message).includes(TOKEN)).toBe(false);
+    expect(String(httpError.requestPath).includes(TOKEN)).toBe(false);
+    expect(String(httpError.message).includes(rejected)).toBe(false);
+    expect(String(httpError.requestPath).includes(rejected)).toBe(false);
+    expect(String(httpError.message).includes("user:pass")).toBe(false);
+    expect(String(httpError.requestPath).includes("user:pass")).toBe(false);
+  });
+
+  it("follows a relative next link on the configured origin", async () => {
+    let call = 0;
+    const seen: string[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      call += 1;
+      seen.push(String(input));
+      const headers = new Headers(init?.headers);
+      expect(headers.get("Authorization")).toBe(`Bearer ${TOKEN}`);
+      const page = new URL(String(input)).searchParams.get("page") ?? "1";
+      if (page === "1") {
+        return new Response(JSON.stringify([{ id: 1 }]), {
+          headers: { Link: `</api/v1/courses?page=2>; rel="next"` },
+        });
+      }
+      return new Response(JSON.stringify([{ id: 2 }]));
+    };
+
+    const result = await buildClient(fetchImpl).getPaginatedArray({
+      path: "/api/v1/courses",
+      endpointName: "courses",
+      searchParams: new URLSearchParams({ page: "1" }),
+    });
+
+    expect(call).toBe(2);
+    expect(result).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(seen.every((url) => new URL(url).origin === BASE_URL)).toBe(true);
+  });
+
+  it("refuses next links with a different scheme, port, or subdomain", async () => {
+    const links = [
+      "http://canvas.local/api/v1/courses?page=2",
+      "https://canvas.local:8443/api/v1/courses?page=2",
+      "https://files.canvas.local/api/v1/courses?page=2",
+    ];
+
+    for (const link of links) {
+      let call = 0;
+      const fetchImpl: typeof fetch = async (input) => {
+        call += 1;
+        expect(String(input).includes(link)).toBe(false);
+        return new Response(JSON.stringify([{ id: 1 }]), {
+          status: 200,
+          headers: { Link: `<${link}>; rel="next"` },
+        });
+      };
+
+      let error: unknown;
+      try {
+        await buildClient(fetchImpl).getPaginatedArray({
+          path: "/api/v1/courses",
+          endpointName: "courses",
+        });
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(call).toBe(1);
+      expect(error).toBeInstanceOf(CanvasHttpError);
+      const httpError = error as CanvasHttpError;
+      expect(httpError.status).toBe(400);
+      expect(String(httpError.message).includes(TOKEN)).toBe(false);
+      expect(String(httpError.requestPath).includes(TOKEN)).toBe(false);
+      expect(String(httpError.message).includes(link)).toBe(false);
+      expect(String(httpError.requestPath).includes(link)).toBe(false);
+    }
+  });
+
+  it("does not fetch a first-page URL on another origin", async () => {
+    let call = 0;
+    const fetchImpl: typeof fetch = async () => {
+      call += 1;
+      return new Response("[]");
+    };
+
+    let error: unknown;
+    try {
+      await buildClient(fetchImpl).getPaginatedArray({
+        path: "https://evil.example/steal",
+        endpointName: "courses",
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(call).toBe(0);
+    expect(error).toBeInstanceOf(CanvasHttpError);
+    const httpError = error as CanvasHttpError;
+    expect(httpError.status).toBe(400);
+    expect(String(httpError.message).includes(TOKEN)).toBe(false);
+    expect(String(httpError.requestPath).includes(TOKEN)).toBe(false);
+    expect(String(httpError.message).includes("evil.example")).toBe(false);
+    expect(String(httpError.requestPath).includes("evil.example")).toBe(false);
+  });
+
   it("never leaks token in thrown errors", async () => {
     const fetchImpl: typeof fetch = async () => new Response("retry", { status: 429 });
 
