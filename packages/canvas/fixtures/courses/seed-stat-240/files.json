@@ -1,0 +1,12 @@
+[
+  {
+    "id": "stat-file-1",
+    "display_name": "Regression Notes.pdf",
+    "filename": "regression-notes.pdf",
+    "content-type": "application/pdf",
+    "url": "https://fixtures.canvas.local/files/stat-regression.pdf",
+    "updated_at": "2026-11-08T16:00:00Z",
+    "created_at": "2026-09-20T09:00:00Z",
+    "size": 204800
+  }
+]

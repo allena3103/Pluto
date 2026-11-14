@@ -1,0 +1,18 @@
+[
+  {
+    "id": "seed-123",
+    "name": "Project Proposal",
+    "due_at": "{{due:weeks=4,days=3}}",
+    "points_possible": 50,
+    "assignment_group_id": "seed-stat-project",
+    "submission": { "score": null, "workflow_state": "unsubmitted", "submitted_at": null }
+  },
+  {
+    "id": "seed-125",
+    "name": "Final Project Report",
+    "due_at": "{{due:weeks=7,days=1}}",
+    "points_possible": 100,
+    "assignment_group_id": "seed-stat-project",
+    "submission": { "score": null, "workflow_state": "unsubmitted", "submitted_at": null }
+  }
+]

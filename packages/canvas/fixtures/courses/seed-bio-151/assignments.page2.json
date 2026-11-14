@@ -1,0 +1,18 @@
+[
+  {
+    "id": "seed-113",
+    "name": "Quiz 5: Genetics",
+    "due_at": "{{due:weeks=3,days=4}}",
+    "points_possible": 25,
+    "assignment_group_id": "seed-bio-quizzes",
+    "submission": { "score": null, "workflow_state": "unsubmitted", "submitted_at": null }
+  },
+  {
+    "id": "seed-115",
+    "name": "Exam 2",
+    "due_at": "{{due:weeks=6,days=2}}",
+    "points_possible": 150,
+    "assignment_group_id": "seed-bio-exams",
+    "submission": { "score": null, "workflow_state": "unsubmitted", "submitted_at": null }
+  }
+]

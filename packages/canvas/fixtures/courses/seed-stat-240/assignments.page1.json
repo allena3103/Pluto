@@ -1,0 +1,18 @@
+[
+  {
+    "id": "seed-121",
+    "name": "Problem Set 5",
+    "due_at": "{{due:weeks=2,days=4}}",
+    "points_possible": 40,
+    "assignment_group_id": "seed-stat-psets",
+    "submission": { "score": null, "workflow_state": "unsubmitted", "submitted_at": null }
+  },
+  {
+    "id": "seed-122",
+    "name": "Problem Set 6",
+    "due_at": "{{due:weeks=3,days=2}}",
+    "points_possible": 40,
+    "assignment_group_id": "seed-stat-psets",
+    "submission": { "score": null, "workflow_state": "submitted", "submitted_at": "2026-12-01T21:25:00Z" }
+  }
+]

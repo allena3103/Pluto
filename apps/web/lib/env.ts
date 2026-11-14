@@ -12,11 +12,3 @@ export function getPublicSupabaseEnv() {
     anonKey: requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
   };
 }
-
-export function getServerEnv() {
-  return {
-    appUrl: requiredEnv("APP_URL"),
-    internalApiSecret: requiredEnv("INTERNAL_API_SECRET"),
-    serviceRoleKey: requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
-  };
-}
