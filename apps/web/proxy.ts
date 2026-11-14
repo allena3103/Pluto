@@ -2,32 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@pluto/core/database.types";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicSupabaseEnv } from "@/lib/env";
+import { isPublicPath } from "@/lib/public-path";
 import { supabaseFetch } from "@/lib/supabase/fetch";
-
-const PUBLIC_PATH_PREFIXES = [
-  "/login",
-  "/open",
-  "/oauth",
-  "/.well-known",
-  "/api",
-  "/cal",
-  "/auth",
-  "/_next",
-];
-
-const PUBLIC_FILE_PATHS = ["/favicon.ico", "/manifest.webmanifest", "/sw.js"];
-
-function isPublicPath(pathname: string) {
-  if (PUBLIC_FILE_PATHS.includes(pathname)) {
-    return true;
-  }
-
-  if (pathname.match(/\.(?:png|jpg|jpeg|gif|webp|svg|ico|avif|woff|woff2|ttf|otf|eot)$/i)) {
-    return true;
-  }
-
-  return PUBLIC_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-}
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({

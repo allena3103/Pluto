@@ -2,6 +2,8 @@
 
 You are an orchestrator. Read `CLAUDE.md`, `docs/plan.md`, `orchestrations/files/BRIEF.md` and your task file first.
 
+> **Changed 2026-11-14 12:05:** slice planners are retired and branches are flat; see `orchestrations/plans/director.md`. Coders now branch from `agent/pluto` (`ORCH=pluto`) and PR into it. Claude only; Cursor sections below are historical.
+
 ## 1. Plan
 - Write `orchestrations/plans/<orch>.md` on your branch: tasks, the files each task owns (no overlaps), dependencies, which CLI runs each coder, and acceptance checks per task. Commit and push it before spawning anyone.
 - Size tasks so one coder finishes in 1-3 hours. Spawn as many coders as the work genuinely splits into; serialize only true dependencies.
@@ -24,6 +26,7 @@ herdr agent prompt $NAME "Read CLAUDE.md, orchestrations/files/BRIEF.md and orch
 ```
 - Panes open in PowerShell; run the snippet above from your own Bash tool, not inside the pane.
 - If `agent start` returns `agent_not_ready`, run `herdr agent read $NAME --source visible --lines 30`. If it is Claude's "trust this folder" prompt for a `C:/Pluto-*` worktree, accept it (`herdr agent send-keys $NAME down` then `enter`); Allen approved that. Any other approval prompt (MCP servers, new access): do not answer; tell the director.
+- Cursor panes sometimes paste a prompt without submitting it (`agent_prompt_stalled`, screen shows `[Pasted text ...]`). Then run `herdr agent send-keys $NAME enter` once and check it went `working`.
 - Never answer an approval prompt that grants new access (MCP servers, etc.). If a coder is `blocked`, read it with `herdr agent read`; if it needs Allen, tell the director.
 - Track each coder with a background `herdr agent wait $NAME` (no polling). On wake, `herdr agent read $NAME --source recent-unwrapped --lines 80` to see whether it is really done or just paused. Cursor planners: see 2d.
 
@@ -31,14 +34,19 @@ herdr agent prompt $NAME "Read CLAUDE.md, orchestrations/files/BRIEF.md and orch
 - You have no background-job notifications. While coders or reviewers are running, block in the foreground with `herdr agent wait <name> --timeout 900000` (repeat as needed) and keep your turn going; do not end your turn while your own agents are working.
 - When everything left is waiting on grokbot (PRs open, CI green, nothing running), end your turn with one line starting `WAITING_GROKBOT:` listing the PR numbers. The director watches GitHub and prompts you when they merge or get review comments.
 - Your Cursor account is whatever `CURSOR_API_KEY` is in your environment (empty means the default logged-in account). Never print the key, never write it to a file in a repo, and pass it to coder tabs only via `--env` as in section 2. Headless reviewers inherit it automatically.
-- Model for coders: per 2b. You may pick `claude-opus-5-thinking-high` for a coder only for the hardest task in your slice.
+- Model for coders: per 2b.
 
 ## 2b. Usage policy: Claude vs Cursor
 Claude coders, reviewers and orchestrators all share Allen's one Claude 5-hour meter (shown in every Claude tab's status bar). Hitting 100% stalls every Claude agent, including you, until it resets.
-- Default new coders to Cursor: `herdr agent start $NAME --kind cursor --pane $PANE -- --force --trust --model <model>`. Good picks: `gpt-5.3-codex` (backend/logic), `composer-2.5` (fast UI and mechanical work), `claude-sonnet-5-thinking-high` (tricky mixed work, billed to Cursor, not the Claude meter).
-- Reviewers run on Cursor by default: `cursor-agent -p --force --trust --model gpt-5.3-codex "<same reviewer prompt>"`. A different model family from the coder is preferred.
-- Use a Claude coder only for work that clearly needs it, and only while your status bar shows the 5-hour meter under 60%.
+- **Model availability changed (2026-11-14 07:00).** The Cursor CLI is now logged into Allen's second account, which only includes `composer-2.5`, `auto` and the Grok models. `gpt-5.3-codex`, Sonnet 5, Opus 5 and GPT-5.6 fail with "not included in your weekly usage". Use:
+  - planners: `grok-4.7-high`
+  - coders: `composer-2.5` (UI, mechanical) or `grok-4.7-medium` (logic); `grok-4.7-high` for security-sensitive fixes
+  - fresh reviewers: `grok-4.7-high`, via `cursor-agent -p --force --trust --model grok-4.7-high "<same reviewer prompt>"`
+- **Since 12:05: Claude only.** Coders `--model sonnet`, security-sensitive coders `--model opus`, fresh reviewers `--model opus` in a visible herdr tab. Check the 5-hour meter before each spawn; over 80%, queue.
 - Cursor coders get the same brief and protocol; their pane is still checked with `herdr agent read`. If `herdr agent wait` never reports idle for a Cursor agent, read the pane to judge completion.
+
+## 2e. Branch ancestry
+Grokbot squash-merges, so after a milestone PR lands in `agent/pluto`, your slice branch and `agent/pluto` no longer share history and a plain merge shows add/add conflicts. Sync: branch `agent/<orch>-sync` from your slice branch, `git merge origin/agent/pluto`, resolve every file you don't own by taking `agent/pluto`'s version (`git checkout --theirs`), keep your own files, run all checks. Since 12:05 this sync branch is the final milestone and is PR'd straight into `agent/pluto` (merge commit); slice branches then retire.
 
 ## 2c. Memory cap (16 GB machine, shared by everyone)
 The machine has 16 GB and already ran out once (background shells were killed).
@@ -66,7 +74,9 @@ Label those PRs `security-review` (`gh pr edit <pr> --add-label security-review`
 Fresh review, for labeled PRs only. It gets only CLAUDE.md, REVIEW.md, the contract, the task's goals and acceptance checks, and the diff:
 ```bash
 git -C C:/Pluto-$NAME diff agent/$ORCH...HEAD > C:/Pluto-$NAME/.review/diff.patch   # .review is gitignored
-cursor-agent -p --force --trust --model gpt-5.3-codex "You are a fresh reviewer. Follow REVIEW.md exactly. Goals and acceptance checks: orchestrations/tasks/$NAME.md. Diff: .review/diff.patch (base agent/$ORCH). Write your report to .review/review-1.md and print it." > C:/Pluto-$NAME/.review/review-1.log
+# visible tab, opus (headless runs get reaped under memory pressure):
+herdr agent start review-$NAME --kind claude --pane <new tab pane in C:/Pluto-$NAME> -- --model opus --permission-mode auto
+herdr agent prompt review-$NAME "You are a fresh reviewer. Follow REVIEW.md exactly. Goals and acceptance checks: orchestrations/tasks/$NAME.md. Diff: .review/diff.patch (base agent/$ORCH). Write your report to .review/review-1.md, then reply DONE."
 gh pr comment <pr> --body-file C:/Pluto-$NAME/.review/review-1.md
 ```
 Run it from the coder's worktree after the coder is idle. Never give the reviewer the coder's transcript or your own opinion of the code.
@@ -79,7 +89,8 @@ Run it from the coder's worktree after the coder is idle. Never give the reviewe
 - Track merges with `gh pr view <pr> --json state,mergedAt` when a coder goes idle or grokbot comments; do not poll in a tight loop.
 
 ## 6. Milestone PR to the integration branch
-- Merge `origin/agent/pluto` into your branch, rerun typecheck/lint/test/smoke yourself, write the final report (`orchestrations/reports/<orch>-<milestone>.md`, see BRIEF), push, and open `gh pr create --base agent/pluto --head agent/<orch>`.
+- Cadence: about every 2 hours, or as soon as a timeline row in BRIEF works on your branch. Don't wait to finish your whole slice.
+- First sync your branch with `agent/pluto` through a sync PR (section 2e), rerun typecheck/lint/test/smoke yourself, write the report (`orchestrations/reports/<orch>-<milestone>.md`, see BRIEF), push, and open `gh pr create --base agent/pluto --head agent/<orch>`. Ask grokbot in the PR body to merge with a merge commit, not squash.
 - The PR body: summary, contract items touched, check output tails, fresh-review verdicts for labeled PRs, the report path, and a "How to UI-test (for grokbot)" section.
 - Then go idle. Grokbot reviews and merges. The director reruns the checks on `agent/pluto` after each merge and sends you fixes if the combined branch breaks.
 

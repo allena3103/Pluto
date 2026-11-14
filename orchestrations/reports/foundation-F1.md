@@ -68,7 +68,7 @@ CI on `agent/foundation`: `check` green, with the database tests running against
 | PR | Label | Fresh review | Outcome |
 | --- | --- | --- | --- |
 | #1 contract | none | Review 1 (Cursor): 2 blocking. Smoke runner bug was the orchestrator's and was fixed on `agent/foundation`; `DeepLink` was too loose and the coder tightened it to the notes shape with tests | Merged by grokbot, CI green |
-| #2 db | `security-review` | Merged by grokbot before the label rule landed. Orchestrator read all four migrations in full. Post-merge fresh review: see PR #2 comments and section 5 | Merged |
+| #2 db | `security-review` | Merged by grokbot before the label rule landed. Orchestrator read all four migrations in full. Post-merge fresh review (Cursor): `VERDICT: APPROVE`, no findings (https://github.com/allena3103/Pluto/pull/2#issuecomment-6872357705) | Merged |
 | #3 shell | `security-review` | Review 1: missing Supabase timeouts, fixed (10 s timeout on every client, typed clients, narrower public paths). Review 2: one item, generated `next-env.d.ts` imports dev type files; orchestrator ruled it non-blocking because typecheck passes on a clean checkout and in CI | Merged by grokbot |
 
 ## 5. Open issues, risks, decisions needed

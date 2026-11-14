@@ -46,12 +46,24 @@ export async function getNotePages(
   }
 
   const rows = await fetchPagesForFileRange(ctx, file.id, firstPage, lastPage);
+  const rangeLast = Math.min(lastPage, pageCount);
+  const expectedPages = rangeLast >= firstPage ? rangeLast - firstPage + 1 : 0;
   let includedChars = 0;
   let truncated = false;
   const pages: Array<{ page: number; text: string; deepLink: string }> = [];
 
   for (const row of rows) {
-    if (includedChars + row.text.length > cap) {
+    const fits = includedChars + row.text.length <= cap;
+    if (!fits && pages.length === 0) {
+      pages.push({
+        page: row.pageNumber,
+        text: row.text.slice(0, cap),
+        deepLink: pageDeepLink(ctx, file.id, row.pageNumber),
+      });
+      truncated = true;
+      break;
+    }
+    if (!fits) {
       truncated = true;
       break;
     }
@@ -62,6 +74,8 @@ export async function getNotePages(
       deepLink: pageDeepLink(ctx, file.id, row.pageNumber),
     });
   }
+
+  if (pages.length < expectedPages) truncated = true;
 
   return TOOLS.get_note_pages.output.parse({
     fileId: file.id,
