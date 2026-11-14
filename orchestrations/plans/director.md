@@ -6,7 +6,7 @@ Supersedes the slice-planner model in `PROTOCOL.md` where they conflict. Freeze 
 1. **Flat branches.** Each slice gets one last sync + milestone PR into `agent/pluto` (the sync is done on `agent/<slice>-sync` and PR'd straight into `agent/pluto`, merge commit). After that, slice branches retire: coders branch from `agent/pluto` and PR straight into it (merge commit).
 2. **No slice planners.** The director writes briefs, spawns coders, runs reviewers and checks.
 3. **Claude only.** No Cursor coders or reviewers. Everything bills Allen's one Claude 5-hour meter, so model choice is the main cost lever.
-4. Prod secrets generated into `C:/Pluto/.env.secrets` (`PROD_INTERNAL_API_SECRET`, `PROD_CANVAS_TOKEN_KEY`, `PROD_PLUTO_DEMO_MCP_TOKEN`, `DEMO_STUDENT_PASSWORD`, `OTHER_STUDENT_PASSWORD`).
+4. Prod secrets generated into `C:/Pluto/.env.secrets` (`PROD_INTERNAL_API_SECRET`, `PROD_CANVAS_TOKEN_KEY`, `PROD_PLUTO_DEMO_MCP_TOKEN`, `PROD_DEMO_STUDENT_PASSWORD`, `PROD_OTHER_STUDENT_PASSWORD`; drop the `PROD_` prefix when seeding hosted; unprefixed names would override local test passwords via `env:local`).
 5. Hosted DB credentials (`SUPABASE_ACCESS_TOKEN` / `HOSTED_SUPABASE_DB_URL`) not provided yet: hosted push + seed stays blocked on Allen.
 
 ## Cost rules
