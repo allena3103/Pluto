@@ -257,6 +257,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"phone_link_codes": {
+                  Row: {
+                    "code_hash": string,"created_at": string,"expires_at": string,"id": string,"student_id": string,"used_at": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code_hash": string,"created_at"?: string,"expires_at": string,"id"?: string,"student_id": string,"used_at"?: string | null
+                  }
+                  Update: {
+                    "code_hash"?: string,"created_at"?: string,"expires_at"?: string,"id"?: string,"student_id"?: string,"used_at"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "phone_link_codes_student_id_fkey"
+      columns: ["student_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"profiles": {
                   Row: {
                     "canvas_base_url": string | null,"canvas_token_encrypted": string | null,"created_at": string,"id": string,"name": string | null,"phone": string | null
@@ -267,6 +287,52 @@ isOneToOne: false
                   }
                   Update: {
                     "canvas_base_url"?: string | null,"canvas_token_encrypted"?: string | null,"created_at"?: string,"id"?: string,"name"?: string | null,"phone"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"saved_notes": {
+                  Row: {
+                    "body": string,"course_id": string | null,"created_at": string,"id": string,"session_id": string | null,"sources": NonNullable<Json>,"student_id": string,"title": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "body": string,"course_id"?: string | null,"created_at"?: string,"id"?: string,"session_id"?: string | null,"sources"?: NonNullable<Json>,"student_id": string,"title": string
+                  }
+                  Update: {
+                    "body"?: string,"course_id"?: string | null,"created_at"?: string,"id"?: string,"session_id"?: string | null,"sources"?: NonNullable<Json>,"student_id"?: string,"title"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "saved_notes_student_id_course_id_fkey"
+      columns: ["student_id","course_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["student_id","id"]
+    },{
+      foreignKeyName: "saved_notes_student_id_fkey"
+      columns: ["student_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "saved_notes_student_id_session_id_fkey"
+      columns: ["student_id","session_id"]
+isOneToOne: false
+      referencedRelation: "chat_sessions"
+      referencedColumns: ["student_id","id"]
+    }
+                  ]
+                },"sms_inbound_receipts": {
+                  Row: {
+                    "created_at": string,"dedupe_key": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"dedupe_key": string
+                  }
+                  Update: {
+                    "created_at"?: string,"dedupe_key"?: string
                   }
                   Relationships: [
                     

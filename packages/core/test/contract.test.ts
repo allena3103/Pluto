@@ -374,9 +374,22 @@ describe("ENDPOINTS", () => {
       { type: "text", delta: "The Marshall Plan " },
       { type: "citation", fileId: FILE, page: 4, deepLink: noteUrl(APP, FILE, 4) },
       { type: "done", sessionId: SESSION },
+      {
+        type: "questions",
+        questions: [{ id: "class", prompt: "Which class?", options: ["History 105"], multiple: false, allowText: true }],
+      },
+      { type: "saved_note", noteId: SESSION, courseId: COURSE, courseName: "History 105" },
+      { type: "saved_note", noteId: SESSION, courseId: null, courseName: null },
       { type: "error", message: "Something went wrong." },
     ];
     for (const e of events) expect(ChatStreamEvent.safeParse(e).success).toBe(true);
+  });
+
+  test("questions events need 1-3 questions", () => {
+    const q = { id: "class", prompt: "Which class?", options: [], multiple: false, allowText: true };
+    expect(ChatStreamEvent.safeParse({ type: "questions", questions: [] }).success).toBe(false);
+    expect(ChatStreamEvent.safeParse({ type: "questions", questions: [q, q, q, q] }).success).toBe(false);
+    expect(ChatStreamEvent.safeParse({ type: "questions", questions: [{ ...q, prompt: " " }] }).success).toBe(false);
   });
 
   test("sms inbound keeps unknown provider keys", () => {

@@ -18,6 +18,7 @@ export const OWNER_COLUMN: Record<string, string> = {
   file_pages: "student_id",
   chat_sessions: "student_id",
   chat_messages: "student_id",
+  saved_notes: "student_id",
   magic_links: "student_id",
   phone_link_codes: "student_id",
   alerts: "student_id",
@@ -136,6 +137,7 @@ export interface OwnedRows {
   filePageId: string;
   chatSessionId: string;
   chatMessageId: string;
+  savedNoteId: string;
   magicLinkId: string;
   phoneLinkCodeId: string;
   alertId: string;
@@ -170,6 +172,13 @@ export async function createRowInEveryTable(service: SupabaseClient, studentId: 
     cited_file_id: fileId,
     cited_page: 1,
   });
+  const savedNoteId = await one("saved_notes", {
+    course_id: courseId,
+    session_id: chatSessionId,
+    title: `RLS saved note ${tag}`,
+    body: "secret study guide",
+    sources: [{ fileId, page: 1 }],
+  });
   const magicLinkId = await one("magic_links", {
     token_hash: randomBytes(32).toString("hex"),
     file_id: fileId,
@@ -203,6 +212,7 @@ export async function createRowInEveryTable(service: SupabaseClient, studentId: 
     filePageId,
     chatSessionId,
     chatMessageId,
+    savedNoteId,
     magicLinkId,
     phoneLinkCodeId,
     alertId,
@@ -235,6 +245,7 @@ export function insertPayloads(target: {
     file_pages: { student_id: s, file_id: fileId, page_number: 99, text: "intruder" },
     chat_sessions: { student_id: s, channel: "web", title: "intruder" },
     chat_messages: { student_id: s, session_id: sessionId, role: "user", text: "intruder", channel: "web" },
+    saved_notes: { student_id: s, course_id: courseId, session_id: sessionId, title: "intruder", body: "intruder" },
     magic_links: { student_id: s, token_hash: randomBytes(32).toString("hex"), file_id: fileId, page: 1, expires_at: soon },
     phone_link_codes: { student_id: s, code_hash: randomBytes(32).toString("hex"), expires_at: soon },
     alerts: { student_id: s, kind: "crunch_week", message: "intruder" },
