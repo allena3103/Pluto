@@ -85,7 +85,8 @@ Run it from the coder's worktree after the coder is idle. Never give the reviewe
 - Track merges with `gh pr view <pr> --json state,mergedAt` when a coder goes idle or grokbot comments; do not poll in a tight loop.
 
 ## 6. Milestone PR to the integration branch
-- Merge `origin/agent/pluto` into your branch, rerun typecheck/lint/test/smoke yourself, write the final report (`orchestrations/reports/<orch>-<milestone>.md`, see BRIEF), push, and open `gh pr create --base agent/pluto --head agent/<orch>`.
+- Cadence: about every 2 hours, or as soon as a timeline row in BRIEF works on your branch. Don't wait to finish your whole slice.
+- First sync your branch with `agent/pluto` through a sync PR (section 2e), rerun typecheck/lint/test/smoke yourself, write the report (`orchestrations/reports/<orch>-<milestone>.md`, see BRIEF), push, and open `gh pr create --base agent/pluto --head agent/<orch>`. Ask grokbot in the PR body to merge with a merge commit, not squash.
 - The PR body: summary, contract items touched, check output tails, fresh-review verdicts for labeled PRs, the report path, and a "How to UI-test (for grokbot)" section.
 - Then go idle. Grokbot reviews and merges. The director reruns the checks on `agent/pluto` after each merge and sends you fixes if the combined branch breaks.
 
