@@ -4,6 +4,7 @@ import { buildToolDeclarations } from "./declarations";
 import { isKnownTool, normalizeArgs } from "./runner";
 import { deadlineSignal, isAbortError, withDeadline } from "./timeout";
 import {
+  DEFAULT_GEMINI_FAST_MODEL,
   DEFAULT_GEMINI_MODEL,
   EMPTY_REPLY_TEXT,
   MAX_TOOL_ROUNDS,
@@ -147,11 +148,11 @@ async function executeTool(
   }
 }
 
-export function resolveModel(model?: string): string {
+export function resolveModel(model?: string, channel: "web" | "sms" = "web"): string {
   const supplied = typeof model === "string" ? model.trim() : "";
   if (supplied) return supplied;
-  const chosen = process.env.GEMINI_MODEL?.trim();
-  return chosen || DEFAULT_GEMINI_MODEL;
+  if (channel === "sms") return process.env.GEMINI_FAST_MODEL?.trim() || DEFAULT_GEMINI_FAST_MODEL;
+  return process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
 }
 
 async function realClient(): Promise<AgentModelClient | undefined> {
@@ -194,7 +195,7 @@ export async function runGemini(input: RunAgentInput, runTool: AgentToolRunner):
 
   const tools = buildToolDeclarations(Boolean(input.createMagicLink));
   const steps = historySteps(input.history, input.message);
-  const model = resolveModel(input.model);
+  const model = resolveModel(input.model, input.channel);
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     if (input.signal?.aborted) break;
