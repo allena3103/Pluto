@@ -40,7 +40,16 @@ function toolErrorResult(text: string): CallToolResult {
   };
 }
 
-async function callTool(name: ToolName, ctx: ToolContext, args: unknown): Promise<CallToolResult> {
+function errorName(error: unknown): string {
+  return error instanceof Error && error.name ? error.name : "Error";
+}
+
+async function callTool(
+  name: ToolName,
+  ctx: ToolContext,
+  args: unknown,
+  redactErrors: boolean,
+): Promise<CallToolResult> {
   try {
     const result = await TOOL_HANDLERS[name](ctx, args);
     return {
@@ -51,10 +60,19 @@ async function callTool(name: ToolName, ctx: ToolContext, args: unknown): Promis
     if (error instanceof ToolError) {
       return toolErrorResult(`${error.code}: ${error.message}`);
     }
-    console.error(`mcp tool ${name} failed`, error);
+    if (redactErrors) {
+      console.error(`mcp tool ${name} failed`, errorName(error));
+    } else {
+      console.error(`mcp tool ${name} failed`, error);
+    }
     return toolErrorResult(GENERIC_TOOL_ERROR);
   }
 }
+
+export type PlutoMcpServerOptions = {
+  /** URL-token mode: log the tool name and error.name only, never the error object or its message. */
+  redactErrors?: boolean;
+};
 
 /**
  * One MCP server for a single request.
@@ -62,7 +80,8 @@ async function callTool(name: ToolName, ctx: ToolContext, args: unknown): Promis
  * refined `GetNotePagesInput` still publishes `fileId`, `firstPage`, and `lastPage`.
  * Every call runs `TOOL_HANDLERS`, which validates input and output.
  */
-export function createPlutoMcpServer(ctx: ToolContext): Server {
+export function createPlutoMcpServer(ctx: ToolContext, options?: PlutoMcpServerOptions): Server {
+  const redactErrors = options?.redactErrors === true;
   const server = new Server(
     { name: "pluto", version: "0.0.0" },
     {
@@ -84,10 +103,14 @@ export function createPlutoMcpServer(ctx: ToolContext): Server {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const name = request.params.name;
     if (!isToolName(name)) {
-      console.error(`mcp tool ${name} is not in the contract`);
+      if (redactErrors) {
+        console.error("mcp tool is not in the contract");
+      } else {
+        console.error(`mcp tool ${name} is not in the contract`);
+      }
       return toolErrorResult(GENERIC_TOOL_ERROR);
     }
-    return callTool(name, ctx, request.params.arguments ?? {});
+    return callTool(name, ctx, request.params.arguments ?? {}, redactErrors);
   });
 
   return server;

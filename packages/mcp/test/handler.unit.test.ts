@@ -1,5 +1,6 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { TOOL_NAMES } from "@pluto/core/contract";
+import { TOOL_HANDLERS } from "@pluto/core/tools/index";
 import { handleMcpRequest } from "../src/handler";
 import { ACCEPT, UNIT_TOKEN, mcpResult, postMcp, rpcBody, unitConfig } from "./request";
 
@@ -70,6 +71,45 @@ describe("mcp demo url token", () => {
     expect(response.status).toBe(404);
     expect(response.headers.get("www-authenticate")).toBeNull();
     await expect(response.json()).resolves.toEqual({ error: "not_found" });
+  });
+
+  test("a throwing tool in url mode does not log the error object or its message", async () => {
+    const secret = "url-mode-error-message-do-not-log";
+    const thrown = new Error(secret);
+    const original = TOOL_HANDLERS.list_courses;
+    const logged: unknown[][] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args);
+    });
+    TOOL_HANDLERS.list_courses = async () => {
+      throw thrown;
+    };
+    try {
+      const response = await postMcp(
+        unitConfig({ demoUrlFlag: "1" }),
+        rpcBody("tools/call", { name: "list_courses", arguments: {} }),
+        undefined,
+        "http://127.0.0.1:3301/api/mcp",
+        { urlToken: UNIT_TOKEN },
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { result?: { isError?: boolean; content?: Array<{ text?: string }> } };
+      expect(body.result?.isError).toBe(true);
+      expect(body.result?.content?.[0]?.text).toBe("The tool failed.");
+      expect(logged.length).toBeGreaterThan(0);
+      for (const args of logged) {
+        expect(args).not.toContain(thrown);
+        for (const arg of args) {
+          const text = typeof arg === "string" ? arg : JSON.stringify(arg);
+          expect(text).not.toContain(secret);
+        }
+      }
+      expect(logged.some((args) => args.includes("list_courses") || args.some((arg) => typeof arg === "string" && arg.includes("list_courses")))).toBe(true);
+      expect(logged.some((args) => args.includes("Error"))).toBe(true);
+    } finally {
+      TOOL_HANDLERS.list_courses = original;
+      spy.mockRestore();
+    }
   });
 
   test("the header path ignores the url flag", async () => {

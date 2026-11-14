@@ -62,7 +62,7 @@ export async function handleMcpRequest(
     return json({ error: "server_error" }, 500);
   }
 
-  const server = createPlutoMcpServer(ctx);
+  const server = createPlutoMcpServer(ctx, { redactErrors: urlMode });
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
