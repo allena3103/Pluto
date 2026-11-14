@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { encryptCanvasToken } from "@pluto/canvas/token-crypto";
 
@@ -9,6 +10,14 @@ const saveTokenSchema = z.object({
   token: z.string().trim().min(20).max(200).regex(/^\S+$/, "Token must not include spaces"),
   baseUrl: z.string().trim().min(1),
 });
+
+// *.instructure.com — exactly one DNS label. The apex is not a Canvas host.
+const INSTRUCTURE_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.instructure\.com$/;
+
+type CanvasProfileUpdate = {
+  canvas_token_encrypted: string | null;
+  canvas_base_url: string | null;
+};
 
 function normalizeCanvasBaseUrl(baseUrl: string): string {
   let parsed: URL;
@@ -22,22 +31,31 @@ function normalizeCanvasBaseUrl(baseUrl: string): string {
     throw new Error("Base URL must use https");
   }
 
-  if (!parsed.hostname) {
-    throw new Error("Base URL must include a hostname");
-  }
-
-  if ((parsed.pathname && parsed.pathname !== "/") || parsed.search || parsed.hash || parsed.username || parsed.password) {
+  if (parsed.username || parsed.password) {
     throw new Error("Base URL must be a plain host with no path, query, or fragment");
   }
 
-  return `https://${parsed.host}`;
+  if (parsed.port !== "") {
+    throw new Error("Base URL must not include a port");
+  }
+
+  if ((parsed.pathname && parsed.pathname !== "/") || parsed.search || parsed.hash) {
+    throw new Error("Base URL must be a plain host with no path, query, or fragment");
+  }
+
+  const hostname = parsed.hostname.toLowerCase().replace(/\.$/, "");
+  if (!INSTRUCTURE_HOST.test(hostname)) {
+    throw new Error("Base URL must be an https instructure.com host");
+  }
+
+  return `https://${hostname}`;
 }
 
 function json(data: unknown, status = 200): Response {
   return Response.json(data, { status });
 }
 
-async function getAuthenticatedUserId() {
+async function getSession() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) {
@@ -46,8 +64,28 @@ async function getAuthenticatedUserId() {
   return { supabase, userId: data.user.id };
 }
 
+/**
+ * Authenticated students may update profiles.name only. Token columns are
+ * written with the service-role client, scoped to the session user's id.
+ * Returns a response when the write fails, otherwise null.
+ */
+async function updateOwnCanvasProfile(
+  userId: string,
+  values: CanvasProfileUpdate,
+  failureMessage: string,
+): Promise<Response | null> {
+  try {
+    const admin = createAdminClient();
+    const { error } = await admin.from("profiles").update(values).eq("id", userId);
+    if (error) return json({ error: failureMessage }, 500);
+  } catch {
+    return json({ error: failureMessage }, 500);
+  }
+  return null;
+}
+
 export async function GET(): Promise<Response> {
-  const { supabase, userId } = await getAuthenticatedUserId();
+  const { supabase, userId } = await getSession();
   if (!userId) return json({ error: "Unauthorized" }, 401);
 
   const { data, error } = await supabase
@@ -66,7 +104,7 @@ export async function GET(): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const { supabase, userId } = await getAuthenticatedUserId();
+  const { userId } = await getSession();
   if (!userId) return json({ error: "Unauthorized" }, 401);
 
   let rawBody: unknown;
@@ -89,37 +127,39 @@ export async function POST(request: Request): Promise<Response> {
     return json({ error: message }, 400);
   }
 
-  const encryptedToken = encryptCanvasToken(parsed.data.token);
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      canvas_token_encrypted: encryptedToken,
-      canvas_base_url: normalizedBaseUrl,
-    })
-    .eq("id", userId);
-
-  if (error) {
+  let encryptedToken: string;
+  try {
+    encryptedToken = encryptCanvasToken(parsed.data.token);
+  } catch {
     return json({ error: "Failed to save Canvas connection" }, 500);
   }
+
+  const failure = await updateOwnCanvasProfile(
+    userId,
+    {
+      canvas_token_encrypted: encryptedToken,
+      canvas_base_url: normalizedBaseUrl,
+    },
+    "Failed to save Canvas connection",
+  );
+  if (failure) return failure;
 
   return json({ connected: true, baseUrl: normalizedBaseUrl });
 }
 
 export async function DELETE(): Promise<Response> {
-  const { supabase, userId } = await getAuthenticatedUserId();
+  const { userId } = await getSession();
   if (!userId) return json({ error: "Unauthorized" }, 401);
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({
+  const failure = await updateOwnCanvasProfile(
+    userId,
+    {
       canvas_token_encrypted: null,
       canvas_base_url: null,
-    })
-    .eq("id", userId);
-
-  if (error) {
-    return json({ error: "Failed to clear Canvas connection" }, 500);
-  }
+    },
+    "Failed to clear Canvas connection",
+  );
+  if (failure) return failure;
 
   return json({ connected: false, baseUrl: null });
 }
