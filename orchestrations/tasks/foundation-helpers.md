@@ -42,3 +42,11 @@ DB tests gated with `SKIP_DB_TESTS` / `dbEnv()`; throwaway users with unique ema
 
 ## Process
 The shared local Supabase stack is running; never stop or reset it. Commit small, `git push -u origin agent/foundation-helpers` after every commit. Open a PR into `agent/foundation` with summary, contract items touched, check output tails. Reply `DONE <PR URL>`.
+
+## Process (updated by the director; overrides anything above that disagrees)
+- You are a Cursor coder. Follow `CLAUDE.md` including "Allen's global rules".
+- PR body uses `.github/pull_request_template.md`. CI (`check`) runs the database tests against a real Supabase stack: it must be green before you reply DONE. Check with `gh pr checks <pr>`.
+- Grokbot merges PRs. You never merge.
+- Memory is tight on this machine: stop any dev server as soon as a check is done, and do not start extra watchers.
+- Type Supabase clients as `PlutoDb` from `@pluto/core/context` (`SupabaseClient<Database>`).
+- This PR is security-sensitive (magic links, service-role helpers): the orchestrator labels it `security-review` and runs a fresh reviewer before grokbot merges.

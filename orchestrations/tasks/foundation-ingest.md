@@ -47,3 +47,11 @@ In `scripts/seed.ts` `seedFiles()`: for each manifest entry upsert a `files` row
 
 ## Process
 The shared local Supabase stack is running; never stop or reset it. Commit small, `git push -u origin agent/foundation-ingest` after every commit. Open a PR into `agent/foundation` with summary, contract items touched (`/api/ingest`, `files`, `file_pages`), check output tails, and a "How to UI-test" section. Reply `DONE <PR URL>`.
+
+## Process (updated by the director; overrides anything above that disagrees)
+- You are a Cursor coder. Follow `CLAUDE.md` including "Allen's global rules".
+- PR body uses `.github/pull_request_template.md`. CI (`check`) runs the database tests against a real Supabase stack: it must be green before you reply DONE. Check with `gh pr checks <pr>`.
+- Grokbot merges PRs. You never merge.
+- Memory is tight on this machine: stop any dev server as soon as a check is done, and do not start extra watchers.
+- Type Supabase clients as `PlutoDb` from `@pluto/core/context` (`SupabaseClient<Database>`).
+- This PR is security-sensitive (service-role route guarded by `INTERNAL_API_SECRET`): the orchestrator labels it `security-review` and runs a fresh reviewer before grokbot merges.

@@ -3,11 +3,14 @@
  * surface (MCP route, web chat, SMS agent) after it has authenticated the student.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
 
-// TODO(foundation orchestrator): switch `db` to `SupabaseClient<Database>` with `import type { Database } from "./database.types"` once that file lands.
+/** Supabase client typed with the Pluto schema. */
+export type PlutoDb = SupabaseClient<Database>;
+
 export type ToolContext = {
   /** Supabase client. Prefer one bound to the student's session so row-level security applies. */
-  db: SupabaseClient;
+  db: PlutoDb;
   /** The signed-in student. Every query also filters by this id explicitly. */
   studentId: string;
   /** Web app origin without a trailing slash, e.g. `https://pluto.example.com`. Used for deep links. */
@@ -15,7 +18,7 @@ export type ToolContext = {
 };
 
 /** Builds a `ToolContext`, trimming any trailing slash from `appUrl`. */
-export function makeToolContext(input: { db: SupabaseClient; studentId: string; appUrl: string }): ToolContext {
+export function makeToolContext(input: { db: PlutoDb; studentId: string; appUrl: string }): ToolContext {
   if (!input.studentId) throw new TypeError("studentId is required");
   if (!input.appUrl) throw new TypeError("appUrl is required");
   return {
