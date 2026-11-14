@@ -10,16 +10,14 @@ export interface FilePageRow {
   text: string | null;
 }
 
-export function normalizeErrorMessage(error: unknown): string {
-  const fallback = "Database query failed.";
-  if (!error || typeof error !== "object") return fallback;
-  const message = "message" in error ? (error as { message?: unknown }).message : undefined;
-  if (typeof message !== "string" || !message.trim()) return fallback;
-  return message.split("\n")[0]!.trim();
-}
-
+/**
+ * Database errors never reach the caller verbatim: Postgres messages can quote row values or SQL.
+ * The caller gets a generic message; the original is kept on `cause` for server logs.
+ */
 export function toDbToolError(error: unknown): ToolError {
-  return new ToolError("db_error", normalizeErrorMessage(error));
+  const toolError = new ToolError("db_error", "Database query failed.");
+  (toolError as Error & { cause?: unknown }).cause = error;
+  return toolError;
 }
 
 export function toIsoNow(): string {

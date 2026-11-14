@@ -47,6 +47,8 @@ export async function getRecentNotes(
     const pages: Array<{ page: number; text: string; deepLink: string }> = [];
 
     for (const entry of filePages) {
+      // Once the cap is hit nothing more is included, so files after the cut have pagesIncluded 0.
+      if (truncated) break;
       const text = entry.text;
       if (includedChars + text.length > cap) {
         truncated = true;
