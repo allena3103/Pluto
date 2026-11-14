@@ -1,0 +1,11 @@
+node_modules/
+.next/
+.env*
+!.env.example
+.review/
+seed/real/
+supabase/.temp/
+*.tsbuildinfo
+.vercel/
+coverage/
+supabase/.branches/

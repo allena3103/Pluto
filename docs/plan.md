@@ -2,7 +2,7 @@
 
 Nov 12, 2026 · @Allen
 
-Planning only, no code: build a Canvas-fed note search and a Claude MCP server so a student can say "make me a study guide from my last 2 weeks of notes" and get it live.
+Source of truth for the contract (MCP tools, internal API, data model). Only the director edits this file; every change is logged in "Decision log" at the bottom.
 
 ## Scope
 
@@ -41,14 +41,14 @@ Use well-known tools so one person can move fast; the one real choice is search,
 | Layer | Choice | Why |
 | --- | --- | --- |
 | Web app | Next.js (React) on Vercel, installable as a PWA | One codebase for laptop and phone; home-screen install with no app store |
-| Auth and database | Supabase Auth, Postgres, Storage | In your plan already; Postgres holds courses, grades and page text, Storage holds the PDFs |
+| Auth and database | Supabase Auth, Postgres, Storage; local Supabase (Docker) for development, hosted project for deploys | Postgres holds courses, grades and page text, Storage holds the PDFs |
 | Note search | Postgres full-text search, one row per PDF page | Fastest to build and no extra service; add vector search only if time remains |
 | PDF handling | Per-page text extraction on upload; pdf.js viewer that opens to a page number | Page-level answers are the feature |
-| Agent | Claude API with tool use, one agent loop shared by web chat and SMS | Same tools as the MCP, so every surface behaves alike |
-| MCP server | TypeScript MCP SDK over HTTP with OAuth, deployed as its own small service | Claude connects as a custom connector; each student sees only their own data |
+| Agent | Google Gemini API (`@google/genai`) with function calling, one agent loop shared by web chat and SMS | Gemini is a hackathon sponsor; same tools as the MCP, so every surface behaves alike |
+| MCP server | TypeScript MCP SDK (streamable HTTP) served from the Next.js app at `/api/mcp` on Vercel; Supabase Auth OAuth 2.1 server with dynamic client registration; consent page at `/oauth/consent`; demo-student bearer token fallback | One deployment and one auth system; Claude and ChatGPT connect as custom connectors; access tokens respect row-level security |
 | SMS | Sendblue free sandbox (iMessage/SMS, no approval needed); Twilio Virtual Phone or a dashboard SMS simulator as fallback | Twilio toll-free verification needs review time, so it will not clear before kickoff. Sandbox limits: 10 verified contacts, and each person must text the number first; Pluto can then reply for 24 hours |
 | Calendar | ICS feed link per student | Works with Apple and Google Calendar with no calendar OAuth |
-| Repo and CI | One GitHub repo, typecheck and lint on every push | Catches breakage early when one person builds everything |
+| Repo and CI | One GitHub repo, npm workspaces, typecheck, lint and tests on every push; Tailwind + shadcn/ui for the web UI | Catches breakage early with many parallel agents |
 
 ## Data model outline
 
@@ -85,7 +85,7 @@ Seven read-only tools, so a wrong tool call from Claude can never change student
 - **Citations:** every result carries a deep link to the exact page in the web app, so the study guide can cite pages.
 - **Changes:** a tool name or field changes here first, then in code.
 
-* **Client support:** standard remote MCP over HTTP with OAuth, so Claude and ChatGPT connect to the same server. Test ChatGPT at build step 4; the live demo runs in Claude.
+* **Client support:** standard remote MCP over streamable HTTP at `/api/mcp` with OAuth, so Claude and ChatGPT connect to the same server. Test ChatGPT at build step 4; the live demo runs in Claude.
 
 ## Internal API contract
 
@@ -106,7 +106,7 @@ Ten endpoints connect the web app, the agent and the integrations; settle each o
 
 ## Build order
 
-Allen builds alone, one step at a time, in this order; the demo path comes first, so if time runs short, cut from the bottom.
+Built by a director, five orchestrators and their coders in parallel (see `orchestrations/files/`). The demo path comes first, so if time runs short, cut from the bottom.
 
 1. **Schema and seed.** Supabase tables with row-level security, plus one seeded demo student (courses, assignments, grade groups, a few lecture PDFs). Done when a second test student cannot read the first student's rows.
 2. **PDF ingest and search.** /api/ingest fills file\_pages, with full-text search on page text. Done when a query returns the right file and page.
@@ -125,64 +125,21 @@ After every step, run the end-to-end smoke test on the demo student before start
 
 ## Working agreement
 
-Every change is written by one agent and checked by a second agent that has never seen the work, with two review rounds at most.
+Every change is written by one coder agent and reviewed and merged by grokbot (Allen's GitHub reviewer). Security-sensitive changes also get a fresh reviewer agent that has never seen the work. Full process: `orchestrations/files/PROTOCOL.md`.
 
-1. **Writer agent.** One Claude session per build step, given CLAUDE.md, the contracts in this doc and that one step. It may spawn subagents for independent parts, never two on the same file.
-2. **Self-check.** Before a pull request, typecheck and lint pass, and the writer lists which contract items it touched.
-3. **Reviewer agent.** A fresh session with no history gets only the project goals, the contract and the diff. It runs typecheck and the smoke script, then reports problems as blocking or non-blocking. It does not fix anything.
+1. **Coder agent.** One session per task in its own worktree and herdr tab, given CLAUDE.md, this contract and that one task.
+2. **Self-check.** Before a pull request, typecheck, lint and tests pass, and the coder lists which contract items it touched.
+3. **Fresh reviewer, security PRs only.** PRs touching migrations/RLS, auth, magic links, the SMS webhook, service-role or internal-secret routes, or Canvas token encryption are labeled `security-review` and get a fresh headless reviewer (only goals, contract and diff, using REVIEW.md) before grokbot. It reports BLOCKING or NON-BLOCKING and fixes nothing.
 4. **Blocking means** a bug, a contract mismatch, a missing auth or row-level-security check, or a secret in code. Style and naming never block.
-5. **Limit.** One fix round and one re-review. Anything still open, Allen decides.
-6. **Merge.** Allen skims the diff, then merges to main. Commit small and often; commit history is part of the record.
-7. **Contract changes.** An agent never edits the contract on its own: this doc changes first, then the code.
+5. **Limit.** One fix round and one re-review. Still open: security and contract items go to the director, then Allen.
+6. **Merge.** Grokbot merges coder PRs into orchestrator branches and milestone PRs into `agent/pluto`, only when CI is green (and the fresh review approved, if labeled). After each merge the owner reruns the checks on the merged branch. `agent/pluto` into `main`: director opens the PR, Allen merges.
+7. **Contract changes.** Only the director edits this doc, then the code follows.
 
 Before kickoff, confirm that the event allows AI-assisted coding; this plan assumes it does.
 
 ## Agent instructions
 
-Paste the first block into the repo root as CLAUDE.md and the reviewer prompt as REVIEW.md. These are instructions for the agents, not project code.
-
-**CLAUDE.md, for every writer agent**
-
-```markdown
-# Pluto (solo build, owner: Allen)
-
-Goal: an AI academic manager. The demo moment is Claude building a study guide from live notes through the Pluto MCP server. Web chat and SMS answer from the same agent and the same database.
-
-How to work
-- Follow the build order in the planning doc. Do one step per session and do not start the next until its done-when check passes.
-- If a decision is open, ask Allen in one short round of numbered questions. Never assume an answer.
-- You may spawn subagents for independent parts of a step. Give each one task and its own files, never let two edit the same file, and check the combined result.
-
-Rules
-- The contract (MCP tools and internal API) in the planning doc is the source of truth. If it must change, stop and tell Allen so the doc changes first.
-- MCP tools are read-only and scoped to the signed-in student. Every query is filtered by student, with row-level security on. Never show another student's data.
-- Page numbers are 1-based everywhere.
-- Web: mobile first, every screen must work at phone width. Log in with Supabase Auth.
-- SMS: inbound text, find the student by phone, call /api/agent/reply, text the answer back. Sendblue sandbox: a person must text the sandbox number first, then Pluto can reply freely for 24 hours (each new text resets the window). Cold outbound is untested, so do not rely on it. The webhook payload gives from_number and content. The crunch alert is a demo button that sends one scripted message with a calendar link while the demo phone's window is open.
-- Canvas calls must handle rate limits and empty responses. Seeded data must work without live sync.
-- Canvas tokens, Sendblue keys and API keys are secrets: environment variables only, never committed. Do not commit course PDFs.
-
-Process
-1. State which build step and which contract items you touch.
-2. Run typecheck and lint before opening a pull request.
-3. A separate fresh reviewer agent reviews every diff using REVIEW.md. Fix blocking issues once, get one re-review, then ask Allen.
-```
-
-**REVIEW.md, the fresh reviewer's prompt**
-
-```markdown
-# REVIEW.md: prompt for the fresh reviewer agent
-
-You are reviewing a diff with no knowledge of how it was written. You are given the project goals, the contract and the diff.
-
-1. Run typecheck, lint and the smoke script. Report the results first.
-2. Check the diff against the contract: tool names, inputs, outputs, endpoint paths.
-3. Check every external call (Canvas, Sendblue, Supabase, Claude API) for error handling and timeouts.
-4. Check for secrets in code, missing auth or row-level-security checks, and data returned for the wrong student.
-5. Check that page numbers are 1-based and deep links open the right page.
-
-Report each problem as BLOCKING (bug, contract break, security) or NON-BLOCKING (style, naming). Do not fix anything, and never block on style.
-```
+Live in the repo root: `CLAUDE.md` (every agent) and `REVIEW.md` (fresh reviewers).
 
 ## Risks and fallbacks
 
@@ -200,3 +157,31 @@ The two that can sink the demo are Claude connector sign-in and the SMS sandbox 
 | Real course material in a public demo | Use only your own courses, keep PDFs out of the repo, show them only in the demo |
 | ChatGPT will not connect (plan, mode or OAuth differences) | Test at build step 4; if it fails, demo Claude live and show ChatGPT from a short recording, or drop the claim from the pitch |
 | Date-change detection misfires | Compare only due date and title against the last saved copy; demo with one known change in the seeded course |
+
+## Decision log
+
+Director-owned. Newest last.
+
+| Date | Decision |
+| --- | --- |
+| 2026-11-13 | Building at the event; ~36h to submission; feature freeze 6h before. |
+| 2026-11-13 | MCP served from the Next.js app at `/api/mcp` on Vercel instead of a separate service. |
+| 2026-11-13 | MCP auth: Supabase Auth OAuth 2.1 server (dynamic client registration, consent page `/oauth/consent`); fallback bearer `PLUTO_DEMO_MCP_TOKEN` maps to the demo student. |
+| 2026-11-13 | Local Supabase in Docker for development; hosted Supabase + Vercel for deploys and grokbot UI checks. |
+| 2026-11-13 | Seed notes are synthetic, text-based lecture PDFs committed to the repo; Allen's real PDFs are uploaded only for the demo and never committed. |
+| 2026-11-13 | Tool and endpoint shapes live as zod schemas in `packages/core/src/contract.ts`; this doc stays the human-readable source and the two must agree. |
+| 2026-11-13 | Data model adds `sms_messages` (simulator store and SMS log). |
+| 2026-11-13 | `packages/core` owns shared helpers used by several surfaces: magic links, `sendSms` (simulator + Sendblue), ICS builder, deep links. Deep-link format `/notes/<fileId>?page=<n>`, 1-based. |
+| 2026-11-13 | Mocks for keyless development: `PLUTO_LLM=mock`, `SMS_PROVIDER=simulator`, `CANVAS_MODE=fixtures`. |
+| 2026-11-13 | Agent loop (web chat + SMS) uses the Google Gemini API instead of the Anthropic API (Gemini is a sponsor). Env: `GEMINI_API_KEY`, `GEMINI_MODEL`; `PLUTO_LLM=mock|gemini`. Claude stays the MCP client in the demo. |
+| 2026-11-13 | `/api/alerts/demo` accepts either the signed-in student's session (studentId must equal the session user) or `INTERNAL_API_SECRET` (for a timer). |
+| 2026-11-14 | Grokbot reviews, UI-tests and merges every PR (coder and milestone). Fresh reviewer agents only for `security-review` PRs (migrations/RLS, auth, magic links, SMS webhook, service-role/internal-secret routes, Canvas token encryption). Merge gate is CI green (+ APPROVE if labeled); GitHub can't enforce it on this private free repo. CI runs the database tests against a Supabase stack. |
+| 2026-11-14 | F1 choices accepted (details: `orchestrations/reports/foundation-F1.md` section 2): composite `(student_id, id)` foreign keys; `magic_links` stores a SHA-256 token hash, service role only; `search_notes(p_student_id, p_query, p_course_id, p_limit)` security invoker; ICS source is `study_blocks`, feed token `alerts.calendar_feed_token`; storage path `notes/<student_id>/<file_id>.pdf`, PDFs up to 50 MB; internal secret header `x-internal-secret`; `/api/chat` streams NDJSON events `text`, `citation`, `done`, `error`; `get_recent_notes` cap 60,000 chars with `pagesIncluded`/`pageCount`, `get_note_pages` also has `truncated`; session refresh in `apps/web/proxy.ts` (Next 16). |
+| 2026-11-14 | The proxy treats every `/api/*`, `/open`, `/oauth`, `/cal` path as public; each such route must authenticate the caller itself (session, internal secret, webhook secret, MCP token or feed token). |
+| 2026-11-14 | PR #9 hardening: students can't write `files` rows (server only), `files.storage_path` must equal `<student_id>/<file_id>.pdf`, and students may update only `profiles.name`. Next foundation migration number is `20261113000600`. |
+| 2026-11-14 | Sign-up: `/signup` page (web slice) with name, email and password via `supabase.auth.signUp` (name in user metadata; the existing trigger creates the profile). Email confirmation is off for the hackathon (local `config.toml` already; Allen turns it off on the hosted project). Linked from `/login`; validated `next` carries through. |
+| 2026-11-14 | Phone linking proves ownership and fits the Sendblue sandbox rule that the person texts first: `/settings/phone` (web slice) shows a short single-use code from `POST /api/sms/link-code` (assistant slice, signed-in; stores a hash with 15-minute expiry in a new `phone_link_codes` table, assistant migration range). The student texts `LINK <code>` to the Pluto number; `/api/sms/inbound` matches the code and sets `profiles.phone` = `from_number` with the service role. No other path writes `profiles.phone` except the seed. |
+| 2026-11-14 | MCP demo fallback for claude.ai (its connector screen has no custom headers): `/api/mcp/demo/<token>` serves the same 7 read-only tools as the demo student only, enabled only when `PLUTO_DEMO_MCP_URL_ENABLED=1`, constant-time compare against `PLUTO_DEMO_MCP_TOKEN`, off by default, on only for the demo deployment, token rotated after the demo. The header form `Authorization: Bearer` stays for Inspector, Claude Code and Desktop. OAuth remains the primary path. |
+| 2026-11-14 | Local OAuth round trip runs the web app on port 3000 (`site_url` in `supabase/config.toml`); no config change. Hosted `site_url` is `APP_URL`. |
+| 2026-11-14 | Shared `apps/web/package.json`, `apps/web/next.config.ts`, `package-lock.json` and `.env.example`: any slice may make small additive edits (one dependency, one config line, one env var) and must list them in the PR body; lockfile conflicts are resolved in sync PRs with `npm install`. |
+| 2026-11-14 | Plan from Sat 10:00: revised timeline in `orchestrations/files/BRIEF.md`; milestone PRs into `agent/pluto` about every 2 hours, merged by grokbot with a merge commit (not squash); after each, the director opens `agent/pluto` -> `main` and Allen merges it to deploy on Vercel (root `apps/web`). Foundation planner retires after F2; the director then owns `packages/core/**`, `supabase/config.toml`, CI and root configs. |
