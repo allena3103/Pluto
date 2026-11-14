@@ -53,6 +53,7 @@ Coders: branch `agent/<orch>-<task>`, worktree `C:/Pluto-<orch>-<task>`, based o
 
 ## Local environment and testing without real keys
 - One shared local Supabase stack (Docker) for everyone. Apply your new migrations with `npx supabase migration up`. Never `db reset` (director only). Tests create their own users with unique emails and clean up after themselves.
+- Docker Desktop is running (engine 29.9.3). If `docker` is not on PATH in your shell, prepend `/c/Program Files/Docker/Docker/resources/bin` (Git Bash) or `C:\Program Files\Docker\Docker\resources\bin`.
 - `npm run env:local` (built by foundation) writes `apps/web/.env.local` from `npx supabase status -o env`, your port, and `C:/Pluto/.env.secrets` if present (Allen fills real keys there; never copy it into a repo).
 - Mocks when keys are missing: `PLUTO_LLM=mock` (deterministic scripted tool calls), `SMS_PROVIDER=simulator` (messages stored and shown in `/sms-sim`), `CANVAS_MODE=fixtures` (recorded JSON in `packages/canvas/fixtures`).
 - Seed: demo student `demo@pluto.test` and a second student `other@pluto.test` (password in `.env.example`), History 105 and two more courses, synthetic lecture PDFs with selectable text, one seeded due-date change.

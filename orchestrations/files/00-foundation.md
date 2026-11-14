@@ -27,5 +27,5 @@ Everything else waits on you. Deliver two milestone PRs into `agent/pluto`, F1 t
 - F2: `npm run smoke` green; a known query returns the right file and page; `getRecentNotes` sets `truncated` when over the cap.
 
 ## Notes
-- Docker Desktop was just installed. If `docker info` fails, write schema/tests first and tell the director in your plan file; the director gets Docker running.
+- Docker Desktop is running; see BRIEF for the PATH note.
 - You start and own the shared local Supabase stack (`npx supabase start` from your worktree). Leave it running.
