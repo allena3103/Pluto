@@ -2,6 +2,8 @@
 
 You are an orchestrator. Read `CLAUDE.md`, `docs/plan.md`, `orchestrations/files/BRIEF.md` and your task file first.
 
+> **Changed 2026-11-14 12:05:** slice planners are retired and branches are flat; see `orchestrations/plans/director.md`. Coders now branch from `agent/pluto` (`ORCH=pluto`) and PR into it. Claude only; Cursor sections below are historical.
+
 ## 1. Plan
 - Write `orchestrations/plans/<orch>.md` on your branch: tasks, the files each task owns (no overlaps), dependencies, which CLI runs each coder, and acceptance checks per task. Commit and push it before spawning anyone.
 - Size tasks so one coder finishes in 1-3 hours. Spawn as many coders as the work genuinely splits into; serialize only true dependencies.
@@ -40,11 +42,11 @@ Claude coders, reviewers and orchestrators all share Allen's one Claude 5-hour m
   - planners: `grok-4.7-high`
   - coders: `composer-2.5` (UI, mechanical) or `grok-4.7-medium` (logic); `grok-4.7-high` for security-sensitive fixes
   - fresh reviewers: `grok-4.7-high`, via `cursor-agent -p --force --trust --model grok-4.7-high "<same reviewer prompt>"`
-- Use a Claude coder only for work that clearly needs it, and only while your status bar shows the 5-hour meter under 60%.
+- **Since 12:05: Claude only.** Coders `--model sonnet`, security-sensitive coders `--model opus`, fresh reviewers `--model opus` in a visible herdr tab. Check the 5-hour meter before each spawn; over 80%, queue.
 - Cursor coders get the same brief and protocol; their pane is still checked with `herdr agent read`. If `herdr agent wait` never reports idle for a Cursor agent, read the pane to judge completion.
 
 ## 2e. Branch ancestry
-Grokbot squash-merges, so after a milestone PR lands in `agent/pluto`, your slice branch and `agent/pluto` no longer share history and a plain merge shows add/add conflicts. Sync through a dedicated PR: branch `agent/<orch>-sync` from your slice branch, `git merge origin/agent/pluto`, resolve every file you don't own by taking `agent/pluto`'s version (`git checkout --theirs`), keep your own files, run all checks, PR into `agent/<orch>`. Never mix a sync into a feature PR.
+Grokbot squash-merges, so after a milestone PR lands in `agent/pluto`, your slice branch and `agent/pluto` no longer share history and a plain merge shows add/add conflicts. Sync: branch `agent/<orch>-sync` from your slice branch, `git merge origin/agent/pluto`, resolve every file you don't own by taking `agent/pluto`'s version (`git checkout --theirs`), keep your own files, run all checks. Since 12:05 this sync branch is the final milestone and is PR'd straight into `agent/pluto` (merge commit); slice branches then retire.
 
 ## 2c. Memory cap (16 GB machine, shared by everyone)
 The machine has 16 GB and already ran out once (background shells were killed).
@@ -72,7 +74,9 @@ Label those PRs `security-review` (`gh pr edit <pr> --add-label security-review`
 Fresh review, for labeled PRs only. It gets only CLAUDE.md, REVIEW.md, the contract, the task's goals and acceptance checks, and the diff:
 ```bash
 git -C C:/Pluto-$NAME diff agent/$ORCH...HEAD > C:/Pluto-$NAME/.review/diff.patch   # .review is gitignored
-cursor-agent -p --force --trust --model gpt-5.3-codex "You are a fresh reviewer. Follow REVIEW.md exactly. Goals and acceptance checks: orchestrations/tasks/$NAME.md. Diff: .review/diff.patch (base agent/$ORCH). Write your report to .review/review-1.md and print it." > C:/Pluto-$NAME/.review/review-1.log
+# visible tab, opus (headless runs get reaped under memory pressure):
+herdr agent start review-$NAME --kind claude --pane <new tab pane in C:/Pluto-$NAME> -- --model opus --permission-mode auto
+herdr agent prompt review-$NAME "You are a fresh reviewer. Follow REVIEW.md exactly. Goals and acceptance checks: orchestrations/tasks/$NAME.md. Diff: .review/diff.patch (base agent/$ORCH). Write your report to .review/review-1.md, then reply DONE."
 gh pr comment <pr> --body-file C:/Pluto-$NAME/.review/review-1.md
 ```
 Run it from the coder's worktree after the coder is idle. Never give the reviewer the coder's transcript or your own opinion of the code.
