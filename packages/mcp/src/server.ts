@@ -40,6 +40,19 @@ function toolErrorResult(text: string): CallToolResult {
   };
 }
 
+/**
+ * Server-side summary of a `db_error` cause (usually a PostgREST error). Only the
+ * code and message are logged; the caller only ever sees the generic tool message.
+ * In URL mode only the code is logged.
+ */
+function dbErrorCause(error: ToolError, redactErrors: boolean): Record<string, unknown> {
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (!cause || typeof cause !== "object") return { cause: typeof cause };
+  const { code, message } = cause as { code?: unknown; message?: unknown };
+  if (redactErrors) return { code };
+  return { code, message };
+}
+
 function errorName(error: unknown): string {
   return error instanceof Error && error.name ? error.name : "Error";
 }
@@ -58,6 +71,9 @@ async function callTool(
     };
   } catch (error) {
     if (error instanceof ToolError) {
+      if (error.code === "db_error") {
+        console.error(`mcp tool ${name} db_error`, dbErrorCause(error, redactErrors));
+      }
       return toolErrorResult(`${error.code}: ${error.message}`);
     }
     if (redactErrors) {
