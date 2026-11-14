@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { safeNext } from "../lib/safe-next";
+import { headersWithPlutoPath, loginRedirectForPath, safeNext } from "../lib/safe-next";
 
 describe("safeNext", () => {
   test("accepts same-origin paths and keeps the query string and hash", () => {
@@ -81,5 +81,45 @@ describe("safeNext", () => {
   test("rejects a dummy-origin URL whose pathname is protocol-relative", () => {
     expect(safeNext("http://dummy.local//evil.example")).toBe("/");
     expect(safeNext("http://dummy.local/\\evil.example")).toBe("/");
+  });
+});
+
+describe("loginRedirectForPath", () => {
+  test("builds the same login URL the proxy uses for /grades?x=1", () => {
+    expect(loginRedirectForPath("/grades?x=1")).toBe("/login?next=%2Fgrades%3Fx%3D1");
+    expect(loginRedirectForPath("/")).toBe("/login?next=%2F");
+    expect(loginRedirectForPath("/oauth/consent?authorization_id=abc123")).toBe(
+      "/login?next=%2Foauth%2Fconsent%3Fauthorization_id%3Dabc123",
+    );
+  });
+
+  test("a hostile header value falls back to /", () => {
+    expect(loginRedirectForPath("https://evil.example")).toBe("/login?next=%2F");
+    expect(loginRedirectForPath("//evil.example")).toBe("/login?next=%2F");
+    expect(loginRedirectForPath("/\\evil.example")).toBe("/login?next=%2F");
+    expect(loginRedirectForPath("/%09/evil.example")).toBe("/login?next=%2F");
+    expect(loginRedirectForPath("https://evil.example, /grades?x=1")).toBe("/login?next=%2F");
+    expect(loginRedirectForPath(null)).toBe("/login?next=%2F");
+    expect(loginRedirectForPath(undefined)).toBe("/login?next=%2F");
+  });
+});
+
+describe("headersWithPlutoPath", () => {
+  test("overwrites a client-sent x-pluto-path and does not append it", () => {
+    const incoming = new Headers();
+    incoming.append("x-pluto-path", "https://evil.example");
+    incoming.append("x-pluto-path", "//evil.example");
+    incoming.set("cookie", "sb=1");
+
+    const headers = headersWithPlutoPath(incoming, "/grades", "?x=1");
+    const values: string[] = [];
+    headers.forEach((value, key) => {
+      if (key === "x-pluto-path") values.push(value);
+    });
+
+    expect(values).toEqual(["/grades?x=1"]);
+    expect(headers.get("x-pluto-path")).toBe("/grades?x=1");
+    expect(headers.get("cookie")).toBe("sb=1");
+    expect(loginRedirectForPath(headers.get("x-pluto-path"))).toBe("/login?next=%2Fgrades%3Fx%3D1");
   });
 });

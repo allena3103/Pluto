@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@pluto/core/database.types";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicSupabaseEnv } from "@/lib/env";
+import { headersWithPlutoPath, loginRedirectForPath } from "@/lib/safe-next";
 import { supabaseFetch } from "@/lib/supabase/fetch";
 
 const PUBLIC_PATH_PREFIXES = [
@@ -31,12 +32,17 @@ function isPublicPath(pathname: string) {
   return PUBLIC_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({
+/** Forward the request with `x-pluto-path` overwritten from the real URL. */
+function nextWithPath(request: NextRequest) {
+  return NextResponse.next({
     request: {
-      headers: request.headers,
+      headers: headersWithPlutoPath(request.headers, request.nextUrl.pathname, request.nextUrl.search),
     },
   });
+}
+
+export async function proxy(request: NextRequest) {
+  let response = nextWithPath(request);
 
   const { url, anonKey } = getPublicSupabaseEnv();
   const supabase = createServerClient<Database>(url, anonKey, {
@@ -52,11 +58,7 @@ export async function proxy(request: NextRequest) {
           request.cookies.set(name, value);
         });
 
-        response = NextResponse.next({
-          request: {
-            headers: request.headers,
-          },
-        });
+        response = nextWithPath(request);
 
         cookiesToSet.forEach(({ name, value, options }) => {
           response.cookies.set(name, value, options);
@@ -76,9 +78,10 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!user && !isPublicPath(request.nextUrl.pathname)) {
-    const loginUrl = new URL("/login", request.url);
-    const nextPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
-    loginUrl.searchParams.set("next", nextPath || "/");
+    const loginUrl = new URL(
+      loginRedirectForPath(`${request.nextUrl.pathname}${request.nextUrl.search}`),
+      request.url,
+    );
     const redirectResponse = NextResponse.redirect(loginUrl);
     response.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie);

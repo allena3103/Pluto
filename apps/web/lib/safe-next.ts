@@ -11,6 +11,13 @@
  */
 export const DEFAULT_NEXT_PATH = "/";
 
+/**
+ * Request header the proxy sets to the real pathname + search. A layout cannot
+ * read the URL, so the signed-out guard reads this instead. The proxy always
+ * overwrites it; a value that did not come from the proxy is still validated.
+ */
+export const PLUTO_PATH_HEADER = "x-pluto-path";
+
 const DUMMY_ORIGIN = "http://dummy.local";
 
 function hasAsciiControl(value: string): boolean {
@@ -80,4 +87,24 @@ export function safeNext(next: string | null | undefined): string {
   if (target === null) return DEFAULT_NEXT_PATH;
   if (target !== next && !encodedFormsStaySafe(target)) return DEFAULT_NEXT_PATH;
   return target;
+}
+
+/**
+ * Login redirect that keeps a validated in-app path. A missing or hostile
+ * header value (open redirect, protocol-relative URL, controls) falls back to `/`.
+ */
+export function loginRedirectForPath(headerValue: string | null | undefined): string {
+  return `/login?next=${encodeURIComponent(safeNext(headerValue))}`;
+}
+
+/**
+ * Copy of the incoming request headers with `x-pluto-path` overwritten from
+ * the real URL. `delete` then `set` replaces every client-supplied value;
+ * `append` is never used, so a hostile header cannot survive beside the real path.
+ */
+export function headersWithPlutoPath(incoming: Headers, pathname: string, search: string): Headers {
+  const headers = new Headers(incoming);
+  headers.delete(PLUTO_PATH_HEADER);
+  headers.set(PLUTO_PATH_HEADER, `${pathname}${search}`);
+  return headers;
 }

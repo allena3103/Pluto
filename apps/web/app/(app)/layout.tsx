@@ -1,8 +1,10 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { AppNav } from "@/components/app-nav";
 import { PwaRegister } from "@/components/pwa-register";
 import { SignOutButton } from "@/components/sign-out-button";
+import { PLUTO_PATH_HEADER, loginRedirectForPath } from "@/lib/safe-next";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   let user = null;
@@ -17,16 +19,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   if (!user) {
-    // Defense in depth only. `proxy.ts` owns the `next` round trip: it
-    // already redirects every unauthenticated request to a protected
-    // `(app)` route to `/login?next=<path+query>` before this layout ever
-    // renders (a Next 16 Layout cannot read the request path itself — only
-    // a Client Component can, via `usePathname()`, and that never mounts
-    // once `redirect()` has fired). This check exists only in case a
-    // session expires between the proxy and this render; it should not
-    // fire in normal use, and it deliberately does not attempt to
-    // reconstruct `next` itself.
-    redirect("/login");
+    // A layout cannot read the URL. `proxy.ts` overwrites `x-pluto-path`
+    // with pathname + search on the forwarded request (a client-sent value
+    // does not survive). `safeNext` still rejects a hostile value if this
+    // guard runs without the proxy.
+    const path = (await headers()).get(PLUTO_PATH_HEADER);
+    redirect(loginRedirectForPath(path));
   }
 
   return (
