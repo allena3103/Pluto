@@ -6,6 +6,7 @@ import { supabaseFetch } from "@/lib/supabase/fetch";
 
 const PUBLIC_PATH_PREFIXES = [
   "/login",
+  "/signup",
   "/open",
   "/oauth",
   "/.well-known",
