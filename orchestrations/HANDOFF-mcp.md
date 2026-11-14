@@ -7,6 +7,12 @@ For a Cursor planner (`grok-4.7-high`) taking over `agent/mcp` in `C:/Pluto-mcp`
 - Plan: `orchestrations/plans/mcp.md`. Briefs: `orchestrations/tasks/mcp-server.md`, `orchestrations/tasks/mcp-oauth.md`.
 - No PRs open from this slice yet. Nothing merged. No dev server running in `C:/Pluto-mcp` (no `npm install` done there either; run it before checks).
 
+## Update (after the Claude meter reset)
+- PR #27 (`agent/mcp-server` -> `agent/mcp`) is open, CI green, labeled `security-review`. It has `/api/mcp`, the 7 tools, the demo bearer and the URL-token route `/api/mcp/demo/[token]`. Coder tab `mcp-server` (`wF:tK`) is idle.
+- Orchestrator checks in `C:/Pluto-mcp-server`: diff read in full (in scope, no core edits); typecheck, lint, `@pluto/mcp` tests (23) and web build pass; live check on 3301 passed (401 + `WWW-Authenticate` without or with a wrong token, query-string token rejected, 7 tools, 3 demo courses, `course_not_found` as `isError`, URL route 404 with the flag off, GET 405). Dev server stopped.
+- Local-only failure, not from this PR: `packages/core/test/db/rls.test.ts` "covers every public table" fails because the shared local database has another slice's table. CI is green.
+- Fresh review 1 is running from `C:/Pluto-mcp-server` -> `.review/review-1.md` (log `.review/review-1.log`). Next: post it on PR #27 with `gh pr comment 27 --body-file`; APPROVE -> add the verdict to the PR body and leave it for grokbot; CHANGES REQUIRED -> one fix round in tab `mcp-server`, one re-review.
+
 ## Running agents (tabs this orchestrator created)
 - `mcp-server` (tab `wF:tK`, pane `wF:pK`, Cursor `grok-4.7-medium`, worktree `C:/Pluto-mcp-server`, branch `agent/mcp-server`, port 3301): task 1, `/api/mcp` + 7 tools + demo bearer + URL-token fallback. Started ~spawn time of commit `97be2b2`; working, no commits yet when this was written. It was sent the URL-token addition as a follow-up prompt (see below); confirm it is in its diff.
 - Nothing else. `mcp-oauth` is NOT started.
