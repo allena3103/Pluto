@@ -1,0 +1,5 @@
+[
+  { "id": "seed-bio-quizzes", "name": "Quizzes", "group_weight": 15 },
+  { "id": "seed-bio-labs", "name": "Labs", "group_weight": 25 },
+  { "id": "seed-bio-exams", "name": "Exams", "group_weight": 60 }
+]

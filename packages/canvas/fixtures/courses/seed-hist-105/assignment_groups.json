@@ -1,0 +1,5 @@
+[
+  { "id": "seed-hist-responses", "name": "Reading Responses", "group_weight": 20 },
+  { "id": "seed-hist-essays", "name": "Essays", "group_weight": 30 },
+  { "id": "seed-hist-exams", "name": "Exams", "group_weight": 50 }
+]
