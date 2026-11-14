@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PlutoDb } from "../../src/context";
-import { consumeMagicLink, createMagicLink, MAGIC_LINK_TTL_MS } from "../../src/magic-links";
+import { consumeMagicLink, createMagicLink, createSavedNoteMagicLink, MAGIC_LINK_TTL_MS } from "../../src/magic-links";
 import { SKIP_DB_TESTS } from "../db-env";
 import { createThrowawayUser, deleteUsers, serviceClient, type TestUser } from "../db/helpers";
 
@@ -52,6 +52,7 @@ describe.skipIf(SKIP_DB_TESTS)("magic-links", () => {
 
     const consumed = await consumeMagicLink(admin, created.token, { now: new Date("2026-11-14T00:01:00.000Z") });
     expect(consumed).toEqual({
+      kind: "file",
       studentId: student.id,
       fileId,
       page: 3,
@@ -128,5 +129,52 @@ describe.skipIf(SKIP_DB_TESTS)("magic-links", () => {
 
     expect(data.token_hash).toBe(expectedHash);
     expect(data.token_hash).not.toContain(created.token);
+  });
+
+  it("saved-note links: owner only, consumed once to /notes/saved/<id>, 15-minute expiry", async () => {
+    const owner = await createThrowawayUser(admin, "Saved Owner");
+    const other = await createThrowawayUser(admin, "Saved Other");
+    users.push(owner, other);
+    const { data: note, error } = await admin
+      .from("saved_notes")
+      .insert({ student_id: owner.id, title: "Guide", body: "body", source: "mcp" })
+      .select("id")
+      .single();
+    if (error || !note) throw new Error(`failed to create note: ${error?.message ?? "no data"}`);
+
+    await expect(
+      createSavedNoteMagicLink(admin, { studentId: other.id, savedNoteId: note.id, appUrl: "https://pluto.test" }),
+    ).rejects.toThrow("saved note not found for student");
+
+    const now = new Date("2026-11-14T20:00:00Z");
+    const created = await createSavedNoteMagicLink(admin, {
+      studentId: owner.id,
+      savedNoteId: note.id,
+      appUrl: "https://pluto.test/",
+      now,
+    });
+    expect(created.url).toBe(`https://pluto.test/open/${created.token}`);
+    expect(created.expiresAt).toBe(new Date(now.getTime() + MAGIC_LINK_TTL_MS).toISOString());
+
+    const { data: row } = await admin
+      .from("magic_links")
+      .select("token_hash, file_id, saved_note_id")
+      .eq("student_id", owner.id)
+      .single();
+    expect(row).toEqual({
+      token_hash: createHash("sha256").update(created.token).digest("hex"),
+      file_id: null,
+      saved_note_id: note.id,
+    });
+
+    // Expired relative to "now": consume with a time inside the window.
+    const consumed = await consumeMagicLink(admin, created.token, { now: new Date(now.getTime() + 60_000) });
+    expect(consumed).toEqual({
+      kind: "saved_note",
+      studentId: owner.id,
+      savedNoteId: note.id,
+      redirectPath: `/notes/saved/${note.id}`,
+    });
+    expect(await consumeMagicLink(admin, created.token, { now: new Date(now.getTime() + 60_000) })).toBeNull();
   });
 });
