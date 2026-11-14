@@ -59,13 +59,15 @@ CI `check` on the ingest PR: green, including seed, database tests and smoke.
 | #4 tools | none | Not required. Orchestrator read the code: every query filters by `student_id`, no writes. Two follow-up fixes pushed (generic database error text, no pages included after the cap) | Merged by grokbot |
 | #10 helpers | `security-review` | Review 1 (Cursor): security checks passed; one blocking item, ICS continuation lines could be 76 octets. One fix round sent | Merged by grokbot |
 | harden (f517ad6) | `security-review` | Director's coder; its PR #11 was closed as superseded and the commit reached `agent/foundation` and `agent/pluto` through PR #9 | Merged |
-| #25 ingest | `security-review` | See the PR for the fresh review verdict | See PR |
+| #25 ingest | `security-review` | Review 1 (Cursor, `grok-4.7-high`): APPROVE, no blocking items (https://github.com/allena3103/Pluto/pull/25#issuecomment-6878853341). Grokbot's two follow-ups were then fixed in `a9ec3f6`: the `failed` status write is checked, and route tests cover the secret gate | CI green, waiting for grokbot |
 
 ## 5. Open issues, risks, decisions needed
 - **Ingest was built by the orchestrator, not a coder.** Free memory stayed between 0.4 and 1.8 GB, under the 2 GB spawn rule, with no foundation coder running to wait for. The PR still went through CI and a fresh review.
-- **Cursor's Codex 5.3 weekly allowance ran out** during the ingest review ("Buy credits or switch to a Grok model"). The review was rerun on `grok-4.7-medium`. Other orchestrators' Cursor coders and reviewers on `gpt-5.3-codex` will hit the same error. Buying credits is Allen's call.
+- **Cursor's Codex 5.3 weekly allowance ran out** during the ingest review ("Buy credits or switch to a Grok model"). Cursor then moved to Allen's second account, and the review ran on `grok-4.7-high`. Other orchestrators' Cursor coders and reviewers on `gpt-5.3-codex` will hit the same error. Buying credits is Allen's call.
 - **Local database drift.** An earlier draft of the hardening migration had been applied to the shared local stack, so three RLS tests failed locally while CI was green. The orchestrator re-applied the committed grants, policies, constraint and trigger; local tests now pass. A director `supabase db reset` followed by `npm run seed` would remove any remaining drift.
 - **Supabase side containers stopped to save memory** on the shared stack: analytics, vector, studio, edge runtime, realtime. Database, auth, REST, storage and the gateway are running. `npx supabase start` brings them back.
+- **Issues from grokbot's review of PR #4.** #5 is closed (fixed by `7d30818`). #6, #7 and #8 are with a Cursor coder (`foundation-tools-fixes`); that PR goes into `agent/foundation` and reaches `agent/pluto` in a later sync, not in this milestone PR unless it merges first.
+- **A `phone_link_codes` table from another slice is applied to the shared local database**, so `rls.test.ts` ("covers every public table") fails locally on branches that do not have that migration. CI is unaffected.
 - The Claude usage limit stalled the orchestrator twice (about 2 hours and 3.5 hours), so F2 landed after the 05:00 target.
 - `.limit()` values above 1,000 in the tools are capped by PostgREST's default of 1,000 rows. Page text is paged correctly; assignments and courses would need paging only for a student with more than 1,000 of them.
 - PDFs with image-only pages ingest as empty page text (no OCR), as the plan's risk table expects.
