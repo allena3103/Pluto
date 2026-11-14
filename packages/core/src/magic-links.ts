@@ -18,11 +18,36 @@ export interface CreatedMagicLink {
   expiresAt: string;
 }
 
-export interface ConsumedMagicLink {
+export interface CreateSavedNoteMagicLinkInput {
+  studentId: string;
+  savedNoteId: string;
+  appUrl: string;
+  now?: Date;
+}
+
+/** A consumed link to a file page (`kind` is optional so older callers keep working). */
+export interface ConsumedFileMagicLink {
+  kind?: "file";
   studentId: string;
   fileId: string;
   page: number;
   redirectPath: string;
+}
+
+/** A consumed link to a saved note (texted after an MCP `save_study_guide`). */
+export interface ConsumedSavedNoteMagicLink {
+  kind: "saved_note";
+  studentId: string;
+  savedNoteId: string;
+  redirectPath: string;
+}
+
+export type ConsumedMagicLink = ConsumedFileMagicLink | ConsumedSavedNoteMagicLink;
+
+/** `/notes/saved/<id>`: the web page for one saved note. */
+export function savedNotePath(savedNoteId: string): string {
+  if (!savedNoteId) throw new TypeError("savedNoteId is required");
+  return `/notes/saved/${encodeURIComponent(savedNoteId)}`;
 }
 
 function assertPage(page: number): void {
@@ -58,21 +83,66 @@ export async function createMagicLink(admin: PlutoDb, input: CreateMagicLinkInpu
   if (fileError) throw new Error(`failed to verify file ownership: ${fileError.message}`);
   if (!file) throw new Error("file not found for student");
 
+  return insertMagicLink(admin, {
+    appUrl,
+    expiresAt,
+    row: { student_id: input.studentId, file_id: input.fileId, page: input.page },
+  });
+}
+
+async function insertMagicLink(
+  admin: PlutoDb,
+  input: {
+    appUrl: string;
+    expiresAt: Date;
+    row: { student_id: string; file_id?: string; page?: number; saved_note_id?: string };
+  },
+): Promise<CreatedMagicLink> {
   const token = randomBytes(32).toString("base64url");
   const { error } = await admin.from("magic_links").insert({
-    student_id: input.studentId,
-    file_id: input.fileId,
-    page: input.page,
+    ...input.row,
     token_hash: tokenHash(token),
-    expires_at: expiresAt.toISOString(),
+    expires_at: input.expiresAt.toISOString(),
   });
   if (error) throw new Error(`failed to create magic link: ${error.message}`);
 
   return {
-    url: `${appUrl}/open/${token}`,
+    url: `${input.appUrl}/open/${token}`,
     token,
-    expiresAt: expiresAt.toISOString(),
+    expiresAt: input.expiresAt.toISOString(),
   };
+}
+
+/**
+ * One-time link that signs the student in and opens `/notes/saved/<id>`. Same token,
+ * hashing, single use and 15-minute expiry as file links. The note must belong to
+ * `studentId` (checked here and by the composite foreign key).
+ */
+export async function createSavedNoteMagicLink(
+  admin: PlutoDb,
+  input: CreateSavedNoteMagicLinkInput,
+): Promise<CreatedMagicLink> {
+  if (!input.studentId) throw new TypeError("studentId is required");
+  if (!input.savedNoteId) throw new TypeError("savedNoteId is required");
+
+  const appUrl = normalizeAppUrl(input.appUrl);
+  const now = input.now ?? new Date();
+  const expiresAt = new Date(now.getTime() + MAGIC_LINK_TTL_MS);
+
+  const { data: note, error: noteError } = await admin
+    .from("saved_notes")
+    .select("id")
+    .eq("student_id", input.studentId)
+    .eq("id", input.savedNoteId)
+    .maybeSingle();
+  if (noteError) throw new Error(`failed to verify saved note ownership: ${noteError.message}`);
+  if (!note) throw new Error("saved note not found for student");
+
+  return insertMagicLink(admin, {
+    appUrl,
+    expiresAt,
+    row: { student_id: input.studentId, saved_note_id: input.savedNoteId },
+  });
 }
 
 export async function consumeMagicLink(
@@ -89,13 +159,24 @@ export async function consumeMagicLink(
     .eq("token_hash", tokenHash(token))
     .is("used_at", null)
     .gt("expires_at", nowIso)
-    .select("student_id,file_id,page")
+    .select("student_id,file_id,page,saved_note_id")
     .maybeSingle();
 
   if (error) throw new Error(`failed to consume magic link: ${error.message}`);
   if (!data) return null;
 
+  if (data.saved_note_id) {
+    return {
+      kind: "saved_note",
+      studentId: data.student_id,
+      savedNoteId: data.saved_note_id,
+      redirectPath: savedNotePath(data.saved_note_id),
+    };
+  }
+  if (!data.file_id) return null;
+
   return {
+    kind: "file",
     studentId: data.student_id,
     fileId: data.file_id,
     page: data.page,

@@ -3,7 +3,8 @@ export type ToolErrorCode =
   | "course_not_found"
   | "course_ambiguous"
   | "file_not_found"
-  | "db_error";
+  | "db_error"
+  | "rate_limited";
 
 export class ToolError extends Error {
   readonly code: ToolErrorCode;
