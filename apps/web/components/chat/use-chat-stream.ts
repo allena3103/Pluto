@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChatRequest, CHAT_STREAM_CONTENT_TYPE, type ChatStreamEvent } from "@pluto/core/contract";
+import {
+  ChatRequest,
+  CHAT_STREAM_CONTENT_TYPE,
+  type ChatStreamEvent,
+  type ClarifyingQuestion,
+} from "@pluto/core/contract";
 import { createChatFixtureStream } from "./fixture-stream";
 import { parseNdjsonLine, splitNdjsonChunk } from "./ndjson-line-buffer";
 
@@ -13,16 +18,31 @@ export type ChatCitation = {
   title?: string;
 };
 
+export type SavedNoteChip = { noteId: string; courseName: string | null };
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
+  /** What the bubble shows. */
   content: string;
+  /** User messages only: what was sent, when it differs from `content` (answers to questions). */
+  sent?: string;
   citations: ChatCitation[];
   error?: string;
   /** Waiting for the first text delta. */
   pending?: boolean;
   streaming?: boolean;
+  /** The student pressed Stop before the reply finished. */
+  stopped?: boolean;
+  /** The agent asked these before answering. */
+  questions?: ClarifyingQuestion[];
+  /** The student already answered `questions`. */
+  answered?: boolean;
+  /** The reply was saved to the Notes page. */
+  savedNote?: SavedNoteChip;
 };
+
+export type QuestionAnswer = { prompt: string; answer: string };
 
 function newId(): string {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -122,6 +142,22 @@ export function useChatStream() {
                   },
                 ],
               }
+            : m,
+        ),
+      );
+      return;
+    }
+    if (event.type === "questions") {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? { ...m, pending: false, questions: event.questions } : m)),
+      );
+      return;
+    }
+    if (event.type === "saved_note") {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? { ...m, savedNote: { noteId: event.noteId, courseName: event.courseName } }
             : m,
         ),
       );
@@ -235,14 +271,7 @@ export function useChatStream() {
         if (controller.signal.aborted) {
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === assistantId
-                ? {
-                    ...m,
-                    pending: false,
-                    streaming: false,
-                    error: "Cancelled.",
-                  }
-                : m,
+              m.id === assistantId ? { ...m, pending: false, streaming: false, stopped: true } : m,
             ),
           );
           return;
@@ -262,8 +291,9 @@ export function useChatStream() {
     [applyStreamEvent, failAssistant, router, sessionId],
   );
 
+  /** `display` is what the user bubble shows when it differs from the text sent. */
   const sendMessage = useCallback(
-    async (raw?: string) => {
+    async (raw?: string, display?: string) => {
       const text = (raw ?? composerText).trim();
       if (!text || isStreaming) return;
 
@@ -271,9 +301,10 @@ export function useChatStream() {
 
       const userId = newId();
       const assistantId = newId();
+      const shown = display?.trim() || text;
       setMessages((prev) => [
         ...prev,
-        { id: userId, role: "user", content: text, citations: [] },
+        { id: userId, role: "user", content: shown, ...(shown !== text ? { sent: text } : {}), citations: [] },
         {
           id: assistantId,
           role: "assistant",
@@ -288,6 +319,29 @@ export function useChatStream() {
     },
     [composerText, isStreaming, runStream],
   );
+
+  /**
+   * Sends answers to the questions on `assistantId`. The message repeats the student's
+   * original request so the agent (and the saved note's title) keep the full context.
+   */
+  const answerQuestions = useCallback(
+    (assistantId: string, answers: QuestionAnswer[]) => {
+      if (isStreaming || answers.length === 0) return;
+      const index = messages.findIndex((m) => m.id === assistantId);
+      const asked = messages.findLast((m, i) => i < index && m.role === "user");
+      const request = (asked?.sent ?? asked?.content ?? "").split("\n", 1)[0]?.trim() ?? "";
+      const lines = answers.map(({ prompt, answer }) => `${prompt} ${answer}`);
+      const text = [request, lines.join("\n")].filter(Boolean).join("\n\n");
+      setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, answered: true } : m)));
+      void sendMessage(text, answers.map(({ answer }) => answer).join(" · "));
+    },
+    [isStreaming, messages, sendMessage],
+  );
+
+  /** Stops the reply in flight. The server saves nothing for a stopped reply. */
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   const retryLast = useCallback(() => {
     if (!pendingRetryMessage || isStreaming) return;
@@ -326,6 +380,8 @@ export function useChatStream() {
     setComposerText,
     isStreaming,
     sendMessage,
+    answerQuestions,
+    stop,
     retryLast,
     canRetry: Boolean(pendingRetryMessage) && !isStreaming,
     reset,

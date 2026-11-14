@@ -5,20 +5,24 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowUp,
+  BookmarkCheck,
   BookOpen,
   CalendarClock,
   FileText,
   GraduationCap,
   RotateCcw,
   Sparkles,
+  Square,
   type LucideIcon,
 } from "lucide-react";
 import { notePath } from "@pluto/core/deep-links";
+import { MarkdownText } from "@/components/markdown-text";
 import { type MascotMood, PlutoMascot } from "@/components/mascot/pluto-mascot";
 import { useMascotMood } from "@/components/mascot/use-mascot-mood";
 import { cn } from "@/lib/utils";
+import { ClarifyingQuestions } from "./clarifying-questions";
 import { NEW_CHAT_EVENT } from "./new-chat";
-import { type ChatCitation, type ChatMessage, useChatStream } from "./use-chat-stream";
+import { type ChatCitation, type ChatMessage, type QuestionAnswer, useChatStream } from "./use-chat-stream";
 
 const SUGGESTIONS: readonly { text: string; icon: LucideIcon; className: string }[] = [
   {
@@ -66,17 +70,8 @@ function citationHref(citation: ChatCitation): string {
   return notePath(citation.fileId, citation.page);
 }
 
-function AssistantText({ text }: { text: string }) {
-  const paragraphs = text.split(/\n\n+/);
-  return (
-    <div className="space-y-3 break-words">
-      {paragraphs.map((para, index) => (
-        <p key={index} className="whitespace-pre-wrap">
-          {para}
-        </p>
-      ))}
-    </div>
-  );
+function savedNoteHref(noteId: string): string {
+  return `/notes/saved/${encodeURIComponent(noteId)}`;
 }
 
 const BUSY_CAPTIONS: Partial<Record<MascotMood, string>> = {
@@ -84,9 +79,18 @@ const BUSY_CAPTIONS: Partial<Record<MascotMood, string>> = {
   working: "Digging through your notes…",
 };
 
-/** `liveMood` is set only on the latest assistant message; older avatars stay still. */
-function AssistantMessage({ message, liveMood }: { message: ChatMessage; liveMood?: MascotMood }) {
-  const caption = liveMood && message.content === "" ? BUSY_CAPTIONS[liveMood] : undefined;
+type AssistantMessageProps = {
+  message: ChatMessage;
+  /** Set only on the latest assistant message; older avatars stay still. */
+  liveMood?: MascotMood;
+  /** Questions can be answered only on the latest assistant message. */
+  canAnswer: boolean;
+  busy: boolean;
+  onAnswer: (answers: QuestionAnswer[]) => void;
+};
+
+function AssistantMessage({ message, liveMood, canAnswer, busy, onAnswer }: AssistantMessageProps) {
+  const caption = liveMood && message.content === "" && !message.stopped ? BUSY_CAPTIONS[liveMood] : undefined;
   return (
     <div className="flex gap-3">
       <PlutoMascot mood={liveMood ?? "happy"} size={36} animated={liveMood !== undefined} className="-mt-1" />
@@ -97,7 +101,16 @@ function AssistantMessage({ message, liveMood }: { message: ChatMessage; liveMoo
             {caption}
           </p>
         )}
-        {message.content !== "" && <AssistantText text={message.content} />}
+        {message.content !== "" && <MarkdownText text={message.content} />}
+        {message.stopped && (
+          <p className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <Square className="size-3.5 fill-current" aria-hidden />
+            You stopped this reply.
+          </p>
+        )}
+        {message.questions && message.questions.length > 0 && !message.answered && canAnswer && (
+          <ClarifyingQuestions questions={message.questions} disabled={busy} onSubmit={onAnswer} />
+        )}
         {message.error && (
           <p
             className="inline-flex items-start gap-2 rounded-2xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
@@ -122,6 +135,17 @@ function AssistantMessage({ message, liveMood }: { message: ChatMessage; liveMoo
             ))}
           </ul>
         )}
+        {message.savedNote && (
+          <Link
+            href={savedNoteHref(message.savedNote.noteId)}
+            className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-mint/70 px-3 py-1.5 text-xs font-bold text-emerald-900 shadow-warm-sm transition-all hover:-translate-y-0.5 hover:bg-mint"
+          >
+            <BookmarkCheck className="size-3.5 shrink-0 text-emerald-600" aria-hidden />
+            <span className="truncate">
+              Saved to Notes{message.savedNote.courseName ? ` · ${message.savedNote.courseName}` : ""}
+            </span>
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -143,12 +167,13 @@ type ComposerProps = {
   onChange: (value: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onSubmit: (e: React.FormEvent) => void;
-  disabled: boolean;
+  onStop: () => void;
+  streaming: boolean;
   canSend: boolean;
   large?: boolean;
 };
 
-function Composer({ textareaRef, value, onChange, onKeyDown, onSubmit, disabled, canSend, large }: ComposerProps) {
+function Composer({ textareaRef, value, onChange, onKeyDown, onSubmit, onStop, streaming, canSend, large }: ComposerProps) {
   return (
     <form
       onSubmit={onSubmit}
@@ -167,21 +192,33 @@ function Composer({ textareaRef, value, onChange, onKeyDown, onSubmit, disabled,
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
-        disabled={disabled}
+        disabled={streaming}
         placeholder={large ? "Ask Pluto anything…" : "Message Pluto…"}
         className={cn(
           "min-h-10 w-full min-w-0 flex-1 resize-none bg-transparent py-2 text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed disabled:opacity-60",
           large && "md:min-h-14 md:text-lg",
         )}
       />
-      <button
-        type="submit"
-        disabled={!canSend}
-        aria-label="Send message"
-        className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-sunrise text-white shadow-warm transition-all hover:-translate-y-0.5 hover:shadow-warm-lg active:scale-95 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted disabled:bg-none disabled:text-muted-foreground disabled:shadow-none disabled:hover:translate-y-0"
-      >
-        <ArrowUp className="size-5" strokeWidth={2.75} aria-hidden />
-      </button>
+      {streaming ? (
+        <button
+          type="button"
+          onClick={onStop}
+          aria-label="Stop reply"
+          title="Stop"
+          className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background shadow-warm transition-all hover:-translate-y-0.5 hover:shadow-warm-lg active:scale-95 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-none"
+        >
+          <Square className="size-4 fill-current" aria-hidden />
+        </button>
+      ) : (
+        <button
+          type="submit"
+          disabled={!canSend}
+          aria-label="Send message"
+          className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-sunrise text-white shadow-warm transition-all hover:-translate-y-0.5 hover:shadow-warm-lg active:scale-95 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted disabled:bg-none disabled:text-muted-foreground disabled:shadow-none disabled:hover:translate-y-0"
+        >
+          <ArrowUp className="size-5" strokeWidth={2.75} aria-hidden />
+        </button>
+      )}
     </form>
   );
 }
@@ -193,6 +230,8 @@ export function ChatView({ name }: { name: string | null }) {
     setComposerText,
     isStreaming,
     sendMessage,
+    answerQuestions,
+    stop,
     retryLast,
     canRetry,
     reset,
@@ -259,7 +298,8 @@ export function ChatView({ name }: { name: string | null }) {
       onChange={setComposerText}
       onKeyDown={onKeyDown}
       onSubmit={onSubmit}
-      disabled={isStreaming}
+      onStop={stop}
+      streaming={isStreaming}
       canSend={!isStreaming && composerText.trim() !== ""}
       large={isEmpty}
     />
@@ -321,7 +361,13 @@ export function ChatView({ name }: { name: string | null }) {
               {message.role === "user" ? (
                 <UserMessage message={message} />
               ) : (
-                <AssistantMessage message={message} liveMood={message.id === lastAssistantId ? mood : undefined} />
+                <AssistantMessage
+                  message={message}
+                  liveMood={message.id === lastAssistantId ? mood : undefined}
+                  canAnswer={message.id === lastAssistantId}
+                  busy={isStreaming}
+                  onAnswer={(answers) => answerQuestions(message.id, answers)}
+                />
               )}
             </div>
           ))}

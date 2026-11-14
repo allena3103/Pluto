@@ -201,8 +201,8 @@ describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
       }
     }
 
-    // Students cannot write the service-only tables even for themselves.
-    for (const table of ["file_pages", "alerts", "study_blocks", "sms_messages", "magic_links", "phone_link_codes"]) {
+    // Students cannot write the service-only tables even for themselves, and a saved note is never edited.
+    for (const table of ["file_pages", "alerts", "study_blocks", "sms_messages", "magic_links", "phone_link_codes", "saved_notes"]) {
       const res = await victim!.client.from(table).update({ created_at: EPOCH }).eq("student_id", victim!.id).select();
       expect(res.error?.code, `victim update own ${table}`).toBe("42501");
     }
@@ -246,6 +246,14 @@ describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
       [
         "chat_messages",
         { student_id: mine, session_id: victimRows.chatSessionId, role: "user", text: "x", channel: "web" },
+      ],
+      [
+        "saved_notes",
+        { student_id: mine, course_id: victimRows.courseId, title: "x", body: "x" },
+      ],
+      [
+        "saved_notes",
+        { student_id: mine, session_id: victimRows.chatSessionId, title: "x", body: "x" },
       ],
       [
         "magic_links",

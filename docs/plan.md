@@ -52,7 +52,7 @@ Use well-known tools so one person can move fast; the one real choice is search,
 
 ## Data model outline
 
-Nine groups of data, and every row belongs to one student with row-level security on, so a student only ever sees their own rows.
+Ten groups of data, and every row belongs to one student with row-level security on, so a student only ever sees their own rows.
 
 | Table | Holds | Main fields |
 | --- | --- | --- |
@@ -63,6 +63,7 @@ Nine groups of data, and every row belongs to one student with row-level securit
 | files | Lecture PDFs and syllabi | course, title, week label, added date, source (Canvas or manual), storage path, ingest status |
 | file\_pages | Searchable text | file, page number, page text, search index |
 | chat\_sessions and chat\_messages | Web and SMS conversations | session, role, text, cited file and page, channel |
+| saved\_notes | Web chat answers built from notes (study guides, summaries), shown on the Notes page by class | class (null when the answer cites several), chat session, title, body, cited file pages |
 | magic\_links | One-time links sent by SMS | token, student, target file and page, expiry |
 | alerts | Proactive alerts | student, kind (crunch week or date change), week or assignment, message, sent time, calendar feed token |
 
@@ -94,7 +95,7 @@ Ten endpoints connect the web app, the agent and the integrations; settle each o
 | Endpoint | Called by | In | Out |
 | --- | --- | --- | --- |
 | /api/ingest | Canvas sync, manual import | file id | status; fills file\_pages |
-| /api/chat | web chat view | session id, message | streamed reply with cited file and page |
+| /api/chat | web chat view | session id, message | streamed reply with cited file and page; clarifying questions when details are missing; saved-note notice |
 | /api/agent/reply | SMS webhook | student id, text, channel | reply text and optional deep link |
 | /api/grades | web grade view | optional course | same data as get\_grades |
 | /api/magic-link | the agent, internally | student id, file id, page | one-time URL |
@@ -189,3 +190,4 @@ Director-owned. Newest last.
 | 2026-11-14 | Gemini models: web chat `GEMINI_MODEL`, SMS `GEMINI_FAST_MODEL`, both default `gemini-3.5-flash-lite` (`gemini-3.8-flash` timed out and `gemini-3.5-flash` took ~11s per call on 2026-11-14). |
 | 2026-11-14 | `/api/mcp` accepts any valid Supabase access token for the student (web session or OAuth-issued); tokens are not audience-bound to `/api/mcp`. The demo bearer and URL token are unchanged. |
 | 2026-11-14 | `POST /api/canvas/sync` (not one of the ten endpoints): signed-in student, or `x-internal-secret` with body `studentId`. The env Canvas token is used only with the env base URL and only for the demo student; profile URLs must be single-label `*.instructure.com`. `/api/magic-link` and `/open/:token` join the service-role allowed list. |
+| 2026-11-14 | Web chat changes: (1) reply text has no URLs (prompt + server strip; the mock no longer appends the deep link); links stay SMS-only. (2) Web replies that cite notes pages are saved to new `saved_notes` (migration `20261114050000`, student select/insert/delete own, no update; composite FKs to `courses` and `chat_sessions`) and listed on `/notes` under their class, with `/notes/saved/<id>`. (3) Web agent gets `ask_clarifying_questions` (1-3 questions, options with single/multiple pick, optional typed answer); `/api/chat` streams new events `questions` and `saved_note`. (4) Stop button aborts the request; the server then saves no reply and no note. |

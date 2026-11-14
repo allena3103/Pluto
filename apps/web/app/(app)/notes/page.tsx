@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ChevronRight, FileText } from "lucide-react";
+import { BookmarkCheck, ChevronRight, FileText } from "lucide-react";
+import { DeleteSavedNoteButton } from "@/components/notes/delete-saved-note-button";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, PageShell, TINT_CLASSES, type PageTint } from "@/components/page-shell";
@@ -22,6 +23,18 @@ type CourseRow = {
   name: string;
   term: string | null;
 };
+
+type SavedNoteRow = {
+  id: string;
+  course_id: string | null;
+  title: string;
+  created_at: string;
+};
+
+/** Section key for chat answers that cite more than one class. Not a uuid, so it never collides. */
+const ACROSS_CLASSES = "__across__";
+const SAVED_NOTES_LIMIT = 200;
+const PAGE_DESCRIPTION = "Your lecture notes and the study guides you made in chat, by class.";
 
 const INGEST_LABEL: Record<NoteFileRow["ingest_status"], string> = {
   pending: "Pending",
@@ -50,54 +63,73 @@ export default async function NotesPage() {
 
   const user = authData.user;
 
-  const [{ data: fileRows, error: filesError }, { data: courseRows, error: coursesError }] = await Promise.all([
+  const [
+    { data: fileRows, error: filesError },
+    { data: courseRows, error: coursesError },
+    { data: savedRows, error: savedError },
+  ] = await Promise.all([
     supabase
       .from("files")
       .select("id, course_id, title, week_label, added_at, ingest_status, ingest_error, page_count")
       .eq("student_id", user.id)
       .order("added_at", { ascending: false }),
     supabase.from("courses").select("id, name, term").eq("student_id", user.id).order("name", { ascending: true }),
+    supabase
+      .from("saved_notes")
+      .select("id, course_id, title, created_at")
+      .eq("student_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(SAVED_NOTES_LIMIT),
   ]);
 
-  if (filesError || coursesError) {
-    throw filesError ?? coursesError;
+  if (filesError || coursesError || savedError) {
+    throw filesError ?? coursesError ?? savedError;
   }
 
   const files = (fileRows ?? []) as NoteFileRow[];
   const courses = (courseRows ?? []) as CourseRow[];
+  const savedNotes = (savedRows ?? []) as SavedNoteRow[];
 
-  if (files.length === 0) {
+  if (files.length === 0 && savedNotes.length === 0) {
     return (
-      <PageShell title="Notes" description="Your lecture notes, by course and week." icon={FileText} tint="sky">
+      <PageShell title="Notes" description={PAGE_DESCRIPTION} icon={FileText} tint="sky">
         <EmptyState title={EMPTY_STATE_TEXT}>Upload or ingest lecture PDFs to see them here.</EmptyState>
       </PageShell>
     );
   }
 
-  const filesByCourse = new Map<string, NoteFileRow[]>();
-  for (const file of files) {
-    const existing = filesByCourse.get(file.course_id);
-    if (existing) {
-      existing.push(file);
-    } else {
-      filesByCourse.set(file.course_id, [file]);
+  // One section per class. Chat answers that cite several classes go in a last section.
+  const sections = new Map<string, { files: NoteFileRow[]; saved: SavedNoteRow[] }>();
+  const sectionFor = (key: string) => {
+    let section = sections.get(key);
+    if (!section) {
+      section = { files: [], saved: [] };
+      sections.set(key, section);
     }
-  }
+    return section;
+  };
+  for (const file of files) sectionFor(file.course_id).files.push(file);
+  for (const note of savedNotes) sectionFor(note.course_id ?? ACROSS_CLASSES).saved.push(note);
 
-  const orderedCourses = Array.from(filesByCourse.entries())
-    .map(([courseId, courseFiles]) => {
+  const orderedCourses = Array.from(sections.entries())
+    .map(([courseId, section]) => {
       const course = courses.find((row) => row.id === courseId);
       return {
         courseId,
-        courseName: course?.name ?? "Unknown course",
+        courseName: courseId === ACROSS_CLASSES ? "Across classes" : (course?.name ?? "Unknown course"),
         term: course?.term ?? null,
-        files: courseFiles,
+        files: section.files,
+        saved: section.saved,
       };
     })
-    .sort((a, b) => a.courseName.localeCompare(b.courseName));
+    .sort((a, b) => {
+      if (a.courseId === ACROSS_CLASSES) return 1;
+      if (b.courseId === ACROSS_CLASSES) return -1;
+      return a.courseName.localeCompare(b.courseName);
+    });
 
   return (
-    <PageShell title="Notes" description="Your lecture notes, by course and week." icon={FileText} tint="sky">
+    <PageShell title="Notes" description={PAGE_DESCRIPTION} icon={FileText} tint="sky">
       <div className="space-y-6">
         {orderedCourses.map((course, courseIndex) => {
           const tint = TINT_CLASSES[COURSE_TINTS[courseIndex % COURSE_TINTS.length] ?? "peach"];
@@ -135,6 +167,40 @@ export default async function NotesPage() {
               </div>
 
               <div className="mt-4 space-y-4">
+                {course.saved.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="inline-flex rounded-full bg-mint/70 px-3 py-1 text-xs font-extrabold text-emerald-900">
+                      From chat
+                    </p>
+                    <div className="space-y-2">
+                      {course.saved.map((note) => (
+                        <div
+                          key={note.id}
+                          className="flex items-center gap-1 rounded-2xl border border-border/80 bg-card pr-2 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-warm"
+                        >
+                          <Link
+                            href={`/notes/saved/${encodeURIComponent(note.id)}`}
+                            className="group flex min-w-0 flex-1 items-center gap-3 py-3 pl-4"
+                          >
+                            <BookmarkCheck className="size-5 shrink-0 text-emerald-600" aria-hidden />
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="text-[0.95rem] font-bold break-words text-foreground">{note.title}</p>
+                              <p className="text-xs font-semibold text-muted-foreground">
+                                Saved {formatAddedAt(note.created_at)}
+                              </p>
+                            </div>
+                            <ChevronRight
+                              className="size-5 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+                              aria-hidden
+                            />
+                          </Link>
+                          <DeleteSavedNoteButton noteId={note.id} title={note.title} variant="icon" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 {orderedWeekGroups.map((group) => (
                   <div key={group.label ?? "no-week"} className="space-y-2">
                     <p className="inline-flex rounded-full bg-muted px-3 py-1 text-xs font-extrabold text-muted-foreground">

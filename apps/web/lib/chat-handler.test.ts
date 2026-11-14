@@ -71,6 +71,7 @@ describe.skipIf(SKIP_DB_TESTS)("handleChat with the local database", () => {
   let a: { id: string; client: SupabaseClient<Database> };
   let b: { id: string; client: SupabaseClient<Database> };
   let fileId = "";
+  let courseId = "";
 
   function client(url: string, key: string): SupabaseClient<Database> {
     return createClient<Database>(url, key, {
@@ -133,6 +134,7 @@ describe.skipIf(SKIP_DB_TESTS)("handleChat with the local database", () => {
       .select("id")
       .single();
     if (course.error) throw new Error(course.error.message);
+    courseId = course.data.id;
     const file = await service
       .from("files")
       .insert({ student_id: a.id, course_id: course.data.id, title: "Week 2: The printing press", page_count: 5 })
@@ -169,6 +171,26 @@ describe.skipIf(SKIP_DB_TESTS)("handleChat with the local database", () => {
     expect(terminalCount(events)).toBe(1);
     const done = events.at(-1);
     if (done?.type !== "done") throw new Error("last event is not done");
+
+    // A notes-based reply is saved to the Notes page under its class.
+    const saved = events.find((e) => e.type === "saved_note");
+    if (saved?.type !== "saved_note") throw new Error("no saved_note event");
+    expect(saved.courseName).toBe("History 105");
+    const { data: note } = await service
+      .from("saved_notes")
+      .select("student_id,course_id,session_id,title,body,sources")
+      .eq("id", saved.noteId)
+      .single();
+    expect(note).toMatchObject({
+      student_id: a.id,
+      course_id: courseId,
+      session_id: done.sessionId,
+      title: "what's in my History 105 notes about the printing press",
+      sources: [{ fileId, page: 3 }],
+    });
+    expect(note?.body).not.toMatch(/https?:\/\//);
+    const { data: seenByB } = await b.client.from("saved_notes").select("id").eq("id", saved.noteId);
+    expect(seenByB).toEqual([]);
 
     // The model is never taken from the body.
     expect(runSpy.mock.calls[0]![0].model).toBeUndefined();
@@ -227,6 +249,59 @@ describe.skipIf(SKIP_DB_TESTS)("handleChat with the local database", () => {
     // Even if the explicit filter were dropped, B's RLS client cannot see A's session or messages.
     const { data } = await b.client.from("chat_messages").select("id").eq("session_id", done.sessionId);
     expect(data).toEqual([]);
+  });
+
+  it("streams questions, keeps them in history, and saves no note", async () => {
+    const asking: RunAgentFn = async () => ({
+      text: "A quick question first:",
+      citations: [],
+      questions: [
+        { id: "class", prompt: "Which class?", options: ["History 105", "Biology 110"], multiple: false, allowText: false },
+      ],
+    });
+    const events = await readEvents(
+      await handleChat(chatRequest({ message: "make me a study guide" }), { db: a.client, userId: a.id, appUrl: APP, runAgent: asking }),
+    );
+    expect(events.map((e) => e.type)).toEqual(["text", "questions", "done"]);
+    const done = events.at(-1);
+    if (done?.type !== "done") throw new Error("no session");
+
+    const { data: rows } = await service
+      .from("chat_messages")
+      .select("role,text")
+      .eq("session_id", done.sessionId)
+      .order("created_at");
+    expect(rows?.[1]?.text).toBe("A quick question first:\n- Which class? (History 105, Biology 110)");
+    const { data: notes } = await service.from("saved_notes").select("id").eq("session_id", done.sessionId);
+    expect(notes).toEqual([]);
+  });
+
+  it("a stopped reply streams nothing and saves no reply or note", async () => {
+    const stopper = new AbortController();
+    const stopped: RunAgentFn = async (input) => {
+      stopper.abort();
+      return citingAgent()(input);
+    };
+    const res = await handleChat(chatRequest({ message: "printing press stop test" }), {
+      db: a.client,
+      userId: a.id,
+      appUrl: APP,
+      runAgent: stopped,
+      signal: stopper.signal,
+    });
+    expect(await res.text()).toBe("");
+
+    const { data: sessions } = await service
+      .from("chat_sessions")
+      .select("id")
+      .eq("student_id", a.id)
+      .eq("title", "printing press stop test");
+    const sessionId = sessions?.[0]?.id;
+    if (!sessionId) throw new Error("no session");
+    const { data: rows } = await service.from("chat_messages").select("role").eq("session_id", sessionId);
+    expect(rows).toEqual([{ role: "user" }]);
+    const { data: notes } = await service.from("saved_notes").select("id").eq("session_id", sessionId);
+    expect(notes).toEqual([]);
   });
 
   it("streams exactly one fixed error on timeout and nothing after it", async () => {

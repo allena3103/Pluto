@@ -424,6 +424,24 @@ export const ChatRequest = z.object({
   message: MessageText,
 });
 
+/** Limits for questions the agent asks when a request is missing a class, time range or other detail. */
+export const CLARIFY_MAX_QUESTIONS = 3;
+export const CLARIFY_MAX_OPTIONS = 8;
+
+/**
+ * One question the agent asks before it answers. `options` are tappable choices
+ * (`multiple` lets the student pick more than one). `allowText` adds a typed answer;
+ * a question with no options always takes a typed answer.
+ */
+export const ClarifyingQuestion = z.object({
+  id: z.string().trim().min(1).max(40),
+  prompt: z.string().trim().min(1).max(300),
+  options: z.array(z.string().trim().min(1).max(120)).max(CLARIFY_MAX_OPTIONS),
+  multiple: z.boolean(),
+  allowText: z.boolean(),
+});
+export type ClarifyingQuestion = z.infer<typeof ClarifyingQuestion>;
+
 /**
  * `/api/chat` does not return one JSON body. It streams newline-delimited JSON
  * (`CHAT_STREAM_CONTENT_TYPE`): one `ChatStreamEvent` per line. The stream ends
@@ -436,6 +454,18 @@ export const ChatStreamEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), delta: z.string() }),
   /** A notes page the reply cites. */
   z.object({ type: z.literal("citation"), fileId: Id, page: PageNumber, deepLink: DeepLink }),
+  /** The agent needs more detail before it answers; the student replies with a new message. */
+  z.object({
+    type: z.literal("questions"),
+    questions: z.array(ClarifyingQuestion).min(1).max(CLARIFY_MAX_QUESTIONS),
+  }),
+  /** A notes-based reply was saved to the Notes page under `courseName` (null: more than one class). */
+  z.object({
+    type: z.literal("saved_note"),
+    noteId: Id,
+    courseId: Id.nullable(),
+    courseName: z.string().nullable(),
+  }),
   /** The reply is complete. */
   z.object({ type: z.literal("done"), sessionId: Id }),
   /** The reply failed; `message` is safe to show to the student. */

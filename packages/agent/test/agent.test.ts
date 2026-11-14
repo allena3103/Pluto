@@ -34,16 +34,26 @@ afterEach(() => {
 
 describe("tool declarations", () => {
   it("matches the seven tool names and adds create_magic_link only with a creator", () => {
-    const plain = buildToolDeclarations(false);
+    const plain = buildToolDeclarations({ magicLink: false, clarify: false });
     expect(plain.map((tool) => tool.name)).toEqual([...TOOL_NAMES]);
     expect(plain.some((tool) => tool.name === "create_magic_link")).toBe(false);
 
-    const withLink = buildToolDeclarations(true);
+    const withLink = buildToolDeclarations({ magicLink: true, clarify: false });
     expect(withLink.map((tool) => tool.name)).toEqual([...TOOL_NAMES, "create_magic_link"]);
     const magic = withLink.find((tool) => tool.name === "create_magic_link");
     const properties = (magic?.parameters.properties ?? {}) as Record<string, unknown>;
     expect(Object.keys(properties).sort()).toEqual(["fileId", "page"]);
     expect(JSON.stringify(magic)).not.toMatch(/student/i);
+  });
+
+  it("adds ask_clarifying_questions only where questions can be shown", () => {
+    expect(buildToolDeclarations({ magicLink: true, clarify: false }).map((t) => t.name)).not.toContain(
+      "ask_clarifying_questions",
+    );
+    expect(buildToolDeclarations({ magicLink: false, clarify: true }).map((t) => t.name)).toEqual([
+      ...TOOL_NAMES,
+      "ask_clarifying_questions",
+    ]);
   });
 });
 
@@ -63,6 +73,51 @@ describe("mock agent", () => {
     expect(DeepLink.safeParse(result.citations[0]?.deepLink).success).toBe(true);
     expect(result.text).toContain("Treaty of Paris");
     expect(result.text).toContain("page 2");
+    expect(result.text).not.toMatch(/https?:\/\//);
+  });
+
+  describe("study guide requests on the web", () => {
+    const twoCourses = { courses: [{ name: "History 105" }, { name: "Biology 110" }] };
+    const recentNotes = {
+      files: [
+        {
+          fileId: FILE_ID,
+          title: "Lecture 4",
+          deepLink: `http://localhost:3401/notes/${FILE_ID}?page=1`,
+          pages: [{ page: 2, text: "The Treaty of Paris ended the war.", deepLink: DEEP_LINK }],
+        },
+      ],
+    };
+
+    it("asks which class when several exist and none is named", async () => {
+      const runTool = vi.fn(async () => twoCourses);
+      const result = await runAgent({ llm: "mock", channel: "web", message: "make me a study guide", runTool });
+      expect(runTool).toHaveBeenCalledTimes(1);
+      expect(result.citations).toEqual([]);
+      expect(result.questions?.[0]).toMatchObject({ id: "class", options: ["History 105", "Biology 110"], multiple: false });
+      expect(result.questions?.[1]).toMatchObject({ id: "weeks", allowText: true });
+    });
+
+    it("reads the named class's recent notes and cites them", async () => {
+      const runTool = vi.fn(async (name: string) => (name === "list_courses" ? twoCourses : recentNotes));
+      const result = await runAgent({
+        llm: "mock",
+        channel: "web",
+        message: "make me a study guide\n\nWhich class? History 105\nWhich notes should I use? This week",
+        runTool,
+      });
+      expect(runTool).toHaveBeenLastCalledWith("get_recent_notes", { course: "History 105", days: 7 });
+      expect(result.questions).toBeUndefined();
+      expect(result.text.startsWith("# History 105 study guide")).toBe(true);
+      expect(result.citations).toEqual([{ fileId: FILE_ID, page: 2, deepLink: DEEP_LINK }]);
+    });
+
+    it("does not ask on SMS", async () => {
+      const runTool = searchRunner();
+      const result = await runAgent({ llm: "mock", channel: "sms", message: "study guide for the treaty", runTool });
+      expect(result.questions).toBeUndefined();
+      expect(runTool).toHaveBeenCalledWith("search_notes", expect.anything());
+    });
   });
 
   it("sets a magic link for SMS without putting that URL in the text", async () => {
@@ -518,3 +573,85 @@ function functionResultPayload(input: unknown[]): { isError: boolean; value: unk
   }
   throw new Error("missing function result");
 }
+
+describe("gemini web replies", () => {
+  const askCall = {
+    type: "function_call",
+    name: "ask_clarifying_questions",
+    id: "call-ask",
+    arguments: {
+      intro: "Which class do you mean?",
+      questions: [
+        { id: "class", prompt: "Which class?", options: ["History 105", "Biology 110", "History 105"], multiple: true },
+        { id: "class", prompt: "Anything to focus on?" },
+      ],
+    },
+  };
+
+  it("stops and returns normalized questions when the model asks", async () => {
+    const { client, requests } = scriptedClient([askCall, searchCall]);
+    const runTool = vi.fn(async () => searchHit);
+    const result = await runAgent({ llm: "gemini", channel: "web", message: "make a study guide", runTool, client });
+
+    expect(requests).toHaveLength(1);
+    expect(runTool).not.toHaveBeenCalled();
+    expect(result.text).toBe("Which class do you mean?");
+    expect(result.citations).toEqual([]);
+    expect(result.questions).toEqual([
+      { id: "class", prompt: "Which class?", options: ["History 105", "Biology 110"], multiple: true, allowText: false },
+      { id: "class-2", prompt: "Anything to focus on?", options: [], multiple: false, allowText: true },
+    ]);
+  });
+
+  it("sends a bad ask back as a tool error and keeps going", async () => {
+    const bad = { ...askCall, arguments: { questions: [] } };
+    const { client, requests } = scriptedClient([bad]);
+    const result = await runAgent({ llm: "gemini", channel: "web", message: "study guide", runTool: async () => ({}), client });
+
+    expect(requests).toHaveLength(2);
+    expect(functionResultPayload(requests[1]!.input).isError).toBe(true);
+    expect(result.questions).toBeUndefined();
+    expect(result.text).toBe("Recovered.");
+  });
+
+  it("does not offer or honor the ask tool on SMS", async () => {
+    const { client, requests } = scriptedClient([askCall]);
+    const result = await runAgent({ llm: "gemini", channel: "sms", message: "study guide", runTool: async () => ({}), client });
+
+    const tools = (requests[0] as unknown as { tools: { name: string }[] }).tools.map((t) => t.name);
+    expect(tools).not.toContain("ask_clarifying_questions");
+    expect(result.questions).toBeUndefined();
+  });
+
+  it("strips links from web text but leaves SMS text alone", async () => {
+    const reply = `See [Lecture 4](${DEEP_LINK}) or ${DEEP_LINK} for more.`;
+    const linkClient = (): AgentModelClient => ({ interactions: { create: async () => ({ output_text: reply }) } });
+
+    const web = await runAgent({ llm: "gemini", channel: "web", message: "q", runTool: async () => ({}), client: linkClient() });
+    expect(web.text).toBe("See Lecture 4 or for more.");
+
+    const sms = await runAgent({ llm: "gemini", channel: "sms", message: "q", runTool: async () => ({}), client: linkClient() });
+    expect(sms.text).toBe(reply);
+  });
+
+  it("marks a reply partial when the loop ends on a preamble, not a final answer", async () => {
+    let calls = 0;
+    const client: AgentModelClient = {
+      interactions: {
+        create: async () => {
+          calls += 1;
+          if (calls === 1) return { steps: [searchCall], output_text: "Let me check your notes." };
+          throw new Error("model down");
+        },
+      },
+    };
+    const cut = await runAgent({ llm: "gemini", channel: "web", message: "q", runTool: async () => searchHit, client });
+    expect(cut.text).toBe("Let me check your notes.");
+    expect(cut.citations).toHaveLength(1);
+    expect(cut.partial).toBe(true);
+
+    const { client: finished } = scriptedClient([searchCall]);
+    const done = await runAgent({ llm: "gemini", channel: "web", message: "q", runTool: async () => searchHit, client: finished });
+    expect(done.partial).toBeUndefined();
+  });
+});

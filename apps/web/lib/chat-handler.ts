@@ -1,6 +1,12 @@
-import { runAgent as defaultRunAgent, type AgentCitation, type AgentHistoryItem } from "@pluto/agent";
+import {
+  clarificationText,
+  runAgent as defaultRunAgent,
+  type AgentCitation,
+  type AgentHistoryItem,
+} from "@pluto/agent";
 import { makeToolContext, type PlutoDb } from "@pluto/core/context";
 import { CHAT_STREAM_CONTENT_TYPE, ChatRequest, ChatStreamEvent } from "@pluto/core/contract";
+import { saveChatNote } from "./saved-notes";
 
 export type RunAgentFn = typeof defaultRunAgent;
 
@@ -14,7 +20,7 @@ export type ChatDeps = {
   runAgent?: RunAgentFn;
   /** Whole agent call budget. */
   timeoutMs?: number;
-  /** Aborts the agent when the client goes away. */
+  /** Aborts the agent when the client goes away or the student presses Stop. Nothing is saved then. */
   signal?: AbortSignal;
 };
 
@@ -156,7 +162,31 @@ export async function handleChat(request: Request, deps: ChatDeps): Promise<Resp
       return [errorEvent(err instanceof ChatTimeout ? CHAT_TIMEOUT_TEXT : CHAT_ERROR_TEXT)];
     }
 
+    // The student pressed Stop (or left). Keep their message, save no reply and no note.
+    if (deps.signal?.aborted) return [];
+
     const text = result.text.trim() || EMPTY_TEXT;
+
+    const questions = result.questions?.length
+      ? ChatStreamEvent.safeParse({ type: "questions", questions: result.questions })
+      : undefined;
+    if (questions?.success) {
+      const asked = questions.data.type === "questions" ? questions.data.questions : [];
+      const { error: questionError } = await db.from("chat_messages").insert({
+        student_id: studentId!,
+        session_id: sessionId,
+        role: "assistant",
+        // History keeps the questions and options so the next turn knows what was asked.
+        text: clarificationText({ intro: text, questions: asked }),
+        channel: "web",
+      });
+      if (questionError) {
+        console.error("chat: assistant message insert failed:", questionError.message);
+        return [errorEvent(CHAT_ERROR_TEXT)];
+      }
+      return [{ type: "text", delta: text }, questions.data, { type: "done", sessionId }];
+    }
+
     const citations = validCitations(result.citations);
     const first = citations[0];
 
@@ -174,7 +204,20 @@ export async function handleChat(request: Request, deps: ChatDeps): Promise<Resp
       return [errorEvent(CHAT_ERROR_TEXT)];
     }
 
-    return [{ type: "text", delta: text }, ...citations, { type: "done", sessionId }];
+    // A finished reply built from notes pages stays on the Notes page under its class.
+    const saved =
+      citations.length > 0 && !result.partial && text !== EMPTY_TEXT
+        ? await saveChatNote(db, {
+            studentId: studentId!,
+            sessionId,
+            request: message,
+            body: text,
+            sources: citations.map((c) => ({ fileId: c.fileId, page: c.page })),
+          })
+        : null;
+    const savedEvent: ChatStreamEvent[] = saved ? [{ type: "saved_note", ...saved }] : [];
+
+    return [{ type: "text", delta: text }, ...citations, ...savedEvent, { type: "done", sessionId }];
   }
 
   const stream = new ReadableStream<Uint8Array>({
@@ -185,6 +228,15 @@ export async function handleChat(request: Request, deps: ChatDeps): Promise<Resp
       } catch (err) {
         console.error("chat failed:", err instanceof Error ? err.message : "unknown error");
         events = [errorEvent(CHAT_ERROR_TEXT)];
+      }
+      if (deps.signal?.aborted) {
+        // The client is gone; writing to a cancelled stream throws.
+        try {
+          streamController.close();
+        } catch {
+          // Already cancelled by the client.
+        }
+        return;
       }
       try {
         streamController.enqueue(encodeEvents(events));
