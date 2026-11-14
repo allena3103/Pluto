@@ -2,22 +2,22 @@ import { describe, expect, test, vi } from "vitest";
 import { TOOL_NAMES } from "@pluto/core/contract";
 import { TOOL_HANDLERS } from "@pluto/core/tools/index";
 import { handleMcpRequest } from "../src/handler";
-import { ACCEPT, UNIT_TOKEN, mcpResult, postMcp, rpcBody, unitConfig } from "./request";
+import { ACCEPT, CHALLENGE, INVALID_CHALLENGE, UNIT_TOKEN, mcpResult, postMcp, rpcBody, unitConfig } from "./request";
 
 describe("mcp handler auth", () => {
   test("401 and WWW-Authenticate when the demo token is missing, wrong, unset, too short, or not Bearer", async () => {
-    const cases: Array<{ config: ReturnType<typeof unitConfig>; authorization?: string }> = [
-      { config: unitConfig() },
-      { config: unitConfig(), authorization: `Bearer ${"not-the-token".padEnd(32, "x")}` },
-      { config: unitConfig({ demoToken: undefined }), authorization: `Bearer ${UNIT_TOKEN}` },
-      { config: unitConfig({ demoToken: "too-short-token" }), authorization: "Bearer too-short-token" },
-      { config: unitConfig(), authorization: "Basic cGx1dG8=" },
+    const cases: Array<{ config: ReturnType<typeof unitConfig>; authorization?: string; challenge: string }> = [
+      { config: unitConfig(), challenge: CHALLENGE },
+      { config: unitConfig(), authorization: `Bearer ${"not-the-token".padEnd(32, "x")}`, challenge: INVALID_CHALLENGE },
+      { config: unitConfig({ demoToken: undefined }), authorization: `Bearer ${UNIT_TOKEN}`, challenge: INVALID_CHALLENGE },
+      { config: unitConfig({ demoToken: "too-short-token" }), authorization: "Bearer too-short-token", challenge: INVALID_CHALLENGE },
+      { config: unitConfig(), authorization: "Basic cGx1dG8=", challenge: CHALLENGE },
     ];
 
     for (const item of cases) {
       const response = await postMcp(item.config, rpcBody("tools/call", { name: "list_courses", arguments: {} }), item.authorization);
       expect(response.status).toBe(401);
-      expect(response.headers.get("www-authenticate")).toBe("Bearer");
+      expect(response.headers.get("www-authenticate")).toBe(item.challenge);
       await expect(response.json()).resolves.toEqual({ error: "unauthorized" });
     }
   });
@@ -121,7 +121,7 @@ describe("mcp demo url token", () => {
 
     const missing = await postMcp(flagged, listBody);
     expect(missing.status).toBe(401);
-    expect(missing.headers.get("www-authenticate")).toBe("Bearer");
+    expect(missing.headers.get("www-authenticate")).toBe(CHALLENGE);
 
     const unflagged = await mcpResult(await postMcp(unitConfig(), listBody, `Bearer ${UNIT_TOKEN}`));
     expect(unflagged.status).toBe(200);

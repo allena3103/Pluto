@@ -14,7 +14,7 @@ import {
   uniqueName,
   type TestUser,
 } from "./db-helpers";
-import { ACCEPT, mcpResult, postMcp, rpcBody } from "./request";
+import { ACCEPT, CHALLENGE, mcpResult, postMcp, rpcBody } from "./request";
 
 const APP_URL = "http://127.0.0.1:3301";
 const TOKEN = "pluto-mcp-db-test-token-32chars";
@@ -311,6 +311,6 @@ describe.skipIf(SKIP_DB_TESTS)("mcp handler against local supabase", () => {
       configFor(studentA!.id),
     );
     expect(response.status).toBe(401);
-    expect(response.headers.get("www-authenticate")).toBe("Bearer");
+    expect(response.headers.get("www-authenticate")).toBe(CHALLENGE);
   });
 });

@@ -4,6 +4,11 @@ export const ACCEPT = "application/json, text/event-stream";
 
 export const UNIT_TOKEN = "pluto-demo-token-unit-test-32ch";
 
+/** 401 challenge for the unit app URL. */
+export const CHALLENGE = 'Bearer resource_metadata="http://127.0.0.1:3301/.well-known/oauth-protected-resource"';
+export const INVALID_CHALLENGE =
+  'Bearer error="invalid_token", resource_metadata="http://127.0.0.1:3301/.well-known/oauth-protected-resource"';
+
 export function unitConfig(overrides: Partial<McpHandlerConfig> = {}): McpHandlerConfig {
   return {
     supabaseUrl: "http://127.0.0.1:9",
