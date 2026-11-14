@@ -8,6 +8,7 @@ Supersedes the slice-planner model in `PROTOCOL.md` where they conflict. Freeze 
 3. **Claude only.** No Cursor coders or reviewers. Everything bills Allen's one Claude 5-hour meter, so model choice is the main cost lever.
 4. Prod secrets generated into `C:/Pluto/.env.secrets` (`PROD_INTERNAL_API_SECRET`, `PROD_CANVAS_TOKEN_KEY`, `PROD_PLUTO_DEMO_MCP_TOKEN`, `PROD_DEMO_STUDENT_PASSWORD`, `PROD_OTHER_STUDENT_PASSWORD`; drop the `PROD_` prefix when seeding hosted; unprefixed names would override local test passwords via `env:local`).
 5. Hosted DB credentials (`SUPABASE_ACCESS_TOKEN` / `HOSTED_SUPABASE_DB_URL`) not provided yet: hosted push + seed stays blocked on Allen.
+6. **Grokbot replaced (12:45).** Grokbot is out of usage. A Claude agent `mergebot` (sonnet, herdr tab, brief `orchestrations/files/MERGEBOT.md`) reviews and merges PRs into `agent/pluto` with merge commits, when the director prompts it. Same gate: CI green, plus fresh-review `VERDICT: APPROVE` on `security-review` PRs.
 
 ## Cost rules
 - Coders: `--model sonnet` by default; `--model opus` only for security-sensitive tasks (marked below).
