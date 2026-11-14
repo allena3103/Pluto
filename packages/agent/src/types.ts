@@ -1,6 +1,9 @@
 import type { ToolContext } from "@pluto/core/context";
 
-export const DEFAULT_GEMINI_MODEL = "gemini-4-hydrogen";
+/** Web chat. gemini-3.8-flash timed out (>30s) and gemini-3.5-flash took ~11s per call on 2026-11-14, past the 20s budget for a tool loop; raise via GEMINI_MODEL once they are faster. */
+export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
+/** Tier 2: low-latency, high-volume replies (SMS). Override with GEMINI_FAST_MODEL. */
+export const DEFAULT_GEMINI_FAST_MODEL = "gemini-3.5-flash-lite";
 export const MAX_TOOL_ROUNDS = 4;
 export const MODEL_TIMEOUT_MS = 20_000;
 export const TOOL_TIMEOUT_MS = 10_000;
