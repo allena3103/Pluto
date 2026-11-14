@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AlertDeadlineChangeRequest, INTERNAL_SECRET_HEADER } from "@pluto/core/contract";
 import { createCanvasClient, type CanvasClient } from "@pluto/canvas/client";
 import { prepareLiveCanvasClient } from "@pluto/canvas/host";
+import { createFixtureFileFetch, syncCanvasFiles, type FilesSyncDeps } from "@pluto/canvas/files-sync";
 import { createDiskFixturesFetch, syncCanvas, type DueDateChange, type SyncResult } from "@pluto/canvas/sync";
 import { decryptCanvasToken } from "@pluto/canvas/token-crypto";
 import { CanvasAuthError, CanvasRateLimitError, CanvasTimeoutError } from "@pluto/canvas/types";
@@ -191,6 +192,7 @@ export async function POST(request: Request): Promise<Response> {
   const envToken = process.env.CANVAS_API_TOKEN ?? "";
   let token = "";
   let client: CanvasClient;
+  let download: FilesSyncDeps["download"];
 
   if (canvasMode() === "live") {
     // Credentials come as a pair: profile token + validated profile URL, or
@@ -208,6 +210,8 @@ export async function POST(request: Request): Promise<Response> {
     if (!live.ok) return json({ error: live.error }, live.status);
     token = live.token;
     client = live.client;
+    // The token goes only to this host; file URLs on other hosts are fetched without it.
+    download = { baseUrl: live.baseUrl, token: live.token };
   } else {
     client = createCanvasClient({
       baseUrl: FIXTURES_BASE_URL,
@@ -215,6 +219,7 @@ export async function POST(request: Request): Promise<Response> {
       mode: "fixtures",
       fetch: createDiskFixturesFetch(FIXTURES_BASE_URL),
     });
+    download = { baseUrl: FIXTURES_BASE_URL, fetch: createFixtureFileFetch() };
   }
 
   const secrets = [token, ciphertext ?? "", envToken, internalSecret];
@@ -226,7 +231,9 @@ export async function POST(request: Request): Promise<Response> {
       client,
       notifyDueDateChange: notifyDueDateChange({ appUrl, internalSecret, studentId }),
     });
-    return respond({ ok: true, result }, 200, secrets);
+    // Then move the PDFs: download, store, ingest. Same student, same client.
+    const files = await syncCanvasFiles({ admin, studentId, client, download });
+    return respond({ ok: true, result, files }, 200, secrets);
   } catch (error) {
     const mapped = canvasFailure(error);
     if (mapped) return mapped;
