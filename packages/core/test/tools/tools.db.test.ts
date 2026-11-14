@@ -29,6 +29,8 @@ describe.skipIf(SKIP_DB_TESTS)("tools integration", () => {
   let fileHistoryOldId = "";
   let fileMassiveId = "";
   let fileBId = "";
+  let filePartialId = "";
+  let fileOpenCountId = "";
   let heavyWeekStart = "";
 
   const contextsForA = () => [makeCtx(studentA!.client, studentA!.id), makeCtx(service, studentA!.id)];
@@ -98,6 +100,25 @@ describe.skipIf(SKIP_DB_TESTS)("tools integration", () => {
       Array.from({ length: 1105 }, (_, index) => `Massive page ${index + 1} ${"x".repeat(70)}`),
     );
     await insertPages(service, studentB.id, fileBId, ["marshall-plan-keyword for student B only"]);
+
+    filePartialId = (
+      await createFile(service, {
+        studentId: studentA.id,
+        courseId: courseABioId,
+        title: "Partial Notes",
+        pageCount: 5,
+      })
+    ).id;
+    fileOpenCountId = (
+      await createFile(service, {
+        studentId: studentA.id,
+        courseId: courseAHistoryAltId,
+        title: "Open Count Notes",
+        pageCount: null,
+      })
+    ).id;
+    await insertPages(service, studentA.id, filePartialId, ["partial one", "partial two"]);
+    await insertPages(service, studentA.id, fileOpenCountId, ["open page one", "open page two"]);
 
     const essays = must(
       await service
@@ -256,6 +277,35 @@ describe.skipIf(SKIP_DB_TESTS)("tools integration", () => {
       for (const file of output.files) {
         expect(file.pagesIncluded).toBe(file.pages.length);
       }
+      const afterCap = output.files.find((file) => file.fileId === fileMassiveId);
+      expect(afterCap?.pagesIncluded).toBe(0);
+      expect(afterCap?.pages).toEqual([]);
+    }
+  });
+
+  test("getRecentNotes truncated follows page_count, falling back to stored rows", async () => {
+    for (const ctx of contextsForA()) {
+      const partial = await getRecentNotes(ctx, { course: courseABioId, days: 14 }, { textCapChars: 60_000 });
+      expect(partial.files).toHaveLength(1);
+      expect(partial.files[0]?.fileId).toBe(filePartialId);
+      expect(partial.files[0]?.pageCount).toBe(5);
+      expect(partial.files[0]?.pagesIncluded).toBe(2);
+      expect(partial.truncated).toBe(true);
+
+      const open = await getRecentNotes(
+        ctx,
+        { course: courseAHistoryAltId, days: 14 },
+        { textCapChars: 60_000 },
+      );
+      expect(open.files[0]?.fileId).toBe(fileOpenCountId);
+      expect(open.files[0]?.pageCount).toBe(2);
+      expect(open.files[0]?.pagesIncluded).toBe(2);
+      expect(open.truncated).toBe(false);
+
+      const cut = await getRecentNotes(ctx, { course: courseAHistoryAltId, days: 14 }, { textCapChars: 5 });
+      expect(cut.files[0]?.pagesIncluded).toBe(0);
+      expect(cut.files[0]?.pages).toEqual([]);
+      expect(cut.truncated).toBe(true);
     }
   });
 
@@ -279,12 +329,51 @@ describe.skipIf(SKIP_DB_TESTS)("tools integration", () => {
       expect(output.deepLink.endsWith("?page=2")).toBe(true);
       const empty = await getNotePages(ctx, { fileId: fileHistoryRecentId, firstPage: 99, lastPage: 120 });
       expect(empty.pages).toEqual([]);
+      expect(empty.truncated).toBe(false);
+
+      const shortFile = await getNotePages(ctx, { fileId: filePartialId });
+      expect(shortFile.pageCount).toBe(5);
+      expect(shortFile.pages.map((page) => page.page)).toEqual([1, 2]);
+      expect(shortFile.truncated).toBe(true);
+
+      const requestedSlice = await getNotePages(ctx, { fileId: fileHistoryRecentId, firstPage: 2, lastPage: 10 });
+      expect(requestedSlice.pages.map((page) => page.page)).toEqual([2, 3]);
+      expect(requestedSlice.truncated).toBe(false);
     }
 
     for (const ctx of contextsForB()) {
       await expect(getNotePages(ctx, { fileId: fileHistoryRecentId })).rejects.toMatchObject({
         code: "file_not_found",
       });
+    }
+  });
+
+  test("getNotePages cuts an oversized first page and leaves later pages whole", async () => {
+    const fullFirst = "First page with marshall-plan-keyword.";
+    for (const ctx of contextsForA()) {
+      const onlyFirst = await getNotePages(
+        ctx,
+        { fileId: fileHistoryRecentId, firstPage: 1, lastPage: 1 },
+        { textCapChars: 10 },
+      );
+      expect(onlyFirst.pages).toHaveLength(1);
+      expect(onlyFirst.pages[0]?.text).toBe(fullFirst.slice(0, 10));
+      expect(onlyFirst.truncated).toBe(true);
+
+      const laterWhole = await getNotePages(ctx, { fileId: fileHistoryRecentId }, { textCapChars: 50 });
+      expect(laterWhole.pages.map((page) => page.page)).toEqual([1]);
+      expect(laterWhole.pages[0]?.text).toBe(fullFirst);
+      expect(laterWhole.truncated).toBe(true);
+
+      const midRange = await getNotePages(
+        ctx,
+        { fileId: fileMassiveId, firstPage: 2, lastPage: 3 },
+        { textCapChars: 10 },
+      );
+      expect(midRange.pages).toHaveLength(1);
+      expect(midRange.pages[0]?.page).toBe(2);
+      expect(midRange.pages[0]?.text).toHaveLength(10);
+      expect(midRange.truncated).toBe(true);
     }
   });
 

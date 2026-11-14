@@ -1,6 +1,6 @@
 import type { ToolContext } from "../context";
 import { TOOLS, type ToolArgs, type ToolOutput } from "../contract";
-import { toDbToolError, toIsoNow } from "./shared";
+import { fetchAllRows, toIsoNow } from "./shared";
 
 interface AssignmentRow {
   id: string;
@@ -106,32 +106,30 @@ export async function getCrunchWeeks(
   const nowIso = toIsoNow();
   const horizon = new Date(Date.now() + input.weeksAhead * 7 * DAY_MS).toISOString();
 
-  const { data: assignments, error: assignmentsError } = await ctx.db
-    .from("assignments")
-    .select(
-      "id, title, due_at, previous_due_at, graded, submitted, points_possible, course_id, grade_group_id, courses!inner(name), grade_groups(name, weight_percent)",
-    )
-    .eq("student_id", ctx.studentId)
-    .not("due_at", "is", null)
-    .gte("due_at", nowIso)
-    .lte("due_at", horizon)
-    .order("due_at", { ascending: true })
-    .limit(10000);
-  if (assignmentsError) throw toDbToolError(assignmentsError);
-
-  const rows = (assignments ?? []) as AssignmentRow[];
+  const rows = await fetchAllRows<AssignmentRow>(
+    ctx.db
+      .from("assignments")
+      .select(
+        "id, title, due_at, previous_due_at, graded, submitted, points_possible, course_id, grade_group_id, courses!inner(name), grade_groups(name, weight_percent)",
+      )
+      .eq("student_id", ctx.studentId)
+      .not("due_at", "is", null)
+      .gte("due_at", nowIso)
+      .lte("due_at", horizon)
+      .order("due_at", { ascending: true }),
+  );
   const groupIds = [...new Set(rows.map((row) => row.grade_group_id).filter((id): id is string => Boolean(id)))];
 
   const groupTotals = new Map<string, number>();
   if (groupIds.length > 0) {
-    const { data: totals, error: totalsError } = await ctx.db
-      .from("assignments")
-      .select("grade_group_id, points_possible")
-      .eq("student_id", ctx.studentId)
-      .in("grade_group_id", groupIds)
-      .limit(10000);
-    if (totalsError) throw toDbToolError(totalsError);
-    for (const row of (totals ?? []) as Array<{ grade_group_id: string | null; points_possible: number | null }>) {
+    const totals = await fetchAllRows<{ grade_group_id: string | null; points_possible: number | null }>(
+      ctx.db
+        .from("assignments")
+        .select("grade_group_id, points_possible")
+        .eq("student_id", ctx.studentId)
+        .in("grade_group_id", groupIds),
+    );
+    for (const row of totals) {
       if (!row.grade_group_id) continue;
       groupTotals.set(
         row.grade_group_id,
