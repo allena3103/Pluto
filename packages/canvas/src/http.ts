@@ -11,6 +11,8 @@ const DEFAULT_MAX_PAGES = 20;
 const MAX_ATTEMPTS = 4;
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_JITTER_MAX_MS = 250;
+const ORIGIN_MISMATCH_MESSAGE =
+  "Canvas pagination link origin does not match the configured base URL.";
 
 export type CanvasHttpClientOptions = {
   baseUrl: string;
@@ -73,6 +75,7 @@ export function createCanvasHttpClient(options: CanvasHttpClientOptions): Canvas
         const pageResult = await requestPage({
           url: nextUrl,
           path: requestOptions.path,
+          baseUrl,
           includeAuthHeader: options.includeAuthHeader,
           token: options.token,
           fetchImpl,
@@ -103,9 +106,63 @@ function toRequestUrl(baseUrl: string, path: string, searchParams?: URLSearchPar
   return url.toString();
 }
 
+function urlForTokenRequest(target: string, baseUrl: string, requestPath: string, token: string): string {
+  let resolved: URL;
+  let allowedOrigin: string;
+  try {
+    allowedOrigin = new URL(baseUrl).origin;
+    resolved = new URL(target, baseUrl);
+  } catch {
+    throw originMismatchError(requestPath, target, token);
+  }
+
+  const hasCredentials = resolved.username !== "" || resolved.password !== "";
+  if (hasCredentials || resolved.origin !== allowedOrigin) {
+    throw originMismatchError(requestPath, target, token, resolved);
+  }
+
+  return resolved.href;
+}
+
+function originMismatchError(
+  requestPath: string,
+  rejectedTarget: string,
+  token: string,
+  resolved?: URL,
+): CanvasHttpError {
+  return new CanvasHttpError({
+    status: 400,
+    requestPath: safeRequestPath(requestPath, rejectedTarget, token, resolved),
+    message: ORIGIN_MISMATCH_MESSAGE,
+  });
+}
+
+function safeRequestPath(
+  requestPath: string,
+  rejectedTarget: string,
+  token: string,
+  resolved?: URL,
+): string {
+  const secrets = [rejectedTarget, token];
+  if (resolved) {
+    secrets.push(resolved.href, resolved.username, resolved.password, resolved.host, resolved.hostname);
+    if (resolved.username !== "" || resolved.password !== "") {
+      secrets.push(`${resolved.username}:${resolved.password}`);
+    }
+  }
+
+  for (const secret of secrets) {
+    if (secret.length > 0 && requestPath.includes(secret)) {
+      return "";
+    }
+  }
+  return requestPath;
+}
+
 async function requestPage(options: {
   url: string;
   path: string;
+  baseUrl: string;
   includeAuthHeader: boolean;
   token: string;
   fetchImpl: typeof fetch;
@@ -113,6 +170,9 @@ async function requestPage(options: {
   sleep: (ms: number) => Promise<void>;
   allowForbiddenAsEmpty: boolean;
 }): Promise<RequestPageResult> {
+  const requestUrl = options.includeAuthHeader
+    ? urlForTokenRequest(options.url, options.baseUrl, options.path, options.token)
+    : options.url;
   let sawTimeout = false;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
@@ -122,7 +182,7 @@ async function requestPage(options: {
     }
 
     try {
-      const response = await options.fetchImpl(options.url, {
+      const response = await options.fetchImpl(requestUrl, {
         method: "GET",
         headers,
         signal: AbortSignal.timeout(options.timeoutMs),
