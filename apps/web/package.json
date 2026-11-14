@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@pluto/agent": "*",
     "@pluto/core": "*",
     "@pluto/mcp": "*",
     "@supabase/ssr": "^0.12.7",
