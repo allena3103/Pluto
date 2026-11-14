@@ -1,19 +1,20 @@
 import type { ToolOutput } from "@pluto/core/contract";
+import { EmptyState } from "@/components/page-shell";
 import { GradeCourseCard } from "./grade-course-card";
 
 export function GradesView({ data }: { data: ToolOutput<"get_grades"> }) {
   if (data.courses.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
-        <p className="text-sm text-slate-600">No courses with grades to show.</p>
-      </div>
+      <EmptyState title="No courses with grades to show.">
+        Once grades come in from Canvas, they&apos;ll show up here.
+      </EmptyState>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {data.courses.map((course) => (
-        <GradeCourseCard key={course.courseId} course={course} />
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {data.courses.map((course, index) => (
+        <GradeCourseCard key={course.courseId} course={course} index={index} />
       ))}
     </div>
   );

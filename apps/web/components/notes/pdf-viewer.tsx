@@ -237,15 +237,15 @@ export function PdfViewer({ signedUrl, initialPage, pageCountHint, pageTextByNum
   if (view.kind === "error") {
     return (
       <Card>
-        <CardContent className="space-y-3 py-4">
-          <div className="flex items-start gap-2 text-sm text-destructive">
+        <CardContent className="space-y-4 py-2 text-center">
+          <div className="flex items-start justify-center gap-2 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <p>{view.message}</p>
           </div>
           <Button
             type="button"
             variant="outline"
-            className="w-full"
+            className="w-full sm:w-auto"
             onClick={() => {
               setView({ kind: "loading" });
               setPage(initialPage);
@@ -265,81 +265,115 @@ export function PdfViewer({ signedUrl, initialPage, pageCountHint, pageTextByNum
   }
 
   return (
-    <div className="space-y-3">
-      <Card>
-        <CardContent className="space-y-3 py-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={!canGoPrev} onClick={() => moveToPage(page - 1)}>
-              <ChevronLeft className="h-4 w-4" aria-hidden />
-              Prev
-            </Button>
-            <Button type="button" variant="outline" size="sm" disabled={!canGoNext} onClick={() => moveToPage(page + 1)}>
-              Next
-              <ChevronRight className="h-4 w-4" aria-hidden />
-            </Button>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>Page</span>
-              <Input
-                value={jumpValue}
-                onChange={(event) => setJumpValue(event.target.value)}
-                onBlur={() => moveToPage(Number.parseInt(jumpValue, 10) || 1)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    moveToPage(Number.parseInt(jumpValue, 10) || 1);
-                  }
-                }}
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="h-8 w-16"
-                aria-label="Jump to page"
-              />
-              <span>of {pageCount ?? "..."}</span>
+    <div className="space-y-4">
+      <Card className="gap-3 py-3 sm:py-4">
+        <CardContent className="space-y-3 px-3 sm:px-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1 rounded-full bg-muted p-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={!canGoPrev}
+                onClick={() => moveToPage(page - 1)}
+                aria-label="Previous page"
+                className="hover:bg-card"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+              </Button>
+              <div className="flex items-center gap-1.5 px-1 text-sm font-bold text-muted-foreground">
+                <span>Page</span>
+                <Input
+                  value={jumpValue}
+                  onChange={(event) => setJumpValue(event.target.value)}
+                  onBlur={() => moveToPage(Number.parseInt(jumpValue, 10) || 1)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      moveToPage(Number.parseInt(jumpValue, 10) || 1);
+                    }
+                  }}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="h-8 w-12 rounded-full px-2 text-center font-bold shadow-none"
+                  aria-label="Jump to page"
+                />
+                <span className="whitespace-nowrap">of {pageCount ?? "..."}</span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={!canGoNext}
+                onClick={() => moveToPage(page + 1)}
+                aria-label="Next page"
+                className="hover:bg-card"
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </Button>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setFitWidth(true)}>
-              <Shrink className="h-4 w-4" aria-hidden />
-              Fit width
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setFitWidth(false);
-                setManualZoom((value) => clamp(value - 0.1, MIN_ZOOM, MAX_ZOOM));
-              }}
-            >
-              <ZoomOut className="h-4 w-4" aria-hidden />
-              Zoom out
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setFitWidth(false);
-                setManualZoom((value) => clamp(value + 0.1, MIN_ZOOM, MAX_ZOOM));
-              }}
-            >
-              <ZoomIn className="h-4 w-4" aria-hidden />
-              Zoom in
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setShowPageText((value) => !value)}>
-              <ScanText className="h-4 w-4" aria-hidden />
-              {showPageText ? "Hide page text" : "Show page text"}
-            </Button>
+            <div className="flex items-center gap-1 rounded-full bg-muted p-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setFitWidth(true)}
+                aria-label="Fit width"
+                title="Fit width"
+                className={fitWidth ? "bg-card text-primary shadow-warm-sm" : "hover:bg-card"}
+              >
+                <Shrink className="h-4 w-4" aria-hidden />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Zoom out"
+                title="Zoom out"
+                className="hover:bg-card"
+                onClick={() => {
+                  setFitWidth(false);
+                  setManualZoom((value) => clamp(value - 0.1, MIN_ZOOM, MAX_ZOOM));
+                }}
+              >
+                <ZoomOut className="h-4 w-4" aria-hidden />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Zoom in"
+                title="Zoom in"
+                className="hover:bg-card"
+                onClick={() => {
+                  setFitWidth(false);
+                  setManualZoom((value) => clamp(value + 0.1, MIN_ZOOM, MAX_ZOOM));
+                }}
+              >
+                <ZoomIn className="h-4 w-4" aria-hidden />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-pressed={showPageText}
+                onClick={() => setShowPageText((value) => !value)}
+                className={showPageText ? "bg-card text-primary shadow-warm-sm" : "hover:bg-card"}
+              >
+                <ScanText className="h-4 w-4" aria-hidden />
+                {showPageText ? "Hide text" : "Page text"}
+              </Button>
+            </div>
           </div>
 
           <div
             ref={containerRef}
-            className="overflow-x-auto rounded-lg border bg-muted/20 p-2"
+            className="overflow-x-auto rounded-2xl bg-muted/60 p-2"
           >
-            <canvas ref={canvasRef} className="mx-auto block max-w-none rounded-md bg-white shadow" />
+            <canvas ref={canvasRef} className="mx-auto block max-w-none rounded-xl bg-white shadow-warm" />
             {view.kind === "loading" ? (
-              <p className="p-3 text-center text-sm text-muted-foreground">Loading PDF…</p>
+              <p className="p-6 text-center text-sm font-bold text-muted-foreground">Loading PDF…</p>
             ) : null}
           </div>
         </CardContent>
@@ -347,10 +381,10 @@ export function PdfViewer({ signedUrl, initialPage, pageCountHint, pageTextByNum
 
       {showPageText ? (
         <Card>
-          <CardContent className="py-4">
-            <h3 className="mb-2 text-sm font-medium text-foreground">Page text</h3>
+          <CardContent className="py-1">
+            <h3 className="mb-2 text-sm font-extrabold text-foreground">Page text</h3>
             {currentPageText ? (
-              <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{currentPageText}</p>
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">{currentPageText}</p>
             ) : (
               <p className="text-sm text-muted-foreground">No extracted text for this page.</p>
             )}

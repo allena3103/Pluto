@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { ChevronRight, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState, PageShell, TINT_CLASSES, type PageTint } from "@/components/page-shell";
+
+const COURSE_TINTS: readonly PageTint[] = ["peach", "sky", "mint", "butter", "lilac"];
 
 type NoteFileRow = {
   id: string;
@@ -65,15 +68,9 @@ export default async function NotesPage() {
 
   if (files.length === 0) {
     return (
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">Notes</h2>
-        <Card>
-          <CardHeader>
-            <CardTitle>{EMPTY_STATE_TEXT}</CardTitle>
-            <CardDescription>Upload or ingest lecture PDFs to see them here.</CardDescription>
-          </CardHeader>
-        </Card>
-      </section>
+      <PageShell title="Notes" description="Your lecture notes, by course and week." icon={FileText} tint="sky">
+        <EmptyState title={EMPTY_STATE_TEXT}>Upload or ingest lecture PDFs to see them here.</EmptyState>
+      </PageShell>
     );
   }
 
@@ -100,10 +97,10 @@ export default async function NotesPage() {
     .sort((a, b) => a.courseName.localeCompare(b.courseName));
 
   return (
-    <section className="space-y-6">
-      <h2 className="text-lg font-semibold text-foreground">Notes</h2>
-      <div className="space-y-5">
-        {orderedCourses.map((course) => {
+    <PageShell title="Notes" description="Your lecture notes, by course and week." icon={FileText} tint="sky">
+      <div className="space-y-6">
+        {orderedCourses.map((course, courseIndex) => {
+          const tint = TINT_CLASSES[COURSE_TINTS[courseIndex % COURSE_TINTS.length] ?? "peach"];
           const weekGroups = new Map<string, { label: string | null; files: NoteFileRow[] }>();
           for (const file of course.files) {
             const key = file.week_label ?? "__none__";
@@ -123,49 +120,63 @@ export default async function NotesPage() {
           });
 
           return (
-            <div key={course.courseId} className="space-y-3">
-              <div>
-                <h3 className="text-base font-medium text-foreground">{course.courseName}</h3>
-                {course.term ? <p className="text-xs text-muted-foreground">{course.term}</p> : null}
+            <section
+              key={course.courseId}
+              className="rounded-3xl border border-border/80 bg-card/80 p-4 shadow-warm sm:p-5"
+            >
+              <div className="flex items-center gap-3">
+                <span className={`flex size-10 shrink-0 items-center justify-center rounded-2xl ${tint}`}>
+                  <FileText className="size-5" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-lg leading-tight font-extrabold break-words text-foreground">{course.courseName}</h2>
+                  {course.term ? <p className="text-xs font-semibold text-muted-foreground">{course.term}</p> : null}
+                </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="mt-4 space-y-4">
                 {orderedWeekGroups.map((group) => (
                   <div key={group.label ?? "no-week"} className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">{group.label ?? "No week label"}</p>
+                    <p className="inline-flex rounded-full bg-muted px-3 py-1 text-xs font-extrabold text-muted-foreground">
+                      {group.label ?? "No week label"}
+                    </p>
 
                     <div className="space-y-2">
                       {group.files.map((file) => (
                         <Link
                           key={file.id}
                           href={`/notes/${encodeURIComponent(file.id)}?page=1`}
-                          className="block rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:border-primary/40"
+                          className="group flex items-center gap-3 rounded-2xl border border-border/80 bg-card px-4 py-3 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-warm"
                         >
-                          <CardContent className="space-y-2 px-4 py-3">
-                            <p className="text-sm font-medium text-foreground">{file.title}</p>
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            <p className="text-[0.95rem] font-bold break-words text-foreground">{file.title}</p>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold text-muted-foreground">
                               <span>{formatAddedAt(file.added_at)}</span>
-                              {file.page_count ? <span>{file.page_count} pages</span> : null}
+                              {file.page_count ? <span>· {file.page_count} pages</span> : null}
                               {file.ingest_status !== "ready" ? (
                                 <Badge variant={file.ingest_status === "failed" ? "destructive" : "secondary"}>
                                   {INGEST_LABEL[file.ingest_status]}
                                 </Badge>
                               ) : null}
                               {file.ingest_status === "failed" && file.ingest_error ? (
-                                <span className="w-full text-destructive">{file.ingest_error}</span>
+                                <span className="w-full text-red-600">{file.ingest_error}</span>
                               ) : null}
                             </div>
-                          </CardContent>
+                          </div>
+                          <ChevronRight
+                            className="size-5 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+                            aria-hidden
+                          />
                         </Link>
                       ))}
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           );
         })}
       </div>
-    </section>
+    </PageShell>
   );
 }

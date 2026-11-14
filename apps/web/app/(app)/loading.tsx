@@ -1,12 +1,10 @@
-import { Skeleton } from "@/components/ui/skeleton";
+import { PlutoMascot } from "@/components/mascot/pluto-mascot";
 
 export default function AppLoading() {
   return (
-    <div className="space-y-4">
-      <Skeleton className="h-6 w-2/3" />
-      <Skeleton className="h-24 w-full" />
-      <Skeleton className="h-24 w-full" />
-      <Skeleton className="h-24 w-full" />
+    <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-3 px-4" role="status">
+      <PlutoMascot mood="thinking" size={96} />
+      <p className="text-sm font-bold text-muted-foreground">Warming up…</p>
     </div>
   );
 }

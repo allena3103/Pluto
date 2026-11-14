@@ -1,8 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { AppNav } from "@/components/app-nav";
+import { AppSidebar, MobileTopBar } from "@/components/app-nav";
 import { PwaRegister } from "@/components/pwa-register";
-import { SignOutButton } from "@/components/sign-out-button";
 import { PLUTO_PATH_HEADER, loginRedirectForPath } from "@/lib/safe-next";
 import { createClient } from "@/lib/supabase/server";
 
@@ -28,13 +27,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-background sm:max-w-2xl">
-      <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h1 className="text-base font-semibold text-foreground">Pluto</h1>
-        <SignOutButton />
-      </header>
-      <main className="flex-1 overflow-y-auto p-4">{children}</main>
-      <AppNav />
+    <div className="flex h-dvh w-full overflow-hidden">
+      <AppSidebar />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <MobileTopBar />
+        <main className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</main>
+      </div>
       <PwaRegister />
     </div>
   );

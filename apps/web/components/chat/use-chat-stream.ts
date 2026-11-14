@@ -309,6 +309,17 @@ export function useChatStream() {
     void runStream(text, assistantId);
   }, [isStreaming, pendingRetryMessage, runStream]);
 
+  /** Start a fresh conversation: stop any reply in flight and clear everything. */
+  const reset = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setMessages([]);
+    setSessionId(undefined);
+    setComposerText("");
+    setPendingRetryMessage(null);
+    setIsStreaming(false);
+  }, []);
+
   return {
     messages,
     composerText,
@@ -317,6 +328,7 @@ export function useChatStream() {
     sendMessage,
     retryLast,
     canRetry: Boolean(pendingRetryMessage) && !isStreaming,
+    reset,
     sessionId,
   };
 }

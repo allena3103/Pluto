@@ -1,6 +1,8 @@
+import { CalendarClock } from "lucide-react";
 import { getDeadlines } from "@pluto/core/tools/get-deadlines";
 import { DeadlinesView } from "@/components/deadlines/deadlines-view";
 import { createSessionToolContext } from "@/components/grades/session-tool-context";
+import { PageShell } from "@/components/page-shell";
 
 export default async function DeadlinesPage() {
   const { user, ctx } = await createSessionToolContext();
@@ -11,12 +13,8 @@ export default async function DeadlinesPage() {
   const data = await getDeadlines(ctx, { daysAhead: 30 });
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Deadlines</h1>
-        <p className="text-sm text-slate-600">Next 30 days, soonest first</p>
-      </div>
+    <PageShell title="Deadlines" description="Next 30 days, soonest first" icon={CalendarClock} tint="butter">
       <DeadlinesView data={data} />
-    </div>
+    </PageShell>
   );
 }

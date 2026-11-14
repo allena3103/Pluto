@@ -14,7 +14,7 @@ const INITIAL_STATE: SignInState = { error: null };
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" className="w-full" disabled={pending}>
+    <Button type="submit" variant="sunrise" size="lg" className="w-full" disabled={pending}>
       {pending ? "Signing in\u2026" : "Sign in"}
     </Button>
   );

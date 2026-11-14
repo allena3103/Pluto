@@ -2,6 +2,9 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 type CanvasSettingsFormProps = {
   initialConnected: boolean;
@@ -97,14 +100,24 @@ export function CanvasSettingsForm({ initialConnected, initialBaseUrl }: CanvasS
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
-      <p className="text-sm text-slate-700">{statusText}</p>
+    <div className="space-y-5 rounded-3xl border border-border/80 bg-card p-5 shadow-warm sm:p-6">
+      <p
+        className={cn(
+          "inline-flex max-w-full items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-extrabold break-all",
+          connected ? "bg-mint text-emerald-800" : "bg-muted text-muted-foreground",
+        )}
+      >
+        <span
+          className={cn("size-2 shrink-0 rounded-full", connected ? "bg-emerald-500" : "bg-muted-foreground/50")}
+          aria-hidden
+        />
+        {statusText}
+      </p>
 
       <form className="space-y-4" onSubmit={handleSave}>
-        <label className="block space-y-1">
-          <span className="text-sm font-medium text-slate-900">Canvas base URL</span>
-          <input
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-blue-500 focus:ring-2"
+        <label className="block space-y-1.5">
+          <span className="text-sm font-bold text-foreground">Canvas base URL</span>
+          <Input
             name="baseUrl"
             type="url"
             inputMode="url"
@@ -115,36 +128,22 @@ export function CanvasSettingsForm({ initialConnected, initialBaseUrl }: CanvasS
           />
         </label>
 
-        <label className="block space-y-1">
-          <span className="text-sm font-medium text-slate-900">Canvas personal access token</span>
-          <input
-            ref={tokenInputRef}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-blue-500 focus:ring-2"
-            name="token"
-            type="password"
-            autoComplete="off"
-            required
-          />
+        <label className="block space-y-1.5">
+          <span className="text-sm font-bold text-foreground">Canvas personal access token</span>
+          <Input ref={tokenInputRef} name="token" type="password" autoComplete="off" required />
         </label>
 
-        {error ? <p className="text-sm text-red-700">{error}</p> : null}
+        {error ? (
+          <p className="rounded-2xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700">{error}</p>
+        ) : null}
 
         <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-            type="submit"
-            disabled={isPending}
-          >
+          <Button type="submit" variant="sunrise" disabled={isPending}>
             {isPending ? "Saving..." : "Save Canvas connection"}
-          </button>
-          <button
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
-            type="button"
-            onClick={handleDisconnect}
-            disabled={isPending}
-          >
+          </Button>
+          <Button type="button" variant="outline" onClick={handleDisconnect} disabled={isPending}>
             {isPending ? "Working..." : "Disconnect"}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

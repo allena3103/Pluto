@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowUp, BellRing, KeyRound } from "lucide-react";
 import { sendSimMessage } from "@/app/(app)/sms-sim/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,51 +112,57 @@ export function SmsSim(props: {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+      <div className="rounded-3xl border border-border/80 bg-card p-4 text-sm shadow-warm sm:p-5">
         {props.linkedPhone ? (
-          <p>
-            Your linked phone: <span className="font-medium">{props.linkedPhone}</span>
+          <p className="font-semibold text-muted-foreground">
+            Your linked phone: <span className="font-extrabold text-foreground">{props.linkedPhone}</span>
           </p>
         ) : (
-          <p>No phone linked yet. Get a code, then text it from a 555 test number.</p>
+          <p className="font-semibold text-muted-foreground">
+            No phone linked yet. Get a code, then text it from a 555 test number.
+          </p>
         )}
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={getLinkCode} disabled={busy !== null}>
+            <KeyRound className="size-4" aria-hidden />
             {busy === "code" ? "Getting code…" : "Get link code"}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={crunchWeek} disabled={busy !== null}>
+            <BellRing className="size-4" aria-hidden />
             {busy === "crunch" ? "Sending…" : "Crunch week alert"}
           </Button>
         </div>
       </div>
 
-      <ol className="flex min-w-0 flex-col gap-2" aria-label="Messages">
-        {props.messages.length === 0 && (
-          <li className="text-center text-sm text-muted-foreground">No messages yet.</li>
-        )}
-        {props.messages.map((m) => (
-          <li
-            key={m.id}
-            className={cn(
-              "max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm",
-              m.direction === "inbound"
-                ? "self-end bg-primary text-primary-foreground"
-                : "self-start bg-muted text-foreground",
-            )}
-          >
-            <Linkified text={m.body} />
-          </li>
-        ))}
-      </ol>
+      <div className="rounded-3xl border border-border/80 bg-card/70 p-3 shadow-warm sm:p-4">
+        <ol className="flex min-w-0 flex-col gap-2" aria-label="Messages">
+          {props.messages.length === 0 && (
+            <li className="py-6 text-center text-sm font-semibold text-muted-foreground">No messages yet.</li>
+          )}
+          {props.messages.map((m) => (
+            <li
+              key={m.id}
+              className={cn(
+                "max-w-[85%] rounded-3xl px-4 py-2.5 text-sm leading-relaxed font-semibold break-words whitespace-pre-wrap",
+                m.direction === "inbound"
+                  ? "self-end rounded-br-lg bg-sunrise text-white shadow-warm-sm"
+                  : "self-start rounded-bl-lg bg-muted text-foreground",
+              )}
+            >
+              <Linkified text={m.body} />
+            </li>
+          ))}
+        </ol>
+      </div>
 
       {notes.length > 0 && (
-        <ul className="flex flex-col gap-1" aria-live="polite">
+        <ul className="flex flex-col gap-1.5" aria-live="polite">
           {notes.map((n) => (
             <li
               key={n.id}
               className={cn(
-                "break-words rounded-md px-3 py-2 text-xs",
-                n.tone === "error" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground",
+                "rounded-2xl px-4 py-2 text-xs font-semibold break-words",
+                n.tone === "error" ? "bg-red-50 text-red-700" : "bg-butter text-amber-900",
               )}
             >
               {n.text}
@@ -164,8 +171,8 @@ export function SmsSim(props: {
         </ul>
       )}
 
-      <form onSubmit={send} className="flex flex-col gap-2">
-        <div className="flex flex-col gap-1">
+      <form onSubmit={send} className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="sim-from">From number</Label>
           <Input
             id="sim-from"
@@ -175,16 +182,17 @@ export function SmsSim(props: {
             onChange={(e) => setFromNumber(e.target.value)}
           />
         </div>
-        <div className="flex gap-2">
-          <Input
+        <div className="flex items-center gap-2 rounded-full border border-input bg-card p-1.5 pl-4 shadow-warm focus-within:border-ring focus-within:ring-4 focus-within:ring-ring/15">
+          <input
             aria-label="Message"
             placeholder="Ask about your notes, grades or deadlines"
             value={content}
             maxLength={1000}
             onChange={(e) => setContent(e.target.value)}
+            className="h-9 min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground/80"
           />
-          <Button type="submit" disabled={pending || !content.trim()}>
-            {pending ? "…" : "Send"}
+          <Button type="submit" variant="sunrise" size="icon-sm" disabled={pending || !content.trim()} aria-label="Send">
+            {pending ? "…" : <ArrowUp className="size-4" strokeWidth={2.75} aria-hidden />}
           </Button>
         </div>
       </form>
