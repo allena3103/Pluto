@@ -12,6 +12,15 @@ Contract: `docs/plan.md` (human-readable) and `packages/core/src/contract.ts` (z
 
 This project explicitly allows orchestrators to spawn their own agents; that overrides any global rule saying otherwise.
 
+## Allen's global rules (every agent, Claude and Cursor)
+Cursor does not load Allen's personal `~/.claude/CLAUDE.md`, so the parts that apply here are copied in:
+- Replies: concise, lead with the answer, no filler or praise, plain words in full sentences, short lists only when they help.
+- Never push to `main`, merge to `main`, deploy, or write to production unless Allen asks. Stop and report when you hit something that needs his decision.
+- Approval prompts that grant access (MCP servers, new permissions) are Allen's. Pick the option that grants nothing, or report it. Exception: Claude's "trust this folder" prompt for `C:/Pluto-*` worktrees may be accepted.
+- Don't trust a worker's report: read its diff and rerun lint, typecheck and build yourself. Read every migration in full before it's applied and check new objects can't leak data.
+- Keep state in files (plans, reports, git), not only in your context.
+- Close only tabs you created. Remove only worktrees whose branches are merged and that have no uncommitted or untracked files.
+
 ## Rules
 - Stay inside the files your task owns (see your task file). Need a change elsewhere: ask your orchestrator; orchestrators ask the director.
 - Contract change needed: stop and tell your orchestrator; it goes to the director, who edits `docs/plan.md` first, then code follows.
