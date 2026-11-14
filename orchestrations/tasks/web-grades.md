@@ -9,7 +9,12 @@ Everything you need already exists in `packages/core`: your job is a thin authen
 - `apps/web/AGENTS.md`: **this is Next 16, not the Next you know.** Read the relevant guides in `node_modules/next/dist/docs/` (resolve from `apps/web`) first. `params`/`searchParams` are Promises: `await` them. Route handlers live in `app/api/.../route.ts`.
     10|- `packages/core/src/contract.ts`: `GradesRequest`, `GradesResponse`, `GetGradesOutput`, `CourseGrades`, `GradeGroup`, `GetDeadlinesInput`, `GetDeadlinesOutput`, `Deadline`, `DeadlineStatus`, and the `ENDPOINTS.grades` entry (`GET /api/grades`, `auth: "session"`, request in the query string). Read the weighted-grade formula comment above `CourseGrades`.
 - `packages/core/src/tools/index.ts` (`getGrades`, `getDeadlines`, `ToolError`), `packages/core/src/context.ts` (`makeToolContext`). **Never edit `packages/core/**` or `docs/plan.md`.**
-- Shell landed by `web-shell`: `apps/web/components/ui/**`, nav, theme tokens. Reuse them; do not restyle them.
+- Shell landed by `web-shell`: `apps/web/components/ui/**`, nav, theme tokens.
+
+**You are running in parallel with `web-shell`, which owns `apps/web/components/ui/**`, the nav, the theme tokens, `apps/web/app/globals.css` and `apps/web/app/(app)/layout.tsx`.** So:
+- **Never create or edit a file under `apps/web/components/ui/**`**, even if a shadcn primitive you want is missing. Write plain Tailwind markup inside your own `components/grades/**` and `components/deadlines/**` instead (slate palette, rounded-xl cards, `text-sm` body, as in the existing `(app)` placeholder).
+- Do not run `npx shadcn@latest add`.
+- If `web-shell` has merged into `agent/web` before you finish, merge `agent/web` into your branch and swap your cards and badges over to the primitives where it is a one-line change. Otherwise leave it; the orchestrator does the visual pass.
 
 ## Setup
 ```
