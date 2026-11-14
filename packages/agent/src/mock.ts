@@ -51,7 +51,7 @@ export function mockSearchQuery(message: string): string {
   return words.length > 0 ? words.join(" or ").slice(0, 500) : message.trim().slice(0, 500);
 }
 
-type SearchHit = { title: string; page: number; deepLink?: string };
+type SearchHit = { title: string; page: number };
 
 function firstSearchHit(result: unknown): SearchHit | undefined {
   const candidates: unknown[] = [];
@@ -65,8 +65,7 @@ function firstSearchHit(result: unknown): SearchHit | undefined {
     const record = item as Record<string, unknown>;
     if (typeof record.title !== "string" || !record.title.trim()) continue;
     if (typeof record.page !== "number" || !Number.isInteger(record.page) || record.page < 1) continue;
-    const deepLink = typeof record.deepLink === "string" ? record.deepLink : undefined;
-    return { title: record.title.trim(), page: record.page, deepLink };
+    return { title: record.title.trim(), page: record.page };
   }
   return undefined;
 }
@@ -81,7 +80,6 @@ function searchText(hit: SearchHit, channel: "web" | "sms"): string {
     title = room > 0 ? title.slice(0, room) : "";
     sentence = `${prefix}${title}${suffix}`.slice(0, 299);
   }
-  if (channel === "web" && hit.deepLink) return `${sentence} ${hit.deepLink}`;
   return sentence;
 }
 
@@ -154,8 +152,80 @@ async function maybeMagicLink(
   }
 }
 
+type MockCourse = { name: string };
+
+function courseNames(result: unknown): string[] {
+  if (!result || typeof result !== "object" || !Array.isArray((result as { courses?: unknown }).courses)) return [];
+  return ((result as { courses: unknown[] }).courses as MockCourse[])
+    .map((course) => (course && typeof course.name === "string" ? course.name.trim() : ""))
+    .filter(Boolean);
+}
+
+const WEEK_OPTIONS = ["This week", "Last 2 weeks", "Whole term"] as const;
+
+function daysFor(message: string): number {
+  const text = message.toLowerCase();
+  if (text.includes("whole term")) return 120;
+  if (text.includes("this week")) return 7;
+  return 14;
+}
+
+type RecentPage = { page: number; text: string };
+type RecentFile = { title: string; pages: RecentPage[] };
+
+function studyGuideText(course: string, result: unknown): string {
+  const files = (result && typeof result === "object" ? (result as { files?: unknown }).files : undefined) as
+    | RecentFile[]
+    | undefined;
+  if (!Array.isArray(files) || files.length === 0) return `I couldn't find recent notes for ${course}.`;
+  const sections = files.map((file) => {
+    const bullets = (Array.isArray(file.pages) ? file.pages : []).slice(0, 4).map((page) => {
+      const line = String(page.text ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+      return `- p.${page.page}: ${line || "(no text)"}`;
+    });
+    return [`## ${file.title}`, ...bullets].join("\n");
+  });
+  return [`# ${course} study guide`, ...sections].join("\n\n");
+}
+
+/**
+ * Web "study guide" requests: ask for the class when there are several and none is named,
+ * otherwise read that class's recent notes. Keeps the clarifying-question path testable without Gemini.
+ */
+async function runMockStudyGuide(input: RunAgentInput, runTool: AgentToolRunner): Promise<AgentResult> {
+  const courses = courseNames(await withDeadline(runTool("list_courses", {}), TOOL_TIMEOUT_MS, input.signal));
+  const text = input.message.toLowerCase();
+  const named = courses.find((name) => text.includes(name.toLowerCase()));
+  const course = named ?? (courses.length === 1 ? courses[0] : undefined);
+  if (!course) {
+    if (courses.length === 0) return { text: "I couldn't find any classes yet.", citations: [] };
+    return {
+      text: "Happy to make that study guide. A couple of quick questions first:",
+      citations: [],
+      questions: [
+        { id: "class", prompt: "Which class?", options: courses.slice(0, 8), multiple: false, allowText: false },
+        { id: "weeks", prompt: "Which notes should I use?", options: [...WEEK_OPTIONS], multiple: false, allowText: true },
+      ],
+    };
+  }
+  const result = await withDeadline(
+    runTool("get_recent_notes", { course, days: daysFor(input.message) }),
+    TOOL_TIMEOUT_MS,
+    input.signal,
+  );
+  return { text: studyGuideText(course, result), citations: collectCitations(result) };
+}
+
 export async function runMock(input: RunAgentInput, runTool: AgentToolRunner): Promise<AgentResult> {
   if (input.signal?.aborted) return { text: EMPTY_REPLY_TEXT, citations: [] };
+
+  if (input.channel === "web" && /study guide/i.test(input.message)) {
+    try {
+      return await runMockStudyGuide(input, runTool);
+    } catch {
+      return { text: TOOL_FAILURE_TEXT, citations: [] };
+    }
+  }
 
   const call = mockToolCall(input.message);
   let result: unknown;

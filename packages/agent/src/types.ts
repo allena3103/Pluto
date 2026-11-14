@@ -1,4 +1,5 @@
 import type { ToolContext } from "@pluto/core/context";
+import type { ClarifyingQuestion } from "@pluto/core/contract";
 
 /** Web chat. gemini-3.8-flash timed out (>30s) and gemini-3.5-flash took ~11s per call on 2026-11-14, past the 20s budget for a tool loop; raise via GEMINI_MODEL once they are faster. */
 export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
@@ -21,7 +22,16 @@ export type AgentToolRunner = (name: string, args: unknown) => Promise<unknown>;
  */
 export type CreateMagicLink = (input: { fileId: string; page: number }) => Promise<{ url: string }>;
 
-export type AgentResult = { text: string; citations: AgentCitation[]; magicLinkUrl?: string };
+/** Web only. The agent stops and asks; the host shows the questions and the student answers in a new message. */
+export const ASK_TOOL_NAME = "ask_clarifying_questions";
+
+/** `questions` is set when the agent needs more detail; `text` is then a short lead-in to them. */
+export type AgentResult = {
+  text: string;
+  citations: AgentCitation[];
+  magicLinkUrl?: string;
+  questions?: ClarifyingQuestion[];
+};
 
 /** One Interactions API turn. Tests pass a fake; production wraps `GoogleGenAI`. */
 export type AgentModelTurn = {
