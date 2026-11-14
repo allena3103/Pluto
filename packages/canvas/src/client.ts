@@ -101,7 +101,7 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
 
     async listAssignmentGroups(canvasCourseId) {
       const rows = await http.getPaginatedArray({
-        path: `/api/v1/courses/${canvasCourseId}/assignment_groups`,
+        path: courseApiPath(canvasCourseId, "assignment_groups"),
         endpointName: "assignment groups",
       });
       return rows
@@ -111,7 +111,7 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
 
     async listAssignments(canvasCourseId) {
       const rows = await http.getPaginatedArray({
-        path: `/api/v1/courses/${canvasCourseId}/assignments`,
+        path: courseApiPath(canvasCourseId, "assignments"),
         endpointName: "assignments",
         searchParams: new URLSearchParams({
           "include[]": "submission",
@@ -126,7 +126,7 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
     async listCourseFiles(canvasCourseId) {
       try {
         const rows = await http.getPaginatedArray({
-          path: `/api/v1/courses/${canvasCourseId}/files`,
+          path: courseApiPath(canvasCourseId, "files"),
           endpointName: "course files",
           allowForbiddenAsEmpty: true,
         });
@@ -135,7 +135,7 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
           .filter((file): file is CanvasCourseFile => file !== null);
       } catch (error) {
         if (error instanceof CanvasHttpError && error.status === 403) {
-          const key = `/api/v1/courses/${canvasCourseId}/files`;
+          const key = courseApiPath(canvasCourseId, "files");
           if (!warnedPaths.has(key)) {
             warnedPaths.add(key);
             console.warn(`Canvas files disabled for ${key}; treating as empty.`);
@@ -149,7 +149,7 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
     async listModuleItems(canvasCourseId) {
       try {
         const rows = await http.getPaginatedArray({
-          path: `/api/v1/courses/${canvasCourseId}/modules`,
+          path: courseApiPath(canvasCourseId, "modules"),
           endpointName: "module items",
           searchParams: new URLSearchParams({
             "include[]": "items",
@@ -166,6 +166,10 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
       }
     },
   };
+}
+
+function courseApiPath(canvasCourseId: string, resource: string): string {
+  return `/api/v1/courses/${encodeURIComponent(canvasCourseId)}/${resource}`;
 }
 
 function resolveMode(mode: CanvasMode | undefined): CanvasMode {
