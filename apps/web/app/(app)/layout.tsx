@@ -19,12 +19,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   if (!user) {
-    // `proxy.ts` already redirects every unauthenticated request to a
-    // protected `(app)` route to `/login?next=<path+query>` before this
-    // layout ever renders (App Router Layouts cannot read the request
-    // pathname, only Client Components can via `usePathname()`). This check
-    // is defense-in-depth for a session that expired between the proxy and
-    // the render; it is not expected to fire in normal use.
+    // Defense in depth only. `proxy.ts` owns the `next` round trip: it
+    // already redirects every unauthenticated request to a protected
+    // `(app)` route to `/login?next=<path+query>` before this layout ever
+    // renders (a Next 16 Layout cannot read the request path itself — only
+    // a Client Component can, via `usePathname()`, and that never mounts
+    // once `redirect()` has fired). This check exists only in case a
+    // session expires between the proxy and this render; it should not
+    // fire in normal use, and it deliberately does not attempt to
+    // reconstruct `next` itself.
     redirect("/login");
   }
 

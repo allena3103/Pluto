@@ -1,13 +1,15 @@
 // Pluto service worker: caches the static app shell only. Bump this constant
 // on any shell change so clients pick up the new assets and drop the old
 // cache.
-const CACHE_VERSION = "pluto-shell-v1";
+const CACHE_VERSION = "pluto-shell-v2";
 
-// Exactly what gets cached: the start page and the PWA icons/manifest. Never
-// add API routes, `/notes/*` (PDF pages), `/open/*`, `/login`, or anything
-// that can carry a session or another student's data — a stale or
-// cross-student cached response here would be a security bug.
-const APP_SHELL_URLS = ["/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
+// Exactly what gets cached: the PWA manifest and icons. Never add "/" or any
+// other HTML page, API route, `/notes/*` (PDF pages), `/open/*`, `/login`, or
+// anything that can carry a session or another student's data — every page
+// in this app is per-student, so a stale or cross-student cached HTML
+// response would be a security bug. Only static, student-independent assets
+// belong in this cache.
+const APP_SHELL_URLS = ["/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
