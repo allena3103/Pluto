@@ -17,6 +17,16 @@ type RouteResponse = {
   error?: string;
 };
 
+type SyncResponse = {
+  result?: {
+    courses: { inserted: number; updated: number };
+    assignments: { inserted: number; updated: number };
+    errors: string[];
+  };
+  files?: { ingested: number; failed: number };
+  error?: string;
+};
+
 const DEFAULT_BASE_URL = "https://umamherst.instructure.com";
 
 function parseError(body: unknown, fallback: string): string {
@@ -41,8 +51,35 @@ export function CanvasSettingsForm({ initialConnected, initialBaseUrl }: CanvasS
   const [connected, setConnected] = useState(initialConnected);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   const statusText = connected ? `Connected${baseUrl ? ` to ${baseUrlHost(baseUrl)}` : ""}` : "Not connected";
+
+  // Pulls courses, assignments and PDFs from Canvas into Pluto. Returns an error message or null.
+  async function runSync(): Promise<string | null> {
+    setSyncStatus("Syncing your Canvas courses. This can take a minute...");
+    try {
+      const response = await fetch("/api/canvas/sync", { method: "POST" });
+      const data = (await response.json()) as SyncResponse;
+      if (!response.ok || !data.result) {
+        setSyncStatus(null);
+        return parseError(data, "Canvas sync failed.");
+      }
+      const courses = data.result.courses.inserted + data.result.courses.updated;
+      const assignments = data.result.assignments.inserted + data.result.assignments.updated;
+      const pdfs = data.files?.ingested ?? 0;
+      const skipped = data.result.errors.length + (data.files?.failed ?? 0);
+      setSyncStatus(
+        `Synced ${courses} courses, ${assignments} assignments and ${pdfs} new PDFs` +
+          (skipped ? ` (${skipped} items skipped).` : "."),
+      );
+      router.refresh();
+      return null;
+    } catch {
+      setSyncStatus(null);
+      return "Canvas sync failed.";
+    }
+  }
 
   const handleSave = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -67,6 +104,8 @@ export function CanvasSettingsForm({ initialConnected, initialBaseUrl }: CanvasS
         setConnected(data.connected);
         setBaseUrl(data.baseUrl ?? baseUrl);
         router.refresh();
+        const syncError = await runSync();
+        if (syncError) setError(syncError);
       } catch {
         setError("Unable to save Canvas connection.");
       } finally {
@@ -77,8 +116,17 @@ export function CanvasSettingsForm({ initialConnected, initialBaseUrl }: CanvasS
     });
   };
 
+  const handleSync = () => {
+    setError(null);
+    startTransition(async () => {
+      const syncError = await runSync();
+      if (syncError) setError(syncError);
+    });
+  };
+
   const handleDisconnect = () => {
     setError(null);
+    setSyncStatus(null);
     startTransition(async () => {
       try {
         const response = await fetch("/api/canvas/token", { method: "DELETE" });
@@ -136,11 +184,19 @@ export function CanvasSettingsForm({ initialConnected, initialBaseUrl }: CanvasS
         {error ? (
           <p className="rounded-2xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700">{error}</p>
         ) : null}
+        {syncStatus ? (
+          <p className="rounded-2xl bg-muted px-4 py-2.5 text-sm font-semibold text-foreground">{syncStatus}</p>
+        ) : null}
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button type="submit" variant="sunrise" disabled={isPending}>
             {isPending ? "Saving..." : "Save Canvas connection"}
           </Button>
+          {connected ? (
+            <Button type="button" variant="outline" onClick={handleSync} disabled={isPending}>
+              {isPending ? "Working..." : "Sync now"}
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" onClick={handleDisconnect} disabled={isPending}>
             {isPending ? "Working..." : "Disconnect"}
           </Button>
