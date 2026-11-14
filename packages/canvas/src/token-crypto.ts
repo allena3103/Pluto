@@ -82,8 +82,9 @@ export function decryptCanvasToken(payload: string, keyB64?: string): string {
     throw new Error("Invalid encrypted token format (tag length)");
   }
 
+  const key = resolveKeyMaterial(keyB64);
+
   try {
-    const key = resolveKeyMaterial(keyB64);
     const decipher = createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(authTag);
     const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);

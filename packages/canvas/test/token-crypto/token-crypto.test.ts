@@ -59,6 +59,53 @@ describe("token-crypto", () => {
     expect(() => decryptCanvasToken(tampered, GOOD_KEY)).toThrow("Failed to decrypt Canvas token");
   });
 
+  it("propagates missing key error during decrypt without masking", () => {
+    const encrypted = encryptCanvasToken(TEST_TOKEN, GOOD_KEY);
+    delete process.env.CANVAS_TOKEN_KEY;
+
+    let message = "";
+    try {
+      decryptCanvasToken(encrypted);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message).toContain("CANVAS_TOKEN_KEY is required");
+    expect(message).not.toContain("Failed to decrypt Canvas token");
+    expect(message).not.toContain(TEST_TOKEN);
+    expect(message).not.toContain(GOOD_KEY);
+  });
+
+  it("propagates bad key length error during decrypt without masking", () => {
+    const encrypted = encryptCanvasToken(TEST_TOKEN, GOOD_KEY);
+    let message = "";
+    try {
+      decryptCanvasToken(encrypted, BAD_KEY);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message).toContain("CANVAS_TOKEN_KEY must decode to 32 bytes");
+    expect(message).not.toContain("Failed to decrypt Canvas token");
+    expect(message).not.toContain(TEST_TOKEN);
+    expect(message).not.toContain(BAD_KEY);
+  });
+
+  it("keeps generic decrypt error for tampered ciphertext with valid key", () => {
+    const encrypted = encryptCanvasToken(TEST_TOKEN, GOOD_KEY);
+    const tampered = flipByteInPayloadPart(encrypted, 3);
+    let message = "";
+    try {
+      decryptCanvasToken(tampered, GOOD_KEY);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message).toContain("Failed to decrypt Canvas token");
+    expect(message).not.toContain(TEST_TOKEN);
+    expect(message).not.toContain(GOOD_KEY);
+  });
+
   it("throws on invalid key length", () => {
     expect(() => encryptCanvasToken(TEST_TOKEN, BAD_KEY)).toThrow("CANVAS_TOKEN_KEY must decode to 32 bytes");
   });
