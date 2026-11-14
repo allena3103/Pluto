@@ -1,4 +1,5 @@
 // Proves one student cannot read or write another student's rows, in every public table.
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -256,6 +257,120 @@ describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
       const res = await service.from(table).insert(row).select();
       expect(res.error?.code, `${table} pointing at another student's parent`).toBe("23503");
     }
+  });
+
+  it("students cannot write files rows, profile updates are name-only, and storage_path shape is enforced", async () => {
+    const demoFileId = randomUUID();
+    const otherFileId = randomUUID();
+
+    must(
+      await service
+        .from("files")
+        .insert({
+          id: demoFileId,
+          student_id: DEMO_STUDENT_ID,
+          course_id: COURSE_IDS.history105,
+          title: "demo-owned file for hardening test",
+          source: "manual",
+          storage_path: `${DEMO_STUDENT_ID}/${demoFileId}.pdf`,
+        })
+        .select("id")
+        .single(),
+      "seed demo files row",
+    );
+    must(
+      await service
+        .from("files")
+        .insert({
+          id: otherFileId,
+          student_id: OTHER_STUDENT_ID,
+          course_id: OTHER_COURSE_ID,
+          title: "other-owned file for hardening test",
+          source: "manual",
+          storage_path: `${OTHER_STUDENT_ID}/${otherFileId}.pdf`,
+        })
+        .select("id")
+        .single(),
+      "seed other files row",
+    );
+
+    const demoInsert = await demo
+      .from("files")
+      .insert({
+        student_id: DEMO_STUDENT_ID,
+        course_id: COURSE_IDS.history105,
+        title: "demo tries to insert files row",
+        source: "manual",
+      })
+      .select();
+    expect(demoInsert.error?.code, "demo insert into files").toBe("42501");
+
+    const otherInsert = await other
+      .from("files")
+      .insert({
+        student_id: OTHER_STUDENT_ID,
+        course_id: OTHER_COURSE_ID,
+        title: "other tries to insert files row",
+        source: "manual",
+      })
+      .select();
+    expect(otherInsert.error?.code, "other insert into files").toBe("42501");
+
+    const demoUpdate = await demo
+      .from("files")
+      .update({ storage_path: `${DEMO_STUDENT_ID}/${randomUUID()}.pdf` })
+      .eq("id", demoFileId)
+      .select();
+    expect(demoUpdate.error?.code, "demo update files storage_path").toBe("42501");
+
+    const otherUpdate = await other
+      .from("files")
+      .update({ storage_path: `${OTHER_STUDENT_ID}/${randomUUID()}.pdf` })
+      .eq("id", otherFileId)
+      .select();
+    expect(otherUpdate.error?.code, "other update files storage_path").toBe("42501");
+
+    const name = `Demo Hardened ${Date.now()}`;
+    const nameUpdate = await demo.from("profiles").update({ name }).eq("id", DEMO_STUDENT_ID).select("name").single();
+    expect(nameUpdate.error, "demo update own profile name").toBeNull();
+    expect(nameUpdate.data?.name).toBe(name);
+
+    const phoneUpdate = await demo
+      .from("profiles")
+      .update({ phone: "+15555550999" })
+      .eq("id", DEMO_STUDENT_ID)
+      .select("id");
+    expect(phoneUpdate.error?.code, "demo update own phone").toBe("42501");
+
+    const canvasUrlUpdate = await demo
+      .from("profiles")
+      .update({ canvas_base_url: "https://evil.example" })
+      .eq("id", DEMO_STUDENT_ID)
+      .select("id");
+    expect(canvasUrlUpdate.error?.code, "demo update own canvas_base_url").toBe("42501");
+
+    const tokenUpdate = await demo
+      .from("profiles")
+      .update({ canvas_token_encrypted: "not-allowed" })
+      .eq("id", DEMO_STUDENT_ID)
+      .select("id");
+    expect(tokenUpdate.error?.code, "demo update own canvas_token_encrypted").toBe("42501");
+
+    const badFileId = randomUUID();
+    const mismatched = await service
+      .from("files")
+      .insert({
+        id: badFileId,
+        student_id: DEMO_STUDENT_ID,
+        course_id: COURSE_IDS.history105,
+        title: "service role mismatch test",
+        source: "manual",
+        storage_path: `${OTHER_STUDENT_ID}/${badFileId}.pdf`,
+      })
+      .select("id");
+    expect(mismatched.error?.code, "service role insert mismatched storage_path").toBe("23514");
+
+    await service.from("files").delete().in("id", [demoFileId, otherFileId, badFileId]);
   });
 
   it("the auth trigger creates the profile with the name from user metadata", async () => {

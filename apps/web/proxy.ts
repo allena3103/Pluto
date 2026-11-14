@@ -16,13 +16,27 @@ const PUBLIC_PATH_PREFIXES = [
 ];
 
 const PUBLIC_FILE_PATHS = ["/favicon.ico", "/manifest.webmanifest", "/sw.js"];
+const PUBLIC_ASSET_PREFIXES = ["/icons/", "/images/", "/fonts/"];
+
+const PUBLIC_ASSET_EXTENSION =
+  /\.(?:png|jpg|jpeg|gif|webp|svg|ico|avif|woff|woff2|ttf|otf|eot|css|js|map|txt|xml)$/i;
 
 function isPublicPath(pathname: string) {
   if (PUBLIC_FILE_PATHS.includes(pathname)) {
     return true;
   }
 
-  if (pathname.match(/\.(?:png|jpg|jpeg|gif|webp|svg|ico|avif|woff|woff2|ttf|otf|eot)$/i)) {
+  if (PUBLIC_ASSET_EXTENSION.test(pathname)) {
+    // Only bypass auth for known static-asset roots, never arbitrary app routes.
+    if (pathname.startsWith("/_next/")) {
+      return true;
+    }
+    if (PUBLIC_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+      return true;
+    }
+  }
+
+  if (pathname.startsWith("/_next/")) {
     return true;
   }
 
