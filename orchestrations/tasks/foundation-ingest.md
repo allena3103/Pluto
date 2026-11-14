@@ -55,3 +55,11 @@ The shared local Supabase stack is running; never stop or reset it. Commit small
 - Memory is tight on this machine: stop any dev server as soon as a check is done, and do not start extra watchers.
 - Type Supabase clients as `PlutoDb` from `@pluto/core/context` (`SupabaseClient<Database>`).
 - This PR is security-sensitive (service-role route guarded by `INTERNAL_API_SECRET`): the orchestrator labels it `security-review` and runs a fresh reviewer before grokbot merges.
+
+## Hardening rules (director, after grokbot's review of PR #9; these override anything above)
+- A separate coder (`foundation-harden`) owns migration `20261113000500_harden_student_writes.sql`: students lose insert/update/delete on `files`, `files.storage_path` gets a check constraint equal to `<student_id>/<file_id>.pdf`, and students can update only `profiles.name`. Do not edit that migration, `apps/web/proxy.ts`, or its tests. Merge `origin/agent/foundation` when it lands.
+- `files` rows are written only with the service role (seed, ingest, later Canvas sync). Never with a student session.
+- `ingestFile` must build the storage path itself as `<student_id>/<file_id>.pdf` from the file row's `student_id` and `id`. Never download from the `storage_path` value stored in the row, and fail the ingest (`failed`, clear error) if the stored `storage_path` is set and differs.
+- The seed sets `storage_path` to exactly `<student_id>/<file_id>.pdf`.
+- Anything that writes `profiles.phone` or the Canvas fields uses the service role in a server route or script (the seed already does).
+- Add a test: a `files` row whose `storage_path` points into another student's folder is never read from that folder.
