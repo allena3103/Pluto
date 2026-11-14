@@ -7,6 +7,7 @@ import {
   Channel,
   ChatStreamEvent,
   DeadlineStatus,
+  DeepLink,
   ENDPOINTS,
   ENDPOINT_NAMES,
   FileSource,
@@ -397,6 +398,39 @@ describe("ENDPOINTS", () => {
     expectTypeOf<EndpointRequest<"magicLink">>().toEqualTypeOf<{ studentId: string; fileId: string; page: number }>();
     expectTypeOf<EndpointResponse<"agentReply">>().toEqualTypeOf<{ text: string; deepLink?: string | undefined }>();
     expectTypeOf<EndpointResponse<"open">>().toEqualTypeOf<never>();
+  });
+});
+
+describe("DeepLink", () => {
+  test.each([
+    noteUrl(APP, FILE, 1),
+    noteUrl("https://pluto.example.com/", FILE, 12),
+    `https://pluto.example.com/notes/${FILE}`,
+  ])("accepts notes link %s", (link) => {
+    expect(DeepLink.safeParse(link).success).toBe(true);
+  });
+
+  test.each([
+    "https://example.com/",
+    `${APP}/grades`,
+    `${APP}/open/tok_abc`,
+    `${APP}/notes`,
+    `${APP}/notes/${FILE}?page=0`,
+    `${APP}/notes/${FILE}?page=1.5`,
+    `${APP}/notes/${FILE}/extra?page=2`,
+    `/notes/${FILE}?page=2`,
+    `ftp://pluto.example.com/notes/${FILE}?page=2`,
+    `javascript:/notes/${FILE}?page=2`,
+    "not a url",
+  ])("rejects %s", (link) => {
+    expect(DeepLink.safeParse(link).success).toBe(false);
+  });
+
+  test("tool outputs reject a URL that is not a notes link", () => {
+    const result = { fileId: FILE, title: "Lecture 17", courseId: COURSE, courseName: "History 105", weekLabel: null, page: 4, snippet: "x" };
+    expect(TOOLS.search_notes.output.safeParse({ results: [{ ...result, deepLink: noteUrl(APP, FILE, 4) }] }).success).toBe(true);
+    expect(TOOLS.search_notes.output.safeParse({ results: [{ ...result, deepLink: "https://example.com/" }] }).success).toBe(false);
+    expect(ChatStreamEvent.safeParse({ type: "citation", fileId: FILE, page: 4, deepLink: `${APP}/grades` }).success).toBe(false);
   });
 });
 

@@ -14,6 +14,7 @@
  * - All tools are read-only and scoped to the signed-in student.
  */
 import { z } from "zod";
+import { parseNotePath } from "./deep-links";
 
 // ---------------------------------------------------------------------------
 // Primitives
@@ -33,8 +34,15 @@ export const MAX_PAGE = 10_000;
 /** 1-based page number. */
 export const PageNumber = z.number().int().min(1).max(MAX_PAGE);
 
-/** Absolute URL to `/notes/<fileId>?page=<n>` in the web app. */
-export const DeepLink = z.url();
+/**
+ * Absolute http(s) URL to `/notes/<fileId>?page=<n>` in the web app (1-based page).
+ * Build it with `noteUrl` from `./deep-links`.
+ */
+export const DeepLink = z
+  .url({ protocol: /^https?$/ })
+  .refine((value) => parseNotePath(value) !== null, {
+    message: "deepLink must be an absolute URL to /notes/<fileId>?page=<n>",
+  });
 
 const Count = z.number().int().min(0);
 const Percent = z.number().min(0);
