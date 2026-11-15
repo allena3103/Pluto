@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,9 @@ type SyncResponse = {
 };
 
 const DEFAULT_BASE_URL = "https://umamherst.instructure.com";
+// Shown to the student (read-only) so they can open Canvas and create a token.
+// The API still gets the plain host in `baseUrl`; it rejects URLs with a path.
+const CANVAS_TOKEN_PAGE_URL = `${DEFAULT_BASE_URL}/profile/settings`;
 
 function parseError(body: unknown, fallback: string): string {
   if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
@@ -52,6 +56,24 @@ export function CanvasSettingsForm({ initialConnected, initialBaseUrl }: CanvasS
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const linkInputRef = useRef<HTMLInputElement>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(CANVAS_TOKEN_PAGE_URL);
+      setCopied(true);
+    } catch {
+      // Clipboard blocked (permissions or non-secure origin): select the text so the student can copy it by hand.
+      linkInputRef.current?.select();
+    }
+  };
 
   const statusText = connected ? `Connected${baseUrl ? ` to ${baseUrlHost(baseUrl)}` : ""}` : "Not connected";
 
@@ -163,18 +185,36 @@ export function CanvasSettingsForm({ initialConnected, initialBaseUrl }: CanvasS
       </p>
 
       <form className="space-y-4" onSubmit={handleSave}>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-bold text-foreground">Canvas base URL</span>
-          <Input
-            name="baseUrl"
-            type="url"
-            inputMode="url"
-            autoComplete="url"
-            value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
-            required
-          />
-        </label>
+        <div className="space-y-1.5">
+          <label htmlFor="canvas-token-page" className="block text-sm font-bold text-foreground">
+            Canvas settings link
+          </label>
+          <div className="flex items-center gap-2">
+            <Input
+              ref={linkInputRef}
+              id="canvas-token-page"
+              type="url"
+              value={CANVAS_TOKEN_PAGE_URL}
+              readOnly
+              onFocus={(event) => event.currentTarget.select()}
+              className="bg-muted text-muted-foreground"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-lg"
+              className="shrink-0"
+              onClick={handleCopy}
+              aria-label={copied ? "Link copied" : "Copy link"}
+              title={copied ? "Copied" : "Copy link"}
+            >
+              {copied ? <Check className="text-emerald-600" /> : <Copy />}
+            </Button>
+          </div>
+          <p className="text-xs font-semibold text-muted-foreground" aria-live="polite">
+            {copied ? "Link copied." : "Open this page in Canvas and create a new access token."}
+          </p>
+        </div>
 
         <label className="block space-y-1.5">
           <span className="text-sm font-bold text-foreground">Canvas personal access token</span>
