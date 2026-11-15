@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@pluto/core/database.types";
 import type { PlutoDb } from "@pluto/core/context";
@@ -100,6 +100,63 @@ async function objectCount(db: PlutoDb, studentId: string): Promise<number> {
 
 function log(label: string, result: FilesSyncResult, extra: Record<string, unknown> = {}): void {
   console.log(`FILES_SYNC ${label} ${JSON.stringify({ ...result, ...extra })}`);
+}
+
+const HIDDEN_FILES_BASE = "https://canvas.local";
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+}
+
+/**
+ * Live-mode Canvas API for one course whose Files tab is hidden: `/files` is 403 and the
+ * PDFs are only reachable through Modules (7 and 8 are PDFs, 9 is a spreadsheet, 10 is locked).
+ */
+function hiddenFilesTabFetch(requested: string[]): typeof fetch {
+  const pdf = (id: number, name: string) => ({
+    id,
+    display_name: `${name}.pdf`,
+    filename: `${name}.pdf`,
+    "content-type": "application/pdf",
+    url: `${HIDDEN_FILES_BASE}/files/${id}/download?download_frd=1&verifier=v${id}`,
+    updated_at: "2026-11-01T00:00:00Z",
+    created_at: "2026-10-01T00:00:00Z",
+    size: 4096,
+  });
+  return async (input) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    requested.push(url.pathname);
+    switch (url.pathname) {
+      case "/api/v1/courses":
+        return json([{ id: 42, name: "COMPSCI 999", term: { name: "Fall 2026" } }]);
+      case "/api/v1/courses/42/assignment_groups":
+      case "/api/v1/courses/42/assignments":
+        return json([]);
+      case "/api/v1/courses/42/files":
+        return json({ status: "unauthorized", errors: [{ message: "user not authorized to perform that action" }] }, 403);
+      case "/api/v1/courses/42/modules":
+        return json([
+          {
+            name: "Week 3",
+            items: [
+              { type: "File", content_id: 7 },
+              { type: "Page", content_id: 1 },
+              { type: "File", content_id: 8 },
+              { type: "File", content_id: 9 },
+              { type: "File", content_id: 10 },
+            ],
+          },
+        ]);
+      case "/api/v1/courses/42/files/7":
+        return json(pdf(7, "hist-week-7"));
+      case "/api/v1/courses/42/files/8":
+        return json(pdf(8, "bio-lab-3"));
+      case "/api/v1/courses/42/files/9":
+        return json({ id: 9, display_name: "grades.xlsx", "content-type": "application/vnd.ms-excel" });
+      default:
+        return json({ errors: [{ message: "The specified resource does not exist." }] }, 404);
+    }
+  };
 }
 
 describe.skipIf(SKIP_DB_TESTS)("syncCanvasFiles", () => {
@@ -242,5 +299,65 @@ describe.skipIf(SKIP_DB_TESTS)("syncCanvasFiles", () => {
       download: { baseUrl: "https://fixtures.canvas.local", fetch },
     });
     expect(retry).toMatchObject({ downloaded: 0, ingested: 0, failed: 3, skipped: 3 });
+  });
+
+  it("downloads and ingests PDFs read from Modules when the Files tab is hidden (403)", async () => {
+    const admin = database();
+    const student = await createUser(admin);
+    created.push(student);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const requested: string[] = [];
+    const client = createCanvasClient({
+      baseUrl: HIDDEN_FILES_BASE,
+      token: TOKEN,
+      mode: "live",
+      fetch: hiddenFilesTabFetch(requested),
+      sleep: async () => {},
+    });
+
+    const sync = await syncCanvas({ db: admin, studentId: student, client });
+    expect(sync.errors).toEqual([]);
+    expect(sync.files).toEqual({ inserted: 2, updated: 0 });
+    expect(requested).toContain("/api/v1/courses/42/files");
+
+    // Canvas download URLs redirect to a file host; the token must stay on the Canvas host.
+    const download = recordingFileFetch((url) => {
+      const match = /^\/files\/(\d+)\/download$/.exec(url.pathname);
+      if (url.hostname !== "canvas.local" || !match) return null;
+      const name = match[1] === "7" ? "hist-week-7" : match[1] === "8" ? "bio-lab-3" : null;
+      if (!name) return new Response("gone", { status: 404 });
+      return new Response(null, { status: 302, headers: { location: `https://fixtures.canvas.local/files/${name}.pdf` } });
+    });
+    const result = await syncCanvasFiles({
+      admin,
+      studentId: student,
+      client,
+      download: { baseUrl: HIDDEN_FILES_BASE, token: TOKEN, fetch: download.fetch },
+    });
+    log("hidden-files-tab", result);
+    warn.mockRestore();
+
+    expect(result).toMatchObject({ downloaded: 2, ingested: 2, failed: 0, skipped: 0, errors: [] });
+    expect(download.calls.map((call) => [new URL(call.url).host, call.authorization !== null])).toEqual([
+      ["canvas.local", true],
+      ["fixtures.canvas.local", false],
+      ["canvas.local", true],
+      ["fixtures.canvas.local", false],
+    ]);
+
+    const states = await fileStates(admin, student);
+    expect([...states.keys()].sort()).toEqual(["7", "8"]);
+    const pages = await pageNumbers(admin, student);
+    for (const state of states.values()) {
+      expect(state.ingest_status).toBe("ready");
+      expect(state.page_count).toBeGreaterThan(0);
+      expect(pages.get(state.id)).toHaveLength(state.page_count!);
+    }
+    expect(await objectCount(admin, student)).toBe(2);
+
+    const { data: labels, error } = await admin.from("files").select("week_label").eq("student_id", student);
+    expect(error).toBeNull();
+    expect((labels ?? []).map((row) => row.week_label)).toEqual(["Week 3", "Week 3"]);
   });
 });

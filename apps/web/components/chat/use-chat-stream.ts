@@ -139,6 +139,7 @@ export function useChatStream() {
                     fileId: event.fileId,
                     page: event.page,
                     deepLink: event.deepLink,
+                    ...(event.title ? { title: event.title } : {}),
                   },
                 ],
               }

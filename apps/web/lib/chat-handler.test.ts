@@ -164,7 +164,7 @@ describe.skipIf(SKIP_DB_TESTS)("handleChat with the local database", () => {
 
     expect(events[0]?.type).toBe("text");
     const citation = events.find((e) => e.type === "citation");
-    expect(citation).toMatchObject({ type: "citation", fileId, page: 3 });
+    expect(citation).toMatchObject({ type: "citation", fileId, page: 3, title: "Week 2: The printing press" });
     if (citation?.type !== "citation") throw new Error("no citation");
     expect(citation.page).toBeGreaterThanOrEqual(1);
     expect(DeepLink.safeParse(citation.deepLink).success).toBe(true);

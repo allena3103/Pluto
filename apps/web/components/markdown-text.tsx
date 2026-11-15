@@ -3,18 +3,20 @@ import { cn } from "@/lib/utils";
 
 /**
  * Small Markdown subset for agent replies and saved notes: headings, bullet and
- * numbered lists, bold, italic, inline code, paragraphs. Builds React elements only
+ * numbered lists, horizontal rules, bold, italic, inline code, paragraphs. Builds React elements only
  * (no HTML injection). Links are not rendered as links.
  */
 
 type Block =
   | { kind: "heading"; level: 1 | 2 | 3; text: string }
   | { kind: "list"; ordered: boolean; items: { text: string; depth: number }[] }
-  | { kind: "paragraph"; text: string };
+  | { kind: "paragraph"; text: string }
+  | { kind: "rule" };
 
 const HEADING = /^(#{1,6})\s+(.*)$/;
 const BULLET = /^(\s*)[-*•]\s+(.*)$/;
 const NUMBERED = /^(\s*)\d+[.)]\s+(.*)$/;
+const RULE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/;
 
 function parseBlocks(source: string): Block[] {
   const blocks: Block[] = [];
@@ -34,6 +36,11 @@ function parseBlocks(source: string): Block[] {
       flush();
       const level = Math.min(heading[1]!.length, 3) as 1 | 2 | 3;
       blocks.push({ kind: "heading", level, text: heading[2]!.trim() });
+      continue;
+    }
+    if (RULE.test(line)) {
+      flush();
+      blocks.push({ kind: "rule" });
       continue;
     }
     const bullet = BULLET.exec(line);
@@ -100,6 +107,7 @@ export function MarkdownText({ text, className }: { text: string; className?: st
             </Tag>
           );
         }
+        if (block.kind === "rule") return <hr key={index} className="border-border/80" />;
         if (block.kind === "list") {
           const List = block.ordered ? "ol" : "ul";
           return (

@@ -17,7 +17,9 @@ import type { CanvasCourseFile } from "./types";
 
 export const FILE_DOWNLOAD_MAX_BYTES = 50 * 1024 * 1024;
 export const FILE_DOWNLOAD_TIMEOUT_MS = 30_000;
-const DEFAULT_MAX_FILES = 25;
+// Enough for a full term in one sync (the real courses hold 88 PDFs). Files already done are
+// skipped without using the cap, so a sync cut short by the route's time limit resumes next time.
+const DEFAULT_MAX_FILES = 100;
 const MAX_REDIRECTS = 3;
 const PDF_CONTENT_TYPES = new Set(["application/pdf", "application/x-pdf"]);
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"

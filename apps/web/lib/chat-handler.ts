@@ -67,14 +67,35 @@ async function loadHistory(db: PlutoDb, studentId: string, sessionId: string): P
     .map((row) => ({ role: row.role as "user" | "assistant", text: row.text }));
 }
 
+type CitationEvent = Extract<ChatStreamEvent, { type: "citation" }>;
+
 /** Keeps only citations that pass the contract, in order. */
-function validCitations(citations: AgentCitation[]): Extract<ChatStreamEvent, { type: "citation" }>[] {
-  const out: Extract<ChatStreamEvent, { type: "citation" }>[] = [];
+function validCitations(citations: AgentCitation[]): CitationEvent[] {
+  const out: CitationEvent[] = [];
   for (const c of citations) {
     const parsed = ChatStreamEvent.safeParse({ type: "citation", fileId: c.fileId, page: c.page, deepLink: c.deepLink });
     if (parsed.success && parsed.data.type === "citation") out.push(parsed.data);
   }
   return out;
+}
+
+/** Adds each cited file's title so the chat chip reads like the saved note's ("<title> p.<n>"). */
+async function withTitles(db: PlutoDb, studentId: string, citations: CitationEvent[]): Promise<CitationEvent[]> {
+  if (citations.length === 0) return citations;
+  const { data, error } = await db
+    .from("files")
+    .select("id, title")
+    .eq("student_id", studentId)
+    .in("id", [...new Set(citations.map((c) => c.fileId))]);
+  if (error) {
+    console.error("chat: citation titles lookup failed:", error.message);
+    return citations;
+  }
+  const titles = new Map((data ?? []).map((row) => [row.id, row.title.trim().slice(0, 300)]));
+  return citations.map((c) => {
+    const title = titles.get(c.fileId);
+    return title ? { ...c, title } : c;
+  });
 }
 
 function encodeEvents(events: ChatStreamEvent[]): Uint8Array {
@@ -217,7 +238,7 @@ export async function handleChat(request: Request, deps: ChatDeps): Promise<Resp
         : null;
     const savedEvent: ChatStreamEvent[] = saved ? [{ type: "saved_note", ...saved }] : [];
 
-    return [{ type: "text", delta: text }, ...citations, ...savedEvent, { type: "done", sessionId }];
+    return [{ type: "text", delta: text }, ...(await withTitles(db, studentId!, citations)), ...savedEvent, { type: "done", sessionId }];
   }
 
   const stream = new ReadableStream<Uint8Array>({
