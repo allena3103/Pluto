@@ -1,13 +1,20 @@
 // `npm run env:local [-- --port 3001]`
 // Writes apps/web/.env.local from the running local Supabase stack (`npx supabase status -o env`),
 // your dev port, keyless-dev defaults, and C:/Pluto/.env.secrets if present (real keys, never committed).
+//
+// `npm run env:local -- --hosted [--port 3001]`
+// Writes apps/web/.env.production.local instead: the hosted Supabase project plus the production
+// settings Vercel uses (live Canvas, Gemini, Sendblue, PROD_* secrets, demo auto-login).
+// Then `npm run build -w @pluto/web && npm run start -w @pluto/web` runs like production.
+// Every write goes to the real hosted database.
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const outFile = join(root, "apps", "web", ".env.local");
+const hosted = process.argv.includes("--hosted");
+const outFile = join(root, "apps", "web", hosted ? ".env.production.local" : ".env.local");
 const secretsFile = process.env.PLUTO_SECRETS_FILE ?? "C:/Pluto/.env.secrets";
 
 function parseEnv(text) {
@@ -33,44 +40,73 @@ if (!/^\d+$/.test(port)) {
   process.exit(1);
 }
 
-let status;
-try {
-  status = parseEnv(
-    execSync("npx supabase status -o env", { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 }),
-  );
-} catch (err) {
-  console.error("env:local: `npx supabase status` failed. Is the local stack running (`npx supabase start`)?");
-  console.error(String(err?.stderr ?? err?.message ?? err).trim());
-  process.exit(1);
-}
+const secrets = existsSync(secretsFile) ? parseEnv(readFileSync(secretsFile, "utf8")) : {};
 
-const supabaseUrl = status.API_URL;
-const anonKey = status.ANON_KEY ?? status.PUBLISHABLE_KEY;
-const serviceRoleKey = status.SERVICE_ROLE_KEY ?? status.SECRET_KEY;
-if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-  console.error("env:local: could not read API_URL / ANON_KEY / SERVICE_ROLE_KEY from `supabase status -o env`.");
-  process.exit(1);
+let supabase;
+if (hosted) {
+  supabase = {
+    url: secrets.HOSTED_SUPABASE_URL,
+    anonKey: secrets.HOSTED_SUPABASE_ANON_KEY,
+    serviceRoleKey: secrets.HOSTED_SUPABASE_SERVICE_ROLE_KEY,
+    dbUrl: secrets.HOSTED_SUPABASE_DB_URL ?? "",
+  };
+  if (!supabase.url || !supabase.anonKey || !supabase.serviceRoleKey) {
+    console.error(`env:local --hosted: ${secretsFile} needs HOSTED_SUPABASE_URL, _ANON_KEY and _SERVICE_ROLE_KEY.`);
+    process.exit(1);
+  }
+} else {
+  let status;
+  try {
+    status = parseEnv(
+      execSync("npx supabase status -o env", { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 }),
+    );
+  } catch (err) {
+    console.error("env:local: `npx supabase status` failed. Is the local stack running (`npx supabase start`)?");
+    console.error(String(err?.stderr ?? err?.message ?? err).trim());
+    process.exit(1);
+  }
+  supabase = {
+    url: status.API_URL,
+    anonKey: status.ANON_KEY ?? status.PUBLISHABLE_KEY,
+    serviceRoleKey: status.SERVICE_ROLE_KEY ?? status.SECRET_KEY,
+    dbUrl: status.DB_URL ?? "",
+  };
+  if (!supabase.url || !supabase.anonKey || !supabase.serviceRoleKey) {
+    console.error("env:local: could not read API_URL / ANON_KEY / SERVICE_ROLE_KEY from `supabase status -o env`.");
+    process.exit(1);
+  }
 }
 
 // Defaults come from .env.example (so every variable is listed once), then local values win.
 const example = parseEnv(readFileSync(join(root, ".env.example"), "utf8"));
 const env = {
   ...example,
-  NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: anonKey,
-  SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
-  SUPABASE_DB_URL: status.DB_URL ?? "",
+  NEXT_PUBLIC_SUPABASE_URL: supabase.url,
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: supabase.anonKey,
+  SUPABASE_SERVICE_ROLE_KEY: supabase.serviceRoleKey,
+  SUPABASE_DB_URL: supabase.dbUrl,
   PORT: port,
   APP_URL: `http://localhost:${port}`,
   NEXT_PUBLIC_APP_URL: `http://localhost:${port}`,
 };
 
-let secretsNote = "no secrets file";
-if (existsSync(secretsFile)) {
-  const secrets = parseEnv(readFileSync(secretsFile, "utf8"));
-  const names = Object.keys(secrets).filter((k) => secrets[k] !== "");
-  for (const k of names) env[k] = secrets[k];
-  secretsNote = `${names.length} value(s) from ${secretsFile}`;
+const names = Object.keys(secrets).filter((k) => secrets[k] !== "");
+for (const k of names) env[k] = secrets[k];
+let secretsNote = existsSync(secretsFile) ? `${names.length} value(s) from ${secretsFile}` : "no secrets file";
+
+if (hosted) {
+  // PROD_<NAME> is the production value of <NAME> (unprefixed names stay local-only).
+  for (const k of names) {
+    if (k.startsWith("PROD_")) env[k.slice("PROD_".length)] = secrets[k];
+  }
+  Object.assign(env, {
+    CANVAS_MODE: "live",
+    PLUTO_LLM: "gemini",
+    SMS_PROVIDER: "sendblue",
+    PLUTO_DEMO_MCP_URL_ENABLED: "1",
+    PLUTO_AUTO_LOGIN_DEMO: "1",
+  });
+  secretsNote += ", production settings";
 }
 
 const body =
@@ -81,4 +117,4 @@ const body =
   "\n";
 mkdirSync(dirname(outFile), { recursive: true });
 writeFileSync(outFile, body);
-console.log(`env:local: wrote ${outFile} (port ${port}, supabase ${supabaseUrl}, ${secretsNote})`);
+console.log(`env:local: wrote ${outFile} (port ${port}, supabase ${supabase.url}, ${secretsNote})`);
