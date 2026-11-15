@@ -3,7 +3,7 @@
 One URL, every AI. Rehearse each script twice before going on stage.
 
 ## Pre-flight checklist
-- [ ] Hosted env: `APP_URL` is the public origin; `PLUTO_DEMO_MCP_TOKEN` is set (32+ chars); `PLUTO_DEMO_MCP_URL_ENABLED=1` (demo only); `SMS_PROVIDER=sendblue` with the `SENDBLUE_*` keys.
+- [ ] Hosted env: `APP_URL` is the public origin; `PLUTO_DEMO_MCP_TOKEN` is set (at least 24 characters; below that both the bearer fallback and the URL route are silently off); `PLUTO_DEMO_MCP_URL_ENABLED=1` (demo only); `SMS_PROVIDER=sendblue` with the `SENDBLUE_*` keys.
 - [ ] Migration `20261114060000` (`saved_notes.source`, magic links to saved notes) is applied on the hosted DB.
 - [ ] Demo phone is linked to the demo student (Settings, phone: `/settings/phone`).
 - [ ] Sendblue 24-hour window is open: text the Pluto number from the demo phone first, within 24 hours of the show.
@@ -29,7 +29,8 @@ OAuth first, sign in as the demo student when the window opens.
 ## Fallbacks
 - OAuth fails: fallback URL with the demo token.
 - ChatGPT fails: play its recording.
-- Texts fail or the Sendblue window closed: do the same steps in `/sms-sim`; saved-note links show in the simulator.
+- Idea 1, the text does not arrive (Sendblue failed or its window closed): with `SMS_PROVIDER=sendblue` a failed send writes no `sms_messages` row, so `/sms-sim` shows nothing. The note is still saved. Open the `url` that Claude gets back from `save_study_guide` (`textStatus` will say `failed`), signed in as the demo student.
+- Idea 5, the crunch text does not arrive: the alert is only marked sent (`sent_at`) when the text goes out, and a YES only gets a plan after a delivered crunch text. Play the backup recording, or run a local build with `SMS_PROVIDER=simulator`, where the alert and the YES reply both show in `/sms-sim`.
 
 ## After the demo
 Rotate `PLUTO_DEMO_MCP_TOKEN` and unset `PLUTO_DEMO_MCP_URL_ENABLED` (or set it to anything but `1`).
