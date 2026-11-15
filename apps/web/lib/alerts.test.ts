@@ -186,9 +186,11 @@ describe("message helpers", () => {
     const url = `${APP}/cal/tok.ics`;
     expect(crunchMessage(week, url)).toBe(
       `Pluto: your heaviest week is Nov 16-Nov 22: 3 things due worth 22% of your grades. ` +
-        `I added a 90-minute study block before each. Add them to your calendar: ${url}`,
+        `I added a 90-minute study block before each. Add them to your calendar: ${url} Want a plan? Reply YES.`,
     );
-    expect(crunchMessage(undefined, url)).toContain(url);
+    const none = crunchMessage(undefined, url);
+    expect(none).toContain(url);
+    expect(none).not.toMatch(/reply yes/i);
   });
 
   it("writes the deadline text in Eastern time", () => {

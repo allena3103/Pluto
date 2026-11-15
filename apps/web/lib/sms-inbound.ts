@@ -11,6 +11,7 @@ import {
   type SmsProvider,
 } from "@pluto/core/sms";
 import { secretMatches, withLink } from "./agent-reply";
+import { buildPlanRequest, findRecentCrunchAlert, isYesReply } from "./crunch-plan";
 import { consumeLinkCode as defaultConsumeLinkCode } from "./phone-link";
 import { createSmsMagicLink as defaultCreateSmsMagicLink } from "./sms-magic-link";
 
@@ -194,8 +195,16 @@ export async function processInboundSms(payload: InboundPayload, deps: SmsInboun
 
   const ctx = makeToolContext({ db: admin, studentId, appUrl: deps.appUrl });
   const runAgent = deps.runAgent ?? defaultRunAgent;
+  // A short yes to a recent crunch-week text asks for that week's plan. The request
+  // is built from the alert row, never from the text.
+  let message = content;
+  if (isYesReply(content)) {
+    const alert = await findRecentCrunchAlert(admin, studentId);
+    const request = alert ? buildPlanRequest(alert.weekStart) : null;
+    if (request) message = request;
+  }
   const result = await runAgent({
-    message: content,
+    message,
     channel: "sms",
     ctx,
     llm: deps.llm,
