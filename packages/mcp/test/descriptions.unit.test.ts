@@ -9,6 +9,7 @@ describe("tool descriptions", () => {
     expect(text).toContain("list_courses first");
     expect(text).toContain("pagesIncluded");
     expect(text).toContain("search_notes");
+    expect(text).toContain("get_assignment");
     expect(text).toContain("1-based");
   });
 });

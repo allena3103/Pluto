@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import { GetRecentNotesOutput, SearchNotesOutput } from "@pluto/core/contract";
+import { GetAssignmentOutput, GetDeadlinesOutput, GetRecentNotesOutput, SearchNotesOutput } from "@pluto/core/contract";
 import { DEMO_STUDENT_ID } from "../src/auth";
 import type { McpHandlerConfig, McpRequestOptions } from "../src/handler";
 import { SKIP_DB_TESTS, dbEnv } from "./db-env";
@@ -15,6 +15,9 @@ const APP_URL = "https://pluto.example.test";
 const TOKEN = "pluto-mcp-seeded-test-token-32ch";
 // supabase/seed.sql: the second seeded student.
 const OTHER_STUDENT_ID = "22222222-2222-4222-8222-222222222222";
+// supabase/seed.sql: Biology 151 "Lab Report 3: Mitosis" with a read Word handout and a listed-only spreadsheet.
+const LAB_REPORT_ID = "a0000000-0000-4000-8000-000000000112";
+const HANDOUT_ID = "af000000-0000-4000-8000-000000000001";
 
 type ManifestEntry = {
   file: string;
@@ -177,5 +180,40 @@ describe.skipIf(SKIP_DB_TESTS)("mcp handler on the seeded demo student", () => {
       expect(recent.text).not.toContain(fileId);
       expect(search.text).not.toContain(fileId);
     }
+  });
+
+  test("tools/list offers get_assignment and it returns the seeded lab report with its handout text", async () => {
+    const listed = await mcpResult(
+      await postMcp(config(DEMO_STUDENT_ID), rpcBody("tools/list", {}), `Bearer ${TOKEN}`, "http://127.0.0.1:3300/api/mcp"),
+    );
+    const tools = (listed.body.result?.tools ?? []) as Array<{ name: string; annotations?: { readOnlyHint?: boolean } }>;
+    expect(tools.find((tool) => tool.name === "get_assignment")?.annotations?.readOnlyHint).toBe(true);
+
+    const deadlines = await callTool(config(DEMO_STUDENT_ID), "get_deadlines", { course: "Biology 151" });
+    expect(deadlines.isError, deadlines.text).toBeFalsy();
+    const lab = GetDeadlinesOutput.parse(deadlines.structured).deadlines.find((d) => d.assignmentId === LAB_REPORT_ID);
+    expect(lab?.attachmentCount).toBe(2);
+
+    const result = await callTool(config(DEMO_STUDENT_ID), "get_assignment", { assignmentId: LAB_REPORT_ID });
+    expect(result.isError, result.text).toBeFalsy();
+    const output = GetAssignmentOutput.parse(result.structured);
+    expect(output).toMatchObject({
+      title: "Lab Report 3: Mitosis",
+      courseName: "Biology 151",
+      url: `${APP_URL}/assignments/${LAB_REPORT_ID}`,
+      truncated: false,
+    });
+    expect(output.instructions).toContain("onion root tip");
+    expect(output.attachments.map((a) => [a.title, a.fileType, a.status, a.pages.length])).toEqual([
+      ["Lab_3_Mitosis_Handout.docx", "docx", "ready", 1],
+      ["Mitosis_Data_Template.xlsx", "other", "skipped", 0],
+    ]);
+    expect(output.attachments[0]?.url).toBe(`${APP_URL}/assignments/${LAB_REPORT_ID}/files/${HANDOUT_ID}`);
+    expect(output.attachments[0]?.pages[0]?.text).toContain("mitotic index table");
+
+    const other = await callTool(config(OTHER_STUDENT_ID), "get_assignment", { assignmentId: LAB_REPORT_ID });
+    expect(other.isError).toBe(true);
+    expect(other.text.startsWith("assignment_not_found")).toBe(true);
+    expect(other.text).not.toContain("mitotic");
   });
 });

@@ -61,7 +61,7 @@ describe("mcp demo url token", () => {
     }
   });
 
-  test("flag 1 with the right token lists the eight tools", async () => {
+  test("flag 1 with the right token lists every tool", async () => {
     const response = await mcpResult(await urlCall(unitConfig({ demoUrlFlag: "1" }), UNIT_TOKEN));
     expect(response.status).toBe(200);
     const tools = response.body.result?.tools as Array<{ name: string }>;
@@ -156,7 +156,7 @@ describe("mcp tool errors", () => {
 });
 
 describe("mcp tools/list", () => {
-  test("initialize and tools/list expose the seven read tools and save_study_guide", async () => {
+  test("initialize and tools/list expose the eight read tools and save_study_guide", async () => {
     const config = unitConfig();
     const token = `Bearer ${UNIT_TOKEN}`;
 
@@ -185,7 +185,7 @@ describe("mcp tools/list", () => {
       annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean };
     }>;
     expect(tools.map((tool) => tool.name).sort()).toEqual([...ALL_TOOL_NAMES].sort());
-    expect(tools).toHaveLength(8);
+    expect(tools).toHaveLength(9);
     for (const tool of tools) {
       expect(tool.description?.length).toBeGreaterThan(0);
       expect(tool.inputSchema).toBeTruthy();

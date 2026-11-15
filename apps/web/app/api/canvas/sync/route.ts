@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AlertDeadlineChangeRequest, INTERNAL_SECRET_HEADER } from "@pluto/core/contract";
 import { createCanvasClient, type CanvasClient } from "@pluto/canvas/client";
 import { prepareLiveCanvasClient } from "@pluto/canvas/host";
+import { syncAssignmentFiles } from "@pluto/canvas/assignment-files-sync";
 import { createFixtureFileFetch, syncCanvasFiles, type FilesSyncDeps } from "@pluto/canvas/files-sync";
 import { createDiskFixturesFetch, syncCanvas, type DueDateChange, type SyncResult } from "@pluto/canvas/sync";
 import { decryptCanvasToken } from "@pluto/canvas/token-crypto";
@@ -16,6 +17,9 @@ export const maxDuration = 300;
 
 const MAX_BODY_BYTES = 8_000;
 const FIXTURES_BASE_URL = "https://fixtures.canvas.local";
+// No attachment download starts after this much of `maxDuration`; one in flight (metadata,
+// 30 s download, read, upload) still fits. The rest continue on the next sync.
+const ROUTE_BUDGET_MS = 200_000;
 
 const bodySchema = z.object({
   studentId: z.guid().optional(),
@@ -164,6 +168,7 @@ function notifyDueDateChange(input: {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const started = Date.now();
   const auth = await authenticate(request);
   if ("response" in auth) return auth.response;
 
@@ -233,7 +238,12 @@ export async function POST(request: Request): Promise<Response> {
     });
     // Then move the PDFs: download, store, ingest. Same student, same client.
     const files = await syncCanvasFiles({ admin, studentId, client, download });
-    return respond({ ok: true, result, files }, 200, secrets);
+    // Then the assignment attachments (PDF and Word), in what is left of the route's time.
+    const assignmentFiles = await syncAssignmentFiles(
+      { admin, studentId, client, download },
+      { deadline: started + ROUTE_BUDGET_MS },
+    );
+    return respond({ ok: true, result, files, assignmentFiles }, 200, secrets);
   } catch (error) {
     const mapped = canvasFailure(error);
     if (mapped) return mapped;

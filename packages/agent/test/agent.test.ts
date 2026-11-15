@@ -9,6 +9,7 @@ import {
   runAgent,
   type AgentModelClient,
 } from "../src/index";
+import { TOOL_FAILURE_TEXT } from "../src/types";
 
 const FILE_ID = "11111111-1111-4111-8111-111111111111";
 const DEEP_LINK = `http://localhost:3401/notes/${FILE_ID}?page=2`;
@@ -39,9 +40,11 @@ afterEach(() => {
 });
 
 describe("tool declarations", () => {
-  it("matches the seven tool names and adds create_magic_link only with a creator", () => {
+  it("matches the contract tool names, including get_assignment, and adds create_magic_link only with a creator", () => {
     const plain = buildToolDeclarations({ magicLink: false, clarify: false });
     expect(plain.map((tool) => tool.name)).toEqual([...TOOL_NAMES]);
+    const getAssignment = plain.find((tool) => tool.name === "get_assignment");
+    expect(Object.keys((getAssignment?.parameters.properties ?? {}) as Record<string, unknown>)).toEqual(["assignmentId"]);
     expect(plain.some((tool) => tool.name === "create_magic_link")).toBe(false);
 
     const withLink = buildToolDeclarations({ magicLink: true, clarify: false });
@@ -80,6 +83,114 @@ describe("mock agent", () => {
     expect(result.text).toContain("Treaty of Paris");
     expect(result.text).toContain("page 2");
     expect(result.text).not.toMatch(/https?:\/\//);
+  });
+
+  describe("assignment requirement requests", () => {
+    const COURSE_ID = "22222222-2222-4222-8222-222222222222";
+    const LAB_ID = "33333333-3333-4333-8333-333333333333";
+    const QUIZ_ID = "44444444-4444-4444-8444-444444444444";
+    const HANDOUT_ID = "55555555-5555-4555-8555-555555555555";
+    const APP = "http://localhost:3401";
+    const deadline = (assignmentId: string, title: string, dueAt: string) => ({
+      assignmentId,
+      courseId: COURSE_ID,
+      courseName: "Biology 151",
+      title,
+      dueAt,
+      previousDueAt: null,
+      points: 25,
+      weightGroup: null,
+      status: "upcoming",
+      attachmentCount: assignmentId === LAB_ID ? 2 : 0,
+    });
+    const outputs: Record<string, unknown> = {
+      list_courses: {
+        courses: [
+          { courseId: COURSE_ID, name: "Biology 151", term: null },
+          { courseId: "66666666-6666-4666-8666-666666666666", name: "History 105", term: null },
+        ],
+      },
+      get_deadlines: {
+        deadlines: [
+          deadline(QUIZ_ID, "Quiz 4: Photosynthesis", "2026-11-18T04:59:00Z"),
+          deadline(LAB_ID, "Lab Report 3: Mitosis", "2026-12-02T04:59:00Z"),
+        ],
+      },
+      get_assignment: {
+        assignmentId: LAB_ID,
+        courseId: COURSE_ID,
+        courseName: "Biology 151",
+        title: "Lab Report 3: Mitosis",
+        dueAt: "2026-12-02T04:59:00Z",
+        points: 60,
+        status: "upcoming",
+        instructions: `Write a lab report on the onion root tip mitosis lab. ${"Explain each phase. ".repeat(30)}`,
+        url: `${APP}/assignments/${LAB_ID}`,
+        attachments: [
+          {
+            attachmentId: HANDOUT_ID,
+            title: "Lab_3_Mitosis_Handout.docx",
+            fileType: "docx",
+            status: "ready",
+            pageCount: 1,
+            url: `${APP}/assignments/${LAB_ID}/files/${HANDOUT_ID}`,
+            pages: [{ page: 1, text: "Count 200 cells." }],
+          },
+        ],
+        truncated: false,
+      },
+    };
+    const runner = () => vi.fn(async (name: string) => outputs[name]);
+
+    it("reads the named assignment of the named class and lists its attachments without links", async () => {
+      const runTool = runner();
+      const result = await runAgent({
+        llm: "mock",
+        channel: "web",
+        message: "What does Lab Report 3 require in Biology 151? Show me the handout",
+        runTool,
+      });
+      expect(runTool.mock.calls).toEqual([
+        ["list_courses", {}],
+        ["get_deadlines", { course: "Biology 151" }],
+        ["get_assignment", { assignmentId: LAB_ID }],
+      ]);
+      expect(result.citations).toEqual([]);
+      expect(result.text).toContain("**Lab Report 3: Mitosis** (Biology 151) is due Tue, Dec 1, 11:59 PM.");
+      expect(result.text).toContain("Instructions: Write a lab report on the onion root tip mitosis lab.");
+      expect(result.text).toContain("Attachments: Lab_3_Mitosis_Handout.docx.");
+      expect(result.text).not.toMatch(/https?:\/\//);
+    });
+
+    it("falls back to the soonest deadline and keeps SMS under 300 characters", async () => {
+      const runTool = runner();
+      const result = await runAgent({
+        llm: "mock",
+        channel: "sms",
+        message: "send me the instructions for my next assignment",
+        runTool,
+      });
+      expect(runTool).toHaveBeenCalledWith("get_deadlines", {});
+      expect(runTool).toHaveBeenLastCalledWith("get_assignment", { assignmentId: QUIZ_ID });
+      expect(result.text.length).toBeLessThan(300);
+      expect(result.text.startsWith("Lab Report 3: Mitosis (Biology 151) is due")).toBe(true);
+      expect(result.magicLinkUrl).toBeUndefined();
+    });
+
+    it("says so when nothing is due and when a tool fails", async () => {
+      const empty = vi.fn(async (name: string) => (name === "get_deadlines" ? { deadlines: [] } : outputs[name]));
+      const none = await runAgent({ llm: "mock", channel: "web", message: "biology 151 handout please", runTool: empty });
+      expect(none.text).toBe("I couldn't find an upcoming assignment for Biology 151.");
+      expect(empty).not.toHaveBeenCalledWith("get_assignment", expect.anything());
+
+      const failing = vi.fn(async (name: string) => {
+        if (name === "get_assignment") throw new ToolError("assignment_not_found", "Assignment not found.");
+        return outputs[name];
+      });
+      const failed = await runAgent({ llm: "mock", channel: "web", message: "what are the instructions?", runTool: failing });
+      expect(failed.text).toBe(TOOL_FAILURE_TEXT);
+      expect(failed.citations).toEqual([]);
+    });
   });
 
   describe("study guide requests on the web", () => {

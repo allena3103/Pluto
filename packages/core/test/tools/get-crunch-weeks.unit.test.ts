@@ -25,6 +25,7 @@ describe("buildCrunchWeeks", () => {
         grade_group_id: "g1",
         courses: { name: "History 105" },
         grade_groups: { name: "Exams", weight_percent: 60 },
+        assignment_files: [{ count: 2 }],
       },
       {
         id: "a2",
@@ -38,6 +39,7 @@ describe("buildCrunchWeeks", () => {
         grade_group_id: "g2",
         courses: { name: "History 105" },
         grade_groups: { name: "Essays", weight_percent: 40 },
+        assignment_files: [{ count: 0 }],
       },
       {
         id: "a3",
@@ -51,6 +53,7 @@ describe("buildCrunchWeeks", () => {
         grade_group_id: "g1",
         courses: { name: "History 105" },
         grade_groups: { name: "Exams", weight_percent: 60 },
+        assignment_files: [{ count: 0 }],
       },
     ];
 

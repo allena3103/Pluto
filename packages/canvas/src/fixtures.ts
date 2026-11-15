@@ -110,6 +110,11 @@ function resolveFixtureRoute(url: URL): FixtureRoute | null {
     return { kind: "single", filePath: `courses/${courseId}/files.json` };
   }
 
+  const fileId = /^files\/(\d+)$/.exec(tail)?.[1];
+  if (fileId) {
+    return { kind: "single", filePath: `courses/${courseId}/files/${fileId}.json` };
+  }
+
   if (tail === "modules") {
     return { kind: "single", filePath: `courses/${courseId}/modules-items.json` };
   }

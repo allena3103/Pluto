@@ -1,3 +1,4 @@
+import type { DeadlineStatus } from "../contract";
 import { noteUrl } from "../deep-links";
 import type { ToolContext } from "../context";
 import { ToolError } from "./tool-error";
@@ -34,6 +35,17 @@ export function toDbToolError(error: unknown): ToolError {
 
 export function toIsoNow(): string {
   return new Date().toISOString();
+}
+
+/** Status shared by get_deadlines, get_crunch_weeks and get_assignment. A missing due date is never overdue. */
+export function deadlineStatus(
+  row: { graded: boolean; submitted: boolean; due_at: string | null },
+  nowIso: string,
+): DeadlineStatus {
+  if (row.graded) return "graded";
+  if (row.submitted) return "submitted";
+  if (row.due_at !== null && row.due_at < nowIso) return "overdue";
+  return "upcoming";
 }
 
 export function pageDeepLink(ctx: ToolContext, fileId: string, page: number): string {

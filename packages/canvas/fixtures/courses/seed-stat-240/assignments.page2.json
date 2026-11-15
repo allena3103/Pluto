@@ -5,7 +5,9 @@
     "due_at": "{{due:weeks=4,days=3}}",
     "points_possible": 50,
     "assignment_group_id": "seed-stat-project",
-    "submission": { "score": null, "workflow_state": "unsubmitted", "submitted_at": null }
+    "submission": { "score": null, "workflow_state": "unsubmitted", "submitted_at": null },
+    "html_url": "https://fixtures.canvas.local/courses/seed-stat-240/assignments/seed-123",
+    "description": "<p>Write a two-page proposal for your final project.</p>\n<h3>What to submit</h3>\n<ul>\n<li>Your research question</li>\n<li>The dataset &amp; how many rows it has<ul><li>a link or the file name</li></ul></li>\n</ul>\n<p>Read the <a class=\"instructure_file_link instructure_scribd_file inline_disabled\" title=\"Project Proposal Guidelines.pdf\" href=\"https://fixtures.canvas.local/courses/seed-stat-240/files/24001?wrap=1\" target=\"_blank\" data-api-endpoint=\"https://fixtures.canvas.local/api/v1/courses/seed-stat-240/files/24001\" data-api-returntype=\"File\">Project Proposal Guidelines.pdf</a> first, then fill in the <a class=\"instructure_file_link inline_disabled\" title=\"Proposal Template.docx\" href=\"https://fixtures.canvas.local/courses/seed-stat-240/files/24002?wrap=1\" target=\"_blank\" data-api-endpoint=\"https://fixtures.canvas.local/api/v1/courses/seed-stat-240/files/24002\" data-api-returntype=\"File\">Proposal Template.docx</a>.</p>\n<p>The <a class=\"instructure_file_link inline_disabled\" title=\"Data Dictionary.xlsx\" href=\"https://fixtures.canvas.local/courses/seed-stat-240/files/24003?wrap=1\" target=\"_blank\" data-api-endpoint=\"https://fixtures.canvas.local/api/v1/courses/seed-stat-240/files/24003\" data-api-returntype=\"File\">Data Dictionary.xlsx</a> lists every column.</p>\n<p><img src=\"https://fixtures.canvas.local/courses/seed-stat-240/files/24004/preview\" alt=\"Checklist icon\" data-api-endpoint=\"https://fixtures.canvas.local/api/v1/courses/seed-stat-240/files/24004\" data-api-returntype=\"File\"></p>"
   },
   {
     "id": "seed-125",

@@ -77,6 +77,7 @@ describe.skipIf(SKIP_DB_TESTS)("mcp handler against local supabase", () => {
   let hugeFileId = "";
   let courseBId = "";
   let fileBId = "";
+  let assignmentAId = "";
   let assignmentBId = "";
   const secretB = `b-secret-${uniqueName("notes")}`;
   const topicA = `mitochondria-${uniqueName("topic")}`;
@@ -157,24 +158,26 @@ describe.skipIf(SKIP_DB_TESTS)("mcp handler against local supabase", () => {
     ) as { id: string };
 
     const dueAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
-    must(
-      await service
-        .from("assignments")
-        .insert({
-          student_id: studentA.id,
-          course_id: courseA.id,
-          grade_group_id: groupA.id,
-          title: "Essay A",
-          points_possible: 100,
-          score: 90,
-          graded: true,
-          submitted: true,
-          due_at: dueAt,
-        })
-        .select("id")
-        .single(),
-      "assignment A",
-    );
+    assignmentAId = (
+      must(
+        await service
+          .from("assignments")
+          .insert({
+            student_id: studentA.id,
+            course_id: courseA.id,
+            grade_group_id: groupA.id,
+            title: "Essay A",
+            points_possible: 100,
+            score: 90,
+            graded: true,
+            submitted: true,
+            due_at: dueAt,
+          })
+          .select("id")
+          .single(),
+        "assignment A",
+      ) as { id: string }
+    ).id;
     assignmentBId = (
       must(
         await service
@@ -211,6 +214,7 @@ describe.skipIf(SKIP_DB_TESTS)("mcp handler against local supabase", () => {
       get_deadlines: { course: courseAName },
       get_grades: { course: courseAName },
       get_crunch_weeks: {},
+      get_assignment: { assignmentId: assignmentAId },
     };
 
     for (const name of TOOL_NAMES) {
@@ -222,6 +226,9 @@ describe.skipIf(SKIP_DB_TESTS)("mcp handler against local supabase", () => {
         const links = deepLinks(parsed);
         expect(links.length).toBeGreaterThan(0);
         for (const link of links) expect(link.startsWith(APP_URL)).toBe(true);
+      }
+      if (name === "get_assignment") {
+        expect(TOOLS.get_assignment.output.parse(result.structured).url).toBe(`${APP_URL}/assignments/${assignmentAId}`);
       }
     }
   });
@@ -239,6 +246,7 @@ describe.skipIf(SKIP_DB_TESTS)("mcp handler against local supabase", () => {
       ["get_deadlines", {}],
       ["get_grades", {}],
       ["get_crunch_weeks", {}],
+      ["get_assignment", { assignmentId: assignmentBId }],
     ];
     const blobs: string[] = [];
     for (const [name, args] of calls) {
@@ -246,6 +254,7 @@ describe.skipIf(SKIP_DB_TESTS)("mcp handler against local supabase", () => {
       blobs.push(result.text, JSON.stringify(result.structured ?? null));
     }
     const blob = blobs.join("\n");
+    expect(blob).toContain("assignment_not_found");
     for (const secret of [secretB, courseBId, fileBId, assignmentBId, studentB!.id]) {
       expect(blob).not.toContain(secret);
     }

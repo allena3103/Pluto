@@ -13,6 +13,7 @@ const ERROR_TEXT: Record<ToolError["code"], string> = {
   course_not_found: "Course not found.",
   course_ambiguous: "More than one course matches. Be more specific.",
   file_not_found: "Not found.",
+  assignment_not_found: "Not found.",
   db_error: "Something went wrong.",
 };
 

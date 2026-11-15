@@ -33,6 +33,11 @@ import {
 const TABLES = Object.keys(OWNER_COLUMN);
 const EPOCH = "1970-01-01T00:00:00+00:00";
 
+/** The column an attacker tries to overwrite; assignment_file_pages has no created_at. */
+function touch(table: string): { column: string; value: string } {
+  return table === "assignment_file_pages" ? { column: "text", value: "hijacked" } : { column: "created_at", value: EPOCH };
+}
+
 describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
   let service: SupabaseClient;
   let demo: SupabaseClient;
@@ -161,6 +166,8 @@ describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
         fileId: victimRows.fileId,
         chatSessionId: victimRows.chatSessionId,
         alertId: victimRows.alertId,
+        assignmentId: victimRows.assignmentId,
+        assignmentFileId: victimRows.assignmentFileId,
       },
     ];
     for (const attacker of attackers) {
@@ -187,8 +194,9 @@ describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
         for (const table of TABLES) {
           const owner = OWNER_COLUMN[table]!;
           const label = `${attacker.label} -> ${table} of ${targetId}`;
+          const { column, value } = touch(table);
           const updated = rowsOrDenied(
-            await attacker.client.from(table).update({ created_at: EPOCH }).eq(owner, targetId).select(),
+            await attacker.client.from(table).update({ [column]: value }).eq(owner, targetId).select(),
             `update ${label}`,
           );
           expect(updated, `update ${label}`).toEqual([]);
@@ -202,18 +210,20 @@ describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
     }
 
     // Students cannot write the service-only tables even for themselves, and a saved note is never edited.
-    for (const table of ["file_pages", "alerts", "study_blocks", "sms_messages", "magic_links", "phone_link_codes", "saved_notes"]) {
-      const res = await victim!.client.from(table).update({ created_at: EPOCH }).eq("student_id", victim!.id).select();
+    for (const table of ["file_pages", "alerts", "study_blocks", "sms_messages", "magic_links", "phone_link_codes", "saved_notes", "assignment_files", "assignment_file_pages"]) {
+      const { column, value } = touch(table);
+      const res = await victim!.client.from(table).update({ [column]: value }).eq("student_id", victim!.id).select();
       expect(res.error?.code, `victim update own ${table}`).toBe("42501");
     }
 
     // Everything is still there and untouched.
     for (const table of TABLES) {
       const owner = OWNER_COLUMN[table]!;
-      const rows = must(await service.from(table).select("created_at").eq(owner, victim!.id), table);
+      const { column, value } = touch(table);
+      const rows = must(await service.from(table).select(column).eq(owner, victim!.id), table);
       expect(rows.length, `victim rows in ${table} after attacks`).toBe(1);
       const touched = must(
-        await service.from(table).select("created_at").in(owner, [victim!.id, DEMO_STUDENT_ID]).eq("created_at", EPOCH),
+        await service.from(table).select(column).in(owner, [victim!.id, DEMO_STUDENT_ID]).eq(column, value),
         table,
       );
       expect(touched, `rows in ${table} modified by an attacker`).toEqual([]);
@@ -264,6 +274,11 @@ describe.skipIf(SKIP_DB_TESTS)("row-level security", () => {
           expires_at: new Date(Date.now() + 60_000).toISOString(),
         },
       ],
+      [
+        "assignment_files",
+        { student_id: mine, assignment_id: victimRows.assignmentId, canvas_file_id: "x", title: "x", file_type: "pdf" },
+      ],
+      ["assignment_file_pages", { student_id: mine, assignment_file_id: victimRows.assignmentFileId, page_number: 2, text: "x" }],
     ];
     for (const [table, row] of attempts) {
       // Service role bypasses RLS, so only the foreign key can stop this.

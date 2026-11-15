@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { downloadPdf, FILE_DOWNLOAD_MAX_BYTES } from "../../src/files-sync";
+import { downloadCanvasFile, FILE_DOWNLOAD_MAX_BYTES } from "../../src/files-sync";
 
 const TOKEN = "canvas-download-test-token-DO-NOT-LEAK";
 const BASE = "https://school.instructure.com";
@@ -19,12 +19,12 @@ function recordingFetch(respond: (url: URL) => Response): { fetch: typeof fetch;
 
 const pdfResponse = () => new Response(PDF, { status: 200, headers: { "content-type": "application/pdf" } });
 
-describe("downloadPdf", () => {
+describe("downloadCanvasFile", () => {
   it("sends the token only to the configured Canvas host", async () => {
     const { fetch, calls } = recordingFetch(() => pdfResponse());
-    await downloadPdf(`${BASE}/files/1/download?verifier=abc`, { baseUrl: BASE, token: TOKEN, fetch });
-    await downloadPdf("https://cdn.example.com/files/1.pdf", { baseUrl: BASE, token: TOKEN, fetch });
-    await downloadPdf("https://school.instructure.com.evil.test/files/1.pdf", { baseUrl: BASE, token: TOKEN, fetch });
+    await downloadCanvasFile(`${BASE}/files/1/download?verifier=abc`, { baseUrl: BASE, token: TOKEN, fetch }, "pdf");
+    await downloadCanvasFile("https://cdn.example.com/files/1.pdf", { baseUrl: BASE, token: TOKEN, fetch }, "pdf");
+    await downloadCanvasFile("https://school.instructure.com.evil.test/files/1.pdf", { baseUrl: BASE, token: TOKEN, fetch }, "pdf");
     expect(calls.map((call) => call.authorization)).toEqual([`Bearer ${TOKEN}`, null, null]);
   });
 
@@ -34,7 +34,7 @@ describe("downloadPdf", () => {
         ? new Response(null, { status: 302, headers: { location: "https://bucket.s3.amazonaws.com/signed?x=1" } })
         : pdfResponse(),
     );
-    const bytes = await downloadPdf(`${BASE}/files/1/download`, { baseUrl: BASE, token: TOKEN, fetch });
+    const bytes = await downloadCanvasFile(`${BASE}/files/1/download`, { baseUrl: BASE, token: TOKEN, fetch }, "pdf");
     expect(bytes.byteLength).toBe(PDF.byteLength);
     expect(calls).toEqual([
       { url: `${BASE}/files/1/download`, authorization: `Bearer ${TOKEN}` },
@@ -44,7 +44,7 @@ describe("downloadPdf", () => {
 
   it("never sends a token when none is configured (fixtures mode)", async () => {
     const { fetch, calls } = recordingFetch(() => pdfResponse());
-    await downloadPdf(`${BASE}/files/1`, { baseUrl: BASE, fetch });
+    await downloadCanvasFile(`${BASE}/files/1`, { baseUrl: BASE, fetch }, "pdf");
     expect(calls[0]?.authorization).toBeNull();
   });
 
@@ -74,13 +74,13 @@ describe("downloadPdf", () => {
     ];
     for (const [, respond, pattern] of cases) {
       const { fetch } = recordingFetch(respond);
-      const error = await downloadPdf(secretUrl, { baseUrl: BASE, token: TOKEN, fetch }).catch((e: unknown) => e);
+      const error = await downloadCanvasFile(secretUrl, { baseUrl: BASE, token: TOKEN, fetch }, "pdf").catch((e: unknown) => e);
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toMatch(pattern);
       expect((error as Error).message).not.toContain("SIGNED-SECRET");
       expect((error as Error).message).not.toContain(TOKEN);
     }
-    await expect(downloadPdf("http://school.instructure.com/x.pdf", { baseUrl: BASE, token: TOKEN })).rejects.toThrow(
+    await expect(downloadCanvasFile("http://school.instructure.com/x.pdf", { baseUrl: BASE, token: TOKEN }, "pdf")).rejects.toThrow(
       /https/,
     );
   });
@@ -99,7 +99,27 @@ describe("downloadPdf", () => {
     const { fetch } = recordingFetch(
       () => new Response(stream, { status: 200, headers: { "content-type": "application/pdf" } }),
     );
-    await expect(downloadPdf(`${BASE}/big.pdf`, { baseUrl: BASE, fetch })).rejects.toThrow(/larger than 50 MB/);
+    await expect(downloadCanvasFile(`${BASE}/big.pdf`, { baseUrl: BASE, fetch }, "pdf")).rejects.toThrow(/larger than 50 MB/);
     expect(pulled).toBeLessThanOrEqual(8);
+  });
+
+  it("accepts a Word file by its zip bytes and rejects anything else", async () => {
+    const docx = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]);
+    const docxType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    for (const contentType of [docxType, "application/octet-stream"]) {
+      const { fetch } = recordingFetch(() => new Response(docx, { status: 200, headers: { "content-type": contentType } }));
+      const bytes = await downloadCanvasFile(`${BASE}/files/2/download`, { baseUrl: BASE, fetch }, "docx");
+      expect(bytes).toEqual(docx);
+    }
+
+    const cases: Array<[Response, RegExp]> = [
+      [new Response("<html>login</html>", { status: 200, headers: { "content-type": "text/html" } }), /not a Word document \(content type text\/html\)/],
+      [new Response(PDF, { status: 200, headers: { "content-type": "application/pdf" } }), /not a Word document \(content type application\/pdf\)/],
+      [new Response("<html>login</html>", { status: 200, headers: { "content-type": docxType } }), /^file is not a Word document$/],
+    ];
+    for (const [response, pattern] of cases) {
+      const { fetch } = recordingFetch(() => response);
+      await expect(downloadCanvasFile(`${BASE}/files/2/download`, { baseUrl: BASE, fetch }, "docx")).rejects.toThrow(pattern);
+    }
   });
 });

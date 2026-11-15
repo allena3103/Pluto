@@ -25,7 +25,6 @@ describe("mcp-connect", () => {
 
   it("lists every contract tool", () => {
     expect(MCP_TOOLS.map((tool) => tool.name)).toEqual([...TOOL_NAMES, ...WRITE_TOOL_NAMES]);
-    expect(MCP_TOOLS).toHaveLength(8);
     expect(MCP_TOOLS.filter((tool) => tool.write).map((tool) => tool.name)).toEqual(["save_study_guide"]);
   });
 

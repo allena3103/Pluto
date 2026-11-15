@@ -7,8 +7,7 @@ const F1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const F2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 describe("save_study_guide contract", () => {
-  it("is not one of the 7 read tools", () => {
-    expect(TOOL_NAMES).toHaveLength(7);
+  it("is not one of the read tools", () => {
     expect(TOOL_NAMES).not.toContain("save_study_guide");
     expect(WRITE_TOOL_NAMES).toEqual(["save_study_guide"]);
   });

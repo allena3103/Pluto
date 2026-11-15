@@ -1,11 +1,13 @@
 import { createCanvasHttpClient } from "./http";
 import { createFixturesFetch } from "./fixtures";
+import { mapInBatches } from "./map";
 import type {
   CanvasAssignment,
   CanvasAssignmentGroup,
   CanvasClientOptions,
   CanvasCourse,
   CanvasCourseFile,
+  CanvasFileMeta,
   CanvasMode,
   CanvasModuleFileItem,
 } from "./types";
@@ -13,8 +15,8 @@ import { CanvasHttpError, CanvasNotFoundError } from "./types";
 
 const MODE_FIXTURES: CanvasMode = "fixtures";
 const MODE_LIVE: CanvasMode = "live";
-/** Parallel file lookups when a course's files are read from Modules. Small to stay clear of Canvas throttling. */
-const MODULE_FILE_CONCURRENCY = 4;
+/** Parallel single-file lookups (module files, assignment attachments). Small to stay clear of Canvas throttling. */
+export const FILE_LOOKUP_CONCURRENCY = 4;
 
 type CanvasCourseApi = {
   id: number | string;
@@ -41,6 +43,8 @@ type CanvasAssignmentApi = {
   points_possible?: number | null;
   assignment_group_id?: number | string | null;
   submission?: CanvasSubmissionApi | null;
+  description?: string | null;
+  html_url?: string | null;
 };
 
 type CanvasFileApi = {
@@ -68,6 +72,8 @@ export type CanvasClient = {
   listAssignments: (canvasCourseId: string) => Promise<CanvasAssignment[]>;
   listCourseFiles: (canvasCourseId: string) => Promise<CanvasCourseFile[]>;
   listModuleItems: (canvasCourseId: string) => Promise<CanvasModuleFileItem[]>;
+  /** One course file of any type by id; null when the student can't open it (403/404). */
+  getCourseFile: (canvasCourseId: string, canvasFileId: string) => Promise<CanvasFileMeta | null>;
 };
 
 export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
@@ -106,33 +112,32 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
     }
   }
 
+  /** One file object by id, or null when the student can't open it (locked or unpublished: 403/404). */
+  async function readFileRow(canvasCourseId: string, fileId: string, endpointName: string) {
+    try {
+      return await http.getObject({
+        path: courseApiPath(canvasCourseId, `files/${encodeURIComponent(fileId)}`),
+        endpointName,
+      });
+    } catch (error) {
+      if (error instanceof CanvasNotFoundError) return null;
+      if (error instanceof CanvasHttpError && error.status === 403) return null;
+      throw error;
+    }
+  }
+
   /**
    * Many courses hide the Files tab, so `/files` is 403 for students while the same PDFs are
    * linked from Modules. Read each module file by id instead. Files the student can't open
-   * (locked or unpublished: 403/404) are skipped; auth and rate-limit errors still throw.
+   * are skipped; auth and rate-limit errors still throw.
    */
   async function listModuleFiles(canvasCourseId: string): Promise<CanvasCourseFile[]> {
     const ids = [...new Set((await listModuleItems(canvasCourseId)).map((item) => item.canvasFileId))];
-    const files: CanvasCourseFile[] = [];
-    for (let start = 0; start < ids.length; start += MODULE_FILE_CONCURRENCY) {
-      const batch = await Promise.all(
-        ids.slice(start, start + MODULE_FILE_CONCURRENCY).map(async (fileId) => {
-          try {
-            const row = await http.getObject({
-              path: courseApiPath(canvasCourseId, `files/${encodeURIComponent(fileId)}`),
-              endpointName: "module file",
-            });
-            return row ? mapCourseFile(row) : null;
-          } catch (error) {
-            if (error instanceof CanvasNotFoundError) return null;
-            if (error instanceof CanvasHttpError && error.status === 403) return null;
-            throw error;
-          }
-        }),
-      );
-      for (const file of batch) if (file) files.push(file);
-    }
-    return files;
+    const files = await mapInBatches(ids, FILE_LOOKUP_CONCURRENCY, async (fileId) => {
+      const row = await readFileRow(canvasCourseId, fileId, "module file");
+      return row ? mapCourseFile(row) : null;
+    });
+    return files.filter((file): file is CanvasCourseFile => file !== null);
   }
 
   return {
@@ -196,6 +201,11 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
     },
 
     listModuleItems,
+
+    async getCourseFile(canvasCourseId, canvasFileId) {
+      const row = await readFileRow(canvasCourseId, canvasFileId, "course file");
+      return row ? mapFileMeta(row) : null;
+    },
   };
 }
 
@@ -260,6 +270,8 @@ function mapAssignment(row: unknown): CanvasAssignment | null {
     score: hasScore ? submission.score ?? null : null,
     graded,
     submitted,
+    descriptionHtml: typeof source.description === "string" && source.description ? source.description : null,
+    htmlUrl: typeof source.html_url === "string" ? source.html_url : null,
   };
 }
 
@@ -278,6 +290,21 @@ function mapCourseFile(row: unknown): CanvasCourseFile | null {
     updatedAt: typeof source.updated_at === "string" ? source.updated_at : null,
     createdAt: typeof source.created_at === "string" ? source.created_at : null,
     sizeBytes: typeof source.size === "number" ? source.size : null,
+  };
+}
+
+function mapFileMeta(row: unknown): CanvasFileMeta | null {
+  const source = row as CanvasFileApi | null;
+  if (!source || source.id == null) return null;
+  const title = typeof source.display_name === "string" ? source.display_name : source.filename;
+  if (typeof title !== "string" || !title.trim()) return null;
+  return {
+    canvasFileId: String(source.id),
+    title,
+    contentType: typeof source["content-type"] === "string" ? source["content-type"] : null,
+    sizeBytes: typeof source.size === "number" ? source.size : null,
+    updatedAt: typeof source.updated_at === "string" ? source.updated_at : null,
+    url: typeof source.url === "string" ? source.url : "",
   };
 }
 

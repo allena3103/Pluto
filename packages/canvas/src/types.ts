@@ -32,6 +32,10 @@ export type CanvasAssignment = {
   score: number | null;
   graded: boolean;
   submitted: boolean;
+  /** The assignment description as Canvas HTML; attachments live here as file links. */
+  descriptionHtml: string | null;
+  /** The assignment's page in Canvas. */
+  htmlUrl: string | null;
 };
 
 export type CanvasCourseFile = {
@@ -41,6 +45,19 @@ export type CanvasCourseFile = {
   updatedAt: string | null;
   createdAt: string | null;
   sizeBytes: number | null;
+};
+
+/**
+ * One course file of any type, read by id. `url` is a capability download link that works
+ * without auth: keep it in memory for the download only, never store, log or return it.
+ */
+export type CanvasFileMeta = {
+  canvasFileId: string;
+  title: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  updatedAt: string | null;
+  url: string;
 };
 
 export type CanvasModuleFileItem = {

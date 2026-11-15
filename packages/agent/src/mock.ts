@@ -1,3 +1,4 @@
+import { isAssignmentRequest, runMockAssignment } from "./assignment";
 import { collectCitations } from "./citations";
 import { parsePlanRequest, runMockPlan } from "./plan";
 import { withDeadline } from "./timeout";
@@ -249,6 +250,7 @@ export async function runMock(input: RunAgentInput, runTool: AgentToolRunner): P
   if (plan) return runMockPlan(input, runTool, plan);
 
   const request = input.message.split("\n", 1)[0] ?? "";
+  if (isAssignmentRequest(request)) return runMockAssignment(input, runTool);
   const studyGuide = input.channel === "web" && /study guide/i.test(request);
   if (studyGuide || isVagueNotesRequest(request)) {
     try {

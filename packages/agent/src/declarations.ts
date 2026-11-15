@@ -15,7 +15,7 @@ function parametersFor(schema: z.ZodType): Record<string, unknown> {
 }
 
 /**
- * The seven contract tools, plus `create_magic_link` only when the host can mint one (SMS)
+ * The eight contract tools, plus `create_magic_link` only when the host can mint one (SMS)
  * and `ask_clarifying_questions` only where the host can show questions (web).
  */
 export function buildToolDeclarations(options: { magicLink: boolean; clarify: boolean }): AgentToolDeclaration[] {

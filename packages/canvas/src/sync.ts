@@ -1,19 +1,25 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { ASSIGNMENT_FILES_BUCKET, assignmentFileStoragePath } from "@pluto/core/assignment-ingest";
 import type { PlutoDb } from "@pluto/core/context";
-import type { CanvasClient } from "./client";
+import { FILE_LOOKUP_CONCURRENCY, type CanvasClient } from "./client";
 import {
+  buildAssignmentFileRow,
   buildAssignmentRow,
   buildCourseRow,
   buildFileRow,
   buildGradeGroupRow,
+  classifyFileType,
   countInsertedUpdated,
   dedupeBy,
   errorText,
   fileStoragePath,
+  linkedFileIds,
+  mapInBatches,
   weightIsStorable,
   type SavedAssignment,
+  type SavedAssignmentFile,
   type SavedFile,
 } from "./map";
 import {
@@ -24,10 +30,12 @@ import {
   type CanvasAssignmentGroup,
   type CanvasCourse,
   type CanvasCourseFile,
+  type CanvasFileMeta,
   type CanvasModuleFileItem,
 } from "./types";
 
 const SYNC_BUDGET_MS = 240_000;
+const DELETE_BATCH = 100;
 
 export type DueDateChange = {
   assignmentId: string;
@@ -44,6 +52,8 @@ export type SyncResult = {
   gradeGroups: SyncCounts;
   assignments: SyncCounts;
   files: SyncCounts;
+  /** `assignment_files` rows: files linked from assignment descriptions. `removed`: links that are gone. */
+  assignmentFiles: SyncCounts & { removed: number };
   dueDateChanges: DueDateChange[];
   errors: string[];
 };
@@ -57,10 +67,21 @@ export type SyncDeps = {
   notifyDueDateChange?: (change: DueDateChange) => Promise<void>;
 };
 
+/**
+ * The course's linked files by Canvas file id. `notRead`: ids not looked up this time (lookup
+ * failed for a reason other than 403/404, course cap or time budget); their saved rows are left alone.
+ */
+type AttachmentLookup = { files: Map<string, CanvasFileMeta>; notRead: Set<string> };
+
+/** Linked files kept per assignment, and looked up per course per sync, so one description can't stall a sync. */
+export const MAX_LINKED_FILES_PER_ASSIGNMENT = 20;
+export const MAX_LINKED_FILE_LOOKUPS_PER_COURSE = 200;
+
 type CourseWork = {
   course: CanvasCourse;
   groups: CanvasAssignmentGroup[] | null;
   assignments: CanvasAssignment[] | null;
+  attachments: AttachmentLookup | null;
   files: CanvasCourseFile[] | null;
   weekByFileId: Map<string, string> | null;
 };
@@ -91,7 +112,7 @@ export async function syncCanvas(deps: SyncDeps): Promise<SyncResult> {
       result.errors.push("Sync stopped because it exceeded its time budget");
       break;
     }
-    work.push(await loadCourse(deps.client, course, result));
+    work.push(await loadCourse(deps.client, course, started, result));
   }
 
   const courseIdByCanvas = await writeCourses(deps.db, studentId, work, result);
@@ -105,7 +126,8 @@ export async function syncCanvas(deps: SyncDeps): Promise<SyncResult> {
 
   const groupIdByCanvas = await writeGroups(deps.db, studentId, ready, result);
   if (groupIdByCanvas) {
-    await writeAssignments(deps, studentId, ready, groupIdByCanvas, now, result);
+    const assignmentIdByCanvas = await writeAssignments(deps, studentId, ready, groupIdByCanvas, now, result);
+    if (assignmentIdByCanvas) await writeAssignmentFiles(deps.db, studentId, ready, assignmentIdByCanvas, now, result);
   }
   await writeFiles(deps.db, studentId, ready, now, result);
   return result;
@@ -118,6 +140,7 @@ function emptyResult(): SyncResult {
     gradeGroups: counts(),
     assignments: counts(),
     files: counts(),
+    assignmentFiles: { ...counts(), removed: 0 },
     dueDateChanges: [],
     errors: [],
   };
@@ -147,7 +170,12 @@ async function readList<T>(result: SyncResult, label: string, load: () => Promis
   }
 }
 
-async function loadCourse(client: CanvasClient, course: CanvasCourse, result: SyncResult): Promise<CourseWork> {
+async function loadCourse(
+  client: CanvasClient,
+  course: CanvasCourse,
+  started: number,
+  result: SyncResult,
+): Promise<CourseWork> {
   const label = course.canvasCourseId;
   const groups = await readList(result, `assignment groups ${label}`, () =>
     client.listAssignmentGroups(course.canvasCourseId),
@@ -156,15 +184,70 @@ async function loadCourse(client: CanvasClient, course: CanvasCourse, result: Sy
     groups === null
       ? null
       : await readList(result, `assignments ${label}`, () => client.listAssignments(course.canvasCourseId));
+  const attachments =
+    assignments === null ? null : await loadAttachments(client, course.canvasCourseId, assignments, started, result);
   const files = await readList(result, `files ${label}`, () => client.listCourseFiles(course.canvasCourseId));
   const modules = await readList(result, `modules ${label}`, () => client.listModuleItems(course.canvasCourseId));
   return {
     course,
     groups,
     assignments,
+    attachments,
     files,
     weekByFileId: modules === null ? null : weekLabels(modules),
   };
+}
+
+/**
+ * Metadata of the files linked from the course's assignment descriptions, a few at a time, up to
+ * the caps and only while the sync has time left. The download URL in it stays in memory; it is
+ * never written anywhere. Overflow is reported once per course, without URLs.
+ */
+async function loadAttachments(
+  client: CanvasClient,
+  canvasCourseId: string,
+  assignments: CanvasAssignment[],
+  started: number,
+  result: SyncResult,
+): Promise<AttachmentLookup> {
+  const lookup: AttachmentLookup = { files: new Map(), notRead: new Set() };
+  const ids = new Set<string>();
+  let skipped = 0;
+  for (const assignment of assignments) {
+    const linked = linkedFileIds(assignment.descriptionHtml, canvasCourseId);
+    skipped += Math.max(0, linked.length - MAX_LINKED_FILES_PER_ASSIGNMENT);
+    for (const id of linked.slice(0, MAX_LINKED_FILES_PER_ASSIGNMENT)) ids.add(id);
+  }
+  const all = [...ids];
+  const batch = all.slice(0, MAX_LINKED_FILE_LOOKUPS_PER_COURSE);
+  for (const id of all.slice(MAX_LINKED_FILE_LOOKUPS_PER_COURSE)) lookup.notRead.add(id);
+  skipped += all.length - batch.length;
+  if (skipped > 0) {
+    result.errors.push(
+      `attachments ${canvasCourseId}: ${skipped} linked files skipped (at most ${MAX_LINKED_FILES_PER_ASSIGNMENT} per assignment and ${MAX_LINKED_FILE_LOOKUPS_PER_COURSE} per course)`,
+    );
+  }
+
+  let outOfTime = false;
+  await mapInBatches(batch, FILE_LOOKUP_CONCURRENCY, async (fileId) => {
+    if (overBudget(started)) {
+      outOfTime = true;
+      lookup.notRead.add(fileId);
+      return;
+    }
+    try {
+      const file = await client.getCourseFile(canvasCourseId, fileId);
+      if (file) lookup.files.set(fileId, file);
+    } catch (error) {
+      rethrowIfFatal(error);
+      lookup.notRead.add(fileId);
+      result.errors.push(`attachment ${canvasCourseId}/${fileId}: ${errorText(error)}`);
+    }
+  });
+  if (outOfTime) {
+    result.errors.push(`attachments ${canvasCourseId}: stopped at the sync time budget; the rest are read next sync`);
+  }
+  return lookup;
 }
 
 function weekLabels(items: CanvasModuleFileItem[]): Map<string, string> {
@@ -255,6 +338,7 @@ async function writeGroups(
   return ids;
 }
 
+/** Writes the assignments; returns their ids by Canvas id, or null when nothing could be written. */
 async function writeAssignments(
   deps: SyncDeps,
   studentId: string,
@@ -262,7 +346,7 @@ async function writeAssignments(
   groupIdByCanvas: Map<string, string>,
   now: Date,
   result: SyncResult,
-): Promise<void> {
+): Promise<Map<string, string> | null> {
   const planned: Array<{ canvasId: string; row: ReturnType<typeof buildAssignmentRow>["row"]; change: PendingChange | null }> = [];
 
   const canvasIds: string[] = [];
@@ -274,7 +358,7 @@ async function writeAssignments(
   }
 
   const savedByCanvas = await loadAssignments(deps.db, studentId, dedupeBy(canvasIds, (id) => id), result);
-  if (!savedByCanvas) return;
+  if (!savedByCanvas) return null;
 
   for (const item of work) {
     if (!item.assignments) continue;
@@ -309,15 +393,16 @@ async function writeAssignments(
   const uniquePlanned = dedupeBy(planned, (item) => item.canvasId);
   const rows = uniquePlanned.map((item) => item.row);
   assertStudent(rows, studentId);
-  if (rows.length === 0) return;
+  if (rows.length === 0) return new Map();
 
-  const { error } = await deps.db
+  const { data, error } = await deps.db
     .from("assignments")
-    .upsert(rows, { onConflict: "student_id,canvas_assignment_id", defaultToNull: false });
+    .upsert(rows, { onConflict: "student_id,canvas_assignment_id", defaultToNull: false })
+    .select("id, canvas_assignment_id");
 
   if (error) {
     result.errors.push(`assignments: ${errorText(error)}`);
-    return;
+    return null;
   }
 
   const writtenIds = rows.map((row) => row.canvas_assignment_id).filter((id): id is string => Boolean(id));
@@ -329,13 +414,156 @@ async function writeAssignments(
   const changes = uniquePlanned.flatMap((item) => (item.change ? [item.change] : []));
   result.dueDateChanges.push(...changes);
 
-  if (!deps.notifyDueDateChange) return;
-  for (const change of changes) {
-    try {
-      await deps.notifyDueDateChange(change);
-    } catch (error) {
-      result.errors.push(`Due date notification failed: ${errorText(error)}`);
+  if (deps.notifyDueDateChange) {
+    for (const change of changes) {
+      try {
+        await deps.notifyDueDateChange(change);
+      } catch (error) {
+        result.errors.push(`Due date notification failed: ${errorText(error)}`);
+      }
     }
+  }
+
+  const ids = new Map<string, string>();
+  for (const row of data ?? []) {
+    if (row.canvas_assignment_id) ids.set(row.canvas_assignment_id, row.id);
+  }
+  return ids;
+}
+
+/**
+ * One `assignment_files` row per file linked from each assignment's description. Rows for
+ * links that are gone (or whose file now has another type) are deleted with their stored
+ * object; pages go with the row. Assignments whose course could not be read are left alone.
+ */
+async function writeAssignmentFiles(
+  db: PlutoDb,
+  studentId: string,
+  work: Array<CourseWork & { courseId: string }>,
+  assignmentIdByCanvas: Map<string, string>,
+  now: Date,
+  result: SyncResult,
+): Promise<void> {
+  const key = (assignmentId: string, canvasFileId: string) => `${assignmentId}/${canvasFileId}`;
+  const planned: Array<{ assignmentId: string; file: CanvasFileMeta }> = [];
+  const kept = new Set<string>();
+  const covered = new Set<string>();
+  for (const item of work) {
+    if (!item.assignments || !item.attachments) continue;
+    for (const assignment of dedupeBy(item.assignments, (row) => row.canvasAssignmentId)) {
+      const assignmentId = assignmentIdByCanvas.get(assignment.canvasAssignmentId);
+      if (!assignmentId) continue;
+      covered.add(assignmentId);
+      const fileIds = linkedFileIds(assignment.descriptionHtml, item.course.canvasCourseId);
+      // Same cap as loadAttachments: links past it are not kept.
+      for (const fileId of fileIds.slice(0, MAX_LINKED_FILES_PER_ASSIGNMENT)) {
+        const file = item.attachments.files.get(fileId);
+        if (file) planned.push({ assignmentId, file });
+        if (file || item.attachments.notRead.has(fileId)) kept.add(key(assignmentId, fileId));
+      }
+    }
+  }
+
+  const saved = await loadAssignmentFiles(db, studentId, result);
+  if (!saved) return;
+  const savedByKey = new Map(saved.map((row) => [key(row.assignmentId, row.canvasFileId), row]));
+  const plannedType = new Map(planned.map(({ assignmentId, file }) => [key(assignmentId, file.canvasFileId), classifyFileType(file)]));
+
+  const stale = saved.filter((row) => {
+    if (!covered.has(row.assignmentId)) return false;
+    const rowKey = key(row.assignmentId, row.canvasFileId);
+    const type = plannedType.get(rowKey);
+    return !kept.has(rowKey) || (type !== undefined && type !== row.fileType);
+  });
+  if (!(await deleteAssignmentFiles(db, studentId, stale, result))) return;
+  const staleIds = new Set(stale.map((row) => row.id));
+
+  const rows = planned.map(({ assignmentId, file }) => {
+    const existing = savedByKey.get(key(assignmentId, file.canvasFileId)) ?? null;
+    return buildAssignmentFileRow({
+      studentId,
+      assignmentId,
+      file,
+      existing: existing && !staleIds.has(existing.id) ? existing : null,
+      now,
+    });
+  });
+  assertStudent(rows, studentId);
+
+  const inserted = rows.filter((row) => {
+    const existing = savedByKey.get(key(row.assignment_id, row.canvas_file_id));
+    return !existing || staleIds.has(existing.id);
+  }).length;
+  result.assignmentFiles = {
+    inserted,
+    updated: rows.length - inserted,
+    removed: stale.filter((row) => !plannedType.has(key(row.assignmentId, row.canvasFileId))).length,
+  };
+  if (rows.length === 0) return;
+
+  const { error } = await db
+    .from("assignment_files")
+    .upsert(rows, { onConflict: "student_id,assignment_id,canvas_file_id", defaultToNull: false });
+  if (error) {
+    result.errors.push(`assignment files: ${errorText(error)}`);
+    result.assignmentFiles = { ...result.assignmentFiles, inserted: 0, updated: 0 };
+  }
+}
+
+/** Deletes the rows (their pages cascade) and their stored objects. False when the rows could not be deleted. */
+async function deleteAssignmentFiles(
+  db: PlutoDb,
+  studentId: string,
+  rows: SavedAssignmentFile[],
+  result: SyncResult,
+): Promise<boolean> {
+  for (let start = 0; start < rows.length; start += DELETE_BATCH) {
+    const ids = rows.slice(start, start + DELETE_BATCH).map((row) => row.id);
+    const { error } = await db.from("assignment_files").delete().eq("student_id", studentId).in("id", ids);
+    if (error) {
+      result.errors.push(`assignment files: ${errorText(error)}`);
+      return false;
+    }
+  }
+  // Paths come from the owner and row id, never from a stored value.
+  const paths = rows.flatMap((row) =>
+    row.fileType === "pdf" || row.fileType === "docx" ? [assignmentFileStoragePath(studentId, row.id, row.fileType)] : [],
+  );
+  if (paths.length > 0) {
+    const { error } = await db.storage.from(ASSIGNMENT_FILES_BUCKET).remove(paths);
+    if (error) result.errors.push(`assignment files storage: ${errorText(error)}`);
+  }
+  return true;
+}
+
+async function loadAssignmentFiles(
+  db: PlutoDb,
+  studentId: string,
+  result: SyncResult,
+): Promise<SavedAssignmentFile[] | null> {
+  const pageSize = 1000;
+  const found: SavedAssignmentFile[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await db
+      .from("assignment_files")
+      .select("id, assignment_id, canvas_file_id, file_type, ingest_status")
+      .eq("student_id", studentId)
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) {
+      result.errors.push(`assignment files: ${errorText(error)}`);
+      return null;
+    }
+    for (const row of data ?? []) {
+      found.push({
+        id: row.id,
+        assignmentId: row.assignment_id,
+        canvasFileId: row.canvas_file_id,
+        fileType: row.file_type,
+        ingestStatus: row.ingest_status,
+      });
+    }
+    if ((data ?? []).length < pageSize) return found;
   }
 }
 
@@ -490,6 +718,8 @@ function fixtureRoute(pathname: string): FixtureRoute | null {
     };
   }
   if (tail === "files") return { kind: "single", filePath: `courses/${courseId}/files.json` };
+  const fileId = /^files\/(\d+)$/.exec(tail)?.[1];
+  if (fileId) return { kind: "single", filePath: `courses/${courseId}/files/${fileId}.json` };
   if (tail === "modules") return { kind: "single", filePath: `courses/${courseId}/modules-items.json` };
   return null;
 }

@@ -11,6 +11,7 @@ export const TOOL_SUMMARIES: Record<ToolName, string> = {
   get_note_pages: "The pages of one file, each with a link back to the page.",
   search_notes: "Search your notes for a topic.",
   get_deadlines: "What is due soon, and whether a due date moved.",
+  get_assignment: "One assignment's instructions and the text of its attached PDF and Word files.",
   get_grades: "Your grade per group and your running grade.",
   get_crunch_weeks: "Your busiest weeks ahead, ranked.",
 };
