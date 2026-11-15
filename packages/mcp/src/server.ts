@@ -1,5 +1,12 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolRequestSchema,
+  ErrorCode,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListToolsRequestSchema,
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { toJSONSchema, type ZodType } from "zod";
 import { TOOLS, TOOL_NAMES, WRITE_TOOLS, WRITE_TOOL_NAMES, type ToolName, type WriteToolName } from "@pluto/core/contract";
@@ -8,6 +15,7 @@ import { saveStudyGuide, type SaveStudyGuideDeps } from "@pluto/core/save-study-
 import { TOOL_HANDLERS, ToolError } from "@pluto/core/tools/index";
 import { WriteToolError } from "@pluto/core/tools/tool-error";
 import { SERVER_INSTRUCTIONS, TOOL_DESCRIPTIONS, WRITE_TOOL_DESCRIPTIONS } from "./descriptions";
+import { PROMPTS, PromptArgumentError, renderPrompt } from "./prompts";
 
 const GENERIC_TOOL_ERROR = "The tool failed.";
 
@@ -118,7 +126,7 @@ export function createPlutoMcpServer(ctx: ToolContext, options?: PlutoMcpServerO
   const server = new Server(
     { name: "pluto", version: "0.0.0" },
     {
-      capabilities: { tools: {} },
+      capabilities: { tools: {}, prompts: {} },
       instructions: SERVER_INSTRUCTIONS,
     },
   );
@@ -165,6 +173,17 @@ export function createPlutoMcpServer(ctx: ToolContext, options?: PlutoMcpServerO
       return toolErrorResult(GENERIC_TOOL_ERROR);
     }
     return callTool(name, () => TOOL_HANDLERS[name](ctx, args), redactErrors);
+  });
+
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: PROMPTS.map((p) => ({ ...p, arguments: [...p.arguments] })) }));
+
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    try {
+      return renderPrompt(request.params.name, request.params.arguments);
+    } catch (error) {
+      if (error instanceof PromptArgumentError) throw new McpError(ErrorCode.InvalidParams, error.message);
+      throw error;
+    }
   });
 
   return server;
