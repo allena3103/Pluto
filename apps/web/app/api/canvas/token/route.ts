@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isJudgeUser } from "@/lib/judge";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeCanvasBaseUrl } from "@pluto/canvas/host";
 import { encryptCanvasToken } from "@pluto/canvas/token-crypto";
@@ -25,9 +26,9 @@ async function getSession() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) {
-    return { supabase, userId: null as string | null };
+    return { supabase, userId: null as string | null, judge: false };
   }
-  return { supabase, userId: data.user.id };
+  return { supabase, userId: data.user.id, judge: isJudgeUser(data.user) };
 }
 
 /**
@@ -70,8 +71,10 @@ export async function GET(): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const { userId } = await getSession();
+  const { userId, judge } = await getSession();
   if (!userId) return json({ error: "Unauthorized" }, 401);
+  // Every judge shares one account, so one judge's Canvas would be visible to all of them.
+  if (judge) return json({ error: "Canvas linking is off on the judge demo account." }, 403);
 
   let rawBody: unknown;
   try {

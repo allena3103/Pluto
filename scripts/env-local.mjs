@@ -4,7 +4,7 @@
 //
 // `npm run env:local -- --hosted [--port 3001]`
 // Writes apps/web/.env.production.local instead: the hosted Supabase project plus the production
-// settings Vercel uses (live Canvas, Gemini, Sendblue, PROD_* secrets, demo auto-login).
+// settings Vercel uses (live Canvas, Gemini, Sendblue, PROD_* secrets).
 // Then `npm run build -w @pluto/web && npm run start -w @pluto/web` runs like production.
 // Every write goes to the real hosted database.
 import { execSync } from "node:child_process";
@@ -104,7 +104,6 @@ if (hosted) {
     PLUTO_LLM: "gemini",
     SMS_PROVIDER: "sendblue",
     PLUTO_DEMO_MCP_URL_ENABLED: "1",
-    PLUTO_AUTO_LOGIN_DEMO: "1",
   });
   secretsNote += ", production settings";
 }

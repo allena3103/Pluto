@@ -1,6 +1,7 @@
 "use server";
 
 import { llmFromEnv } from "@/lib/agent-reply";
+import { isJudgeUser } from "@/lib/judge";
 import { simulateInboundSms, type SimResult } from "@/lib/sms-inbound";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -19,6 +20,7 @@ export async function sendSimMessage(fromNumber: string, content: string): Promi
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return { ok: false, error: "Sign in again." };
+  if (isJudgeUser(data.user)) return { ok: false, error: "SMS is off on the judge demo account." };
 
   const appUrl = process.env.APP_URL;
   if (!appUrl) return { ok: false, error: "Server is not configured." };

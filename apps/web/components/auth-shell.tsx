@@ -6,11 +6,14 @@ export function AuthShell({
   description,
   children,
   footer,
+  banner,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Shown between the heading and the card, for a call to action that must not be missed. */
+  banner?: React.ReactNode;
 }) {
   return (
     <main className="flex min-h-dvh w-full flex-col items-center justify-center px-4 py-10">
@@ -22,6 +25,7 @@ export function AuthShell({
           </h1>
           {description ? <p className="mt-1.5 text-sm font-semibold text-muted-foreground">{description}</p> : null}
         </div>
+        {banner}
         <div className="rounded-3xl border border-border/80 bg-card p-6 shadow-warm-lg">{children}</div>
         {footer ? <div className="mt-5 text-center text-sm font-semibold text-muted-foreground">{footer}</div> : null}
       </div>

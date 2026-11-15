@@ -26,7 +26,7 @@ type ProfileUpdate = {
   canvas_base_url: string | null;
 };
 
-function mockSession(user: { id: string } | null) {
+function mockSession(user: { id: string; app_metadata?: Record<string, unknown> } | null) {
   const maybeSingle = vi.fn();
   const eq = vi.fn().mockReturnValue({ maybeSingle });
   const select = vi.fn().mockReturnValue({ eq });
@@ -128,6 +128,18 @@ describe("POST /api/canvas/token", () => {
       expect(session.from).not.toHaveBeenCalled();
       vi.clearAllMocks();
     }
+  });
+
+  it("returns 403 for the shared judge account and writes nothing", async () => {
+    const session = mockSession({ id: USER_ID, app_metadata: { judge: true } });
+    const admin = mockAdmin();
+
+    const response = await POST(post(validBody()));
+
+    expect(response.status).toBe(403);
+    expect(createAdminClient).not.toHaveBeenCalled();
+    expect(admin.update).not.toHaveBeenCalled();
+    expect(session.from).not.toHaveBeenCalled();
   });
 
   it("writes the encrypted token for the session user only", async () => {
