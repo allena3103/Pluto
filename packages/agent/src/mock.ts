@@ -245,6 +245,9 @@ async function runMockClassNotes(input: RunAgentInput, runTool: AgentToolRunner)
 export async function runMock(input: RunAgentInput, runTool: AgentToolRunner): Promise<AgentResult> {
   if (input.signal?.aborted) return { text: EMPTY_REPLY_TEXT, citations: [] };
 
+  const plan = parsePlanRequest(input.message);
+  if (plan) return runMockPlan(input, runTool, plan);
+
   const request = input.message.split("\n", 1)[0] ?? "";
   const studyGuide = input.channel === "web" && /study guide/i.test(request);
   if (studyGuide || isVagueNotesRequest(request)) {
@@ -254,9 +257,6 @@ export async function runMock(input: RunAgentInput, runTool: AgentToolRunner): P
       return { text: TOOL_FAILURE_TEXT, citations: [] };
     }
   }
-
-  const plan = parsePlanRequest(input.message);
-  if (plan) return runMockPlan(input, runTool, plan);
 
   const call = mockToolCall(input.message);
   let result: unknown;
