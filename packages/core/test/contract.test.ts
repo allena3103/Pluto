@@ -27,7 +27,7 @@ import {
   type ToolName,
   type ToolOutput,
 } from "../src/contract";
-import { noteUrl } from "../src/deep-links";
+import { assignmentFilePath, assignmentPath, noteUrl } from "../src/deep-links";
 
 const APP = "http://localhost:3000";
 const STUDENT = "11111111-1111-4111-8111-111111111111";
@@ -53,6 +53,7 @@ const deadline = {
   points: 100,
   weightGroup: "Essays",
   status: "upcoming",
+  attachmentCount: 2,
 };
 
 type Case = { valid: unknown; expected?: unknown; invalid: unknown[] };
@@ -138,9 +139,40 @@ const toolCases: Record<ToolName, { input: Case; output: Case }> = {
       valid: { deadlines: [deadline, { ...deadline, previousDueAt: T1, points: null, weightGroup: null, status: "overdue" }] },
       invalid: [
         { deadlines: [{ ...deadline, status: "late" }] },
+        { deadlines: [{ ...deadline, attachmentCount: undefined }] },
         { deadlines: [{ ...deadline, dueAt: "2026-11-20 23:59" }] },
         { deadlines: [{ ...deadline, assignmentId: "a1" }] },
         { deadlines: [{ ...deadline, previousDueAt: undefined }] },
+      ],
+    },
+  },
+  get_assignment: {
+    input: {
+      valid: { assignmentId: ASSIGNMENT },
+      expected: { assignmentId: ASSIGNMENT },
+      invalid: [{}, { assignmentId: "a1" }, { assignmentId: 5 }],
+    },
+    output: {
+      valid: {
+        assignmentId: ASSIGNMENT,
+        courseId: COURSE,
+        courseName: "History 105",
+        title: "Essay 2",
+        dueAt: null,
+        points: null,
+        status: "upcoming",
+        instructions: "Write 1500 words.",
+        url: `${APP}${assignmentPath(ASSIGNMENT)}`,
+        attachments: [
+          { attachmentId: FILE, title: "Prompt.docx", fileType: "docx", status: "ready", pageCount: 1, url: `${APP}${assignmentFilePath(ASSIGNMENT, FILE)}`, pages: [{ page: 1, text: "Prompt" }] },
+          { attachmentId: SEED_ID, title: "Data.xlsx", fileType: "other", status: "skipped", pageCount: null, url: `${APP}${assignmentFilePath(ASSIGNMENT, SEED_ID)}`, pages: [] },
+        ],
+        truncated: false,
+      },
+      invalid: [
+        { assignmentId: ASSIGNMENT, courseId: COURSE, courseName: "History 105", title: "Essay 2", dueAt: T2, points: 100, status: "upcoming", instructions: null, url: `${APP}${assignmentPath(ASSIGNMENT)}`, attachments: [] },
+        { assignmentId: ASSIGNMENT, courseId: COURSE, courseName: "History 105", title: "Essay 2", dueAt: T2, points: 100, status: "upcoming", instructions: null, url: assignmentPath(ASSIGNMENT), attachments: [], truncated: false },
+        { assignmentId: ASSIGNMENT, courseId: COURSE, courseName: "History 105", title: "Essay 2", dueAt: T2, points: 100, status: "upcoming", instructions: null, url: `${APP}${assignmentPath(ASSIGNMENT)}`, attachments: [{ attachmentId: FILE, title: "x.xlsx", fileType: "xlsx", status: "skipped", pageCount: null, url: `${APP}${assignmentFilePath(ASSIGNMENT, FILE)}`, pages: [] }], truncated: false },
       ],
     },
   },
@@ -288,11 +320,11 @@ function check(schema: z.ZodType, c: Case) {
 }
 
 describe("TOOLS", () => {
-  test("has exactly the 7 tool names from the plan", () => {
+  test("has exactly the 8 tool names from the plan", () => {
     expect(Object.keys(TOOLS).sort()).toEqual(
-      ["get_crunch_weeks", "get_deadlines", "get_grades", "get_note_pages", "get_recent_notes", "list_courses", "search_notes"],
+      ["get_assignment", "get_crunch_weeks", "get_deadlines", "get_grades", "get_note_pages", "get_recent_notes", "list_courses", "search_notes"],
     );
-    expect(TOOL_NAMES).toHaveLength(7);
+    expect(TOOL_NAMES).toHaveLength(8);
   });
 
   test.each(TOOL_NAMES)("%s: name matches its key and the description says read-only", (name) => {

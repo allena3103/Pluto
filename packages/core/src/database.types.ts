@@ -49,16 +49,68 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"assignments": {
+                },"assignment_file_pages": {
                   Row: {
-                    "canvas_assignment_id": string | null,"course_id": string,"created_at": string,"due_at": string | null,"due_changed_at": string | null,"grade_group_id": string | null,"graded": boolean,"id": string,"points_possible": number | null,"previous_due_at": string | null,"score": number | null,"student_id": string,"submitted": boolean,"title": string
+                    "assignment_file_id": string,"id": string,"page_number": number,"student_id": string,"text": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "canvas_assignment_id"?: string | null,"course_id": string,"created_at"?: string,"due_at"?: string | null,"due_changed_at"?: string | null,"grade_group_id"?: string | null,"graded"?: boolean,"id"?: string,"points_possible"?: number | null,"previous_due_at"?: string | null,"score"?: number | null,"student_id": string,"submitted"?: boolean,"title": string
+                    "assignment_file_id": string,"id"?: string,"page_number": number,"student_id": string,"text"?: string | null
                   }
                   Update: {
-                    "canvas_assignment_id"?: string | null,"course_id"?: string,"created_at"?: string,"due_at"?: string | null,"due_changed_at"?: string | null,"grade_group_id"?: string | null,"graded"?: boolean,"id"?: string,"points_possible"?: number | null,"previous_due_at"?: string | null,"score"?: number | null,"student_id"?: string,"submitted"?: boolean,"title"?: string
+                    "assignment_file_id"?: string,"id"?: string,"page_number"?: number,"student_id"?: string,"text"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "assignment_file_pages_student_id_assignment_file_id_fkey"
+      columns: ["student_id","assignment_file_id"]
+isOneToOne: false
+      referencedRelation: "assignment_files"
+      referencedColumns: ["student_id","id"]
+    },{
+      foreignKeyName: "assignment_file_pages_student_id_fkey"
+      columns: ["student_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"assignment_files": {
+                  Row: {
+                    "assignment_id": string,"canvas_file_id": string,"canvas_updated_at": string | null,"created_at": string,"file_type": string,"id": string,"ingest_attempts": number,"ingest_error": string | null,"ingest_status": string,"page_count": number | null,"size_bytes": number | null,"storage_path": string | null,"student_id": string,"title": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "assignment_id": string,"canvas_file_id": string,"canvas_updated_at"?: string | null,"created_at"?: string,"file_type": string,"id"?: string,"ingest_attempts"?: number,"ingest_error"?: string | null,"ingest_status"?: string,"page_count"?: number | null,"size_bytes"?: number | null,"storage_path"?: string | null,"student_id": string,"title": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "assignment_id"?: string,"canvas_file_id"?: string,"canvas_updated_at"?: string | null,"created_at"?: string,"file_type"?: string,"id"?: string,"ingest_attempts"?: number,"ingest_error"?: string | null,"ingest_status"?: string,"page_count"?: number | null,"size_bytes"?: number | null,"storage_path"?: string | null,"student_id"?: string,"title"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "assignment_files_student_id_assignment_id_fkey"
+      columns: ["student_id","assignment_id"]
+isOneToOne: false
+      referencedRelation: "assignments"
+      referencedColumns: ["student_id","id"]
+    },{
+      foreignKeyName: "assignment_files_student_id_fkey"
+      columns: ["student_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"assignments": {
+                  Row: {
+                    "canvas_assignment_id": string | null,"canvas_url": string | null,"course_id": string,"created_at": string,"description": string | null,"due_at": string | null,"due_changed_at": string | null,"grade_group_id": string | null,"graded": boolean,"id": string,"points_possible": number | null,"previous_due_at": string | null,"score": number | null,"student_id": string,"submitted": boolean,"title": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "canvas_assignment_id"?: string | null,"canvas_url"?: string | null,"course_id": string,"created_at"?: string,"description"?: string | null,"due_at"?: string | null,"due_changed_at"?: string | null,"grade_group_id"?: string | null,"graded"?: boolean,"id"?: string,"points_possible"?: number | null,"previous_due_at"?: string | null,"score"?: number | null,"student_id": string,"submitted"?: boolean,"title": string
+                  }
+                  Update: {
+                    "canvas_assignment_id"?: string | null,"canvas_url"?: string | null,"course_id"?: string,"created_at"?: string,"description"?: string | null,"due_at"?: string | null,"due_changed_at"?: string | null,"grade_group_id"?: string | null,"graded"?: boolean,"id"?: string,"points_possible"?: number | null,"previous_due_at"?: string | null,"score"?: number | null,"student_id"?: string,"submitted"?: boolean,"title"?: string
                   }
                   Relationships: [
                     {

@@ -1,6 +1,7 @@
 import { ZodError } from "zod";
 import { TOOLS, type ToolName, type ToolOutput } from "../contract";
 import type { ToolContext } from "../context";
+import { getAssignment } from "./get-assignment";
 import { getCrunchWeeks } from "./get-crunch-weeks";
 import { getDeadlines } from "./get-deadlines";
 import { getGrades } from "./get-grades";
@@ -47,6 +48,7 @@ export { getRecentNotes } from "./get-recent-notes";
 export { getNotePages } from "./get-note-pages";
 export { searchNotes } from "./search-notes";
 export { getDeadlines } from "./get-deadlines";
+export { getAssignment } from "./get-assignment";
 export { getGrades, computeGroupGrades, round2 } from "./get-grades";
 export { getCrunchWeeks, buildCrunchWeeks, utcMondayStart } from "./get-crunch-weeks";
 
@@ -69,6 +71,10 @@ export const TOOL_HANDLERS: {
   get_deadlines: async (ctx, input) =>
     runHandler("get_deadlines", ctx, input, async (innerCtx, parsed) =>
       getDeadlines(innerCtx, parsed as Parameters<typeof getDeadlines>[1]),
+    ),
+  get_assignment: async (ctx, input) =>
+    runHandler("get_assignment", ctx, input, async (innerCtx, parsed) =>
+      getAssignment(innerCtx, parsed as Parameters<typeof getAssignment>[1]),
     ),
   get_grades: async (ctx, input) =>
     runHandler("get_grades", ctx, input, async (innerCtx, parsed) =>

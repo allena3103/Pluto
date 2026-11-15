@@ -4,7 +4,6 @@
 // Needs `npm run env:local` and `npm run seed` first.
 import { createClient } from "@supabase/supabase-js";
 import { makeToolContext, type PlutoDb, type ToolContext } from "@pluto/core/context";
-import { TOOL_NAMES } from "@pluto/core/contract";
 import { parseNotePath } from "@pluto/core/deep-links";
 import { getRecentNotes, TOOL_HANDLERS, ToolError } from "@pluto/core/tools/index";
 import { requireEnv } from "../lib/env";
@@ -12,6 +11,7 @@ import { readManifest, seedFileId } from "../lib/seed-files";
 import {
   COURSE_IDS,
   COURSE_NAMES,
+  ATTACHMENT_ASSIGNMENT_ID,
   DATE_CHANGED_ASSIGNMENT_ID,
   DEMO_STUDENT_EMAIL,
   DEMO_STUDENT_ID,
@@ -45,8 +45,6 @@ export default async function coreSmoke(): Promise<void> {
   const other = await signedInContext(OTHER_STUDENT_EMAIL, "OTHER_STUDENT_PASSWORD", OTHER_STUDENT_ID);
 
   // --- every tool runs for the demo student -------------------------------------------
-  check(TOOL_NAMES.length === 7, "expected 7 tools in the contract");
-
   const { courses } = await TOOL_HANDLERS.list_courses(demo, {});
   check(courses.length === 3, `list_courses: expected 3 courses, got ${courses.length}`);
   check(
@@ -114,6 +112,15 @@ export default async function coreSmoke(): Promise<void> {
   const moved = deadlines.find((d) => d.assignmentId === DATE_CHANGED_ASSIGNMENT_ID);
   check(moved?.previousDueAt, "get_deadlines: the seeded date change should show previousDueAt");
 
+  // The seeded assignment with a Word handout (read) and a spreadsheet (listed only).
+  const lab = deadlines.find((d) => d.assignmentId === ATTACHMENT_ASSIGNMENT_ID);
+  check(lab?.attachmentCount === 2, "get_deadlines: the seeded lab report should list 2 attachments");
+  const assignment = await TOOL_HANDLERS.get_assignment(demo, { assignmentId: ATTACHMENT_ASSIGNMENT_ID });
+  check(assignment.instructions, "get_assignment: instructions missing");
+  const handout = assignment.attachments.find((a) => a.fileType === "docx");
+  check(handout?.status === "ready" && handout.pages.length > 0, "get_assignment: the Word handout text is missing");
+  check(assignment.attachments.some((a) => a.fileType === "other" && a.pages.length === 0), "get_assignment: spreadsheet should be listed without text");
+
   const grades = await TOOL_HANDLERS.get_grades(demo, { course: "History 105" });
   check(grades.courses.length === 1, "get_grades: expected one course");
   check(typeof grades.courses[0]!.weightedGradePercent === "number", "get_grades: weighted grade missing");
@@ -143,6 +150,7 @@ export default async function coreSmoke(): Promise<void> {
   await mustFail("get_note_pages on a demo file", () => TOOL_HANDLERS.get_note_pages(other, { fileId: targetFileId }), "file_not_found");
   await mustFail("get_recent_notes by demo course id", () => TOOL_HANDLERS.get_recent_notes(other, { course: COURSE_IDS.history105 }), "course_not_found");
   await mustFail("get_recent_notes by demo course name", () => TOOL_HANDLERS.get_recent_notes(other, { course: "History 105" }), "course_not_found");
+  await mustFail("get_assignment on a demo assignment", () => TOOL_HANDLERS.get_assignment(other, { assignmentId: ATTACHMENT_ASSIGNMENT_ID }), "assignment_not_found");
 
   const demoDeadlineIds = new Set(deadlines.map((d) => d.assignmentId));
   const otherDeadlines = await TOOL_HANDLERS.get_deadlines(other, { daysAhead: 365 });

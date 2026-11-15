@@ -1,6 +1,6 @@
 import type { ToolContext } from "../context";
 import { TOOLS, type ToolArgs, type ToolOutput } from "../contract";
-import { fetchAllRows, toIsoNow } from "./shared";
+import { deadlineStatus, fetchAllRows, toIsoNow } from "./shared";
 
 interface AssignmentRow {
   id: string;
@@ -14,6 +14,8 @@ interface AssignmentRow {
   grade_group_id: string | null;
   courses: { name: string };
   grade_groups: { name: string; weight_percent: number } | null;
+  /** Embedded count of the assignment's attachments (joined on student_id + assignment_id). */
+  assignment_files: Array<{ count: number }>;
 }
 
 export interface CrunchWeekDraft {
@@ -83,7 +85,8 @@ export function buildCrunchWeeks(
         row.previous_due_at && row.previous_due_at !== row.due_at ? row.previous_due_at : null,
       points: row.points_possible,
       weightGroup: row.grade_groups?.name ?? null,
-      status: row.graded ? "graded" : row.submitted ? "submitted" : row.due_at < nowIso ? "overdue" : "upcoming",
+      status: deadlineStatus(row, nowIso),
+      attachmentCount: row.assignment_files[0]?.count ?? 0,
     });
     weeks.set(weekStart, draft);
   }
@@ -110,7 +113,7 @@ export async function getCrunchWeeks(
     ctx.db
       .from("assignments")
       .select(
-        "id, title, due_at, previous_due_at, graded, submitted, points_possible, course_id, grade_group_id, courses!inner(name), grade_groups(name, weight_percent)",
+        "id, title, due_at, previous_due_at, graded, submitted, points_possible, course_id, grade_group_id, courses!inner(name), grade_groups(name, weight_percent), assignment_files(count)",
       )
       .eq("student_id", ctx.studentId)
       .not("due_at", "is", null)

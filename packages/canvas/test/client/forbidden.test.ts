@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCanvasClient } from "../../src/client";
-import { CanvasRateLimitError } from "../../src/types";
+import { CanvasAuthError, CanvasRateLimitError } from "../../src/types";
 
 const BASE_URL = "https://canvas.local";
 
@@ -158,5 +158,46 @@ describe("canvas files and modules forbidden responses", () => {
     await expect(client.listCourseFiles("42")).rejects.toBeInstanceOf(CanvasRateLimitError);
     expect(call).toBe(4);
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("canvas getCourseFile", () => {
+  function fileClient(respond: (path: string) => Response) {
+    const fetchImpl: typeof fetch = async (input) => respond(new URL(String(input instanceof Request ? input.url : input)).pathname);
+    return createCanvasClient({ baseUrl: BASE_URL, token: "t", mode: "live", fetch: fetchImpl, sleep: async () => {} });
+  }
+
+  it("maps a file of any type, and is null when the student can't open it", async () => {
+    const client = fileClient((path) => {
+      if (path === "/api/v1/courses/42/files/8") {
+        return Response.json({
+          id: 8,
+          display_name: "Ch4 data.xlsx",
+          filename: "ch4-data.xlsx",
+          "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          size: 9216,
+          updated_at: "2026-11-01T00:00:00Z",
+          url: `${BASE_URL}/files/8/download?download_frd=1&verifier=v8`,
+        });
+      }
+      if (path === "/api/v1/courses/42/files/9") return Response.json({ status: "unauthorized" }, { status: 403 });
+      return Response.json({ errors: [] }, { status: 404 });
+    });
+
+    await expect(client.getCourseFile("42", "8")).resolves.toEqual({
+      canvasFileId: "8",
+      title: "Ch4 data.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      sizeBytes: 9216,
+      updatedAt: "2026-11-01T00:00:00Z",
+      url: `${BASE_URL}/files/8/download?download_frd=1&verifier=v8`,
+    });
+    await expect(client.getCourseFile("42", "9")).resolves.toBeNull();
+    await expect(client.getCourseFile("42", "10")).resolves.toBeNull();
+  });
+
+  it("still throws when Canvas rejects the token", async () => {
+    const client = fileClient(() => Response.json({ errors: [] }, { status: 401 }));
+    await expect(client.getCourseFile("42", "8")).rejects.toBeInstanceOf(CanvasAuthError);
   });
 });

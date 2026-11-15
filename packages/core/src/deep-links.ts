@@ -50,3 +50,17 @@ export function parseNotePath(pathOrUrl: string): { fileId: string; page: number
   if (!Number.isSafeInteger(page)) return null;
   return { fileId, page };
 }
+
+/** `/assignments/<assignmentId>`: an assignment's instructions and attachments. */
+export function assignmentPath(assignmentId: string): string {
+  if (!assignmentId) throw new TypeError("assignmentId is required");
+  return `/assignments/${encodeURIComponent(assignmentId)}`;
+}
+
+/** `/assignments/<assignmentId>/files/<attachmentId>[?page=<n>]`. */
+export function assignmentFilePath(assignmentId: string, attachmentId: string, page?: number): string {
+  if (!attachmentId) throw new TypeError("attachmentId is required");
+  if (page !== undefined) assertPage(page);
+  const base = `${assignmentPath(assignmentId)}/files/${encodeURIComponent(attachmentId)}`;
+  return page === undefined ? base : `${base}?page=${page}`;
+}

@@ -1,5 +1,5 @@
 /* global document, AbortController */
-// Handoff section 4, scenarios 1-9 (PLUTO_LLM=mock). Each returns a short evidence string or throws.
+// Handoff section 4, scenarios 1-9, plus 13 (assignment pages) (PLUTO_LLM=mock). Each returns a short evidence string or throws.
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -490,6 +490,123 @@ async function s9(ctx) {
   }
 }
 
+// Seeded in supabase/seed.sql: a demo assignment with a ready Word handout and a spreadsheet.
+const SEED_ASSIGNMENT_ID = "a0000000-0000-4000-8000-000000000112";
+const NOT_FOUND = /could not be found/i;
+const squash = (text) => text.replace(/[*_`#]/g, "").replace(/\s+/g, " ").trim();
+
+/** No sideways scrolling at the 390px viewport. */
+async function checkFits(page, where) {
+  const width = await page.evaluate(() => document.documentElement.scrollWidth);
+  check(width <= 390, `${where} is ${width}px wide at 390px`);
+}
+
+/** Clicks a Next.js link and waits for the new page's h1 (client navigation shows loading.tsx first). */
+async function clickThrough(page, selector, title) {
+  await page.click(selector);
+  await page
+    .waitForFunction((t) => document.querySelector("h1")?.textContent.trim() === t, { timeout: 60_000 }, title)
+    .catch(() => {});
+}
+
+async function s13(ctx) {
+  const { page, db, baseUrl, browser, env } = ctx;
+  const id = SEED_ASSIGNMENT_ID;
+  const { rows: assignments } = await db.query(
+    "select title, description, canvas_url from assignments where id = $1 and student_id = $2",
+    [id, DEMO_ID],
+  );
+  const assignment = assignments[0];
+  check(assignment?.description, `seeded assignment ${id} missing or has no description; run the seed`);
+  const { rows: files } = await db.query(
+    `select id, title, file_type, ingest_status from assignment_files
+      where assignment_id = $1 and student_id = $2 order by title, id`,
+    [id, DEMO_ID],
+  );
+  const docx = files.find((f) => f.file_type === "docx" && f.ingest_status === "ready");
+  const other = files.find((f) => f.file_type === "other");
+  check(docx && other, `seed needs a ready docx and an 'other' attachment, found ${JSON.stringify(files)}`);
+  const { rows: pages } = await db.query(
+    "select text from assignment_file_pages where assignment_file_id = $1 and student_id = $2 and page_number = 1",
+    [docx.id, DEMO_ID],
+  );
+  check(pages[0]?.text, "seeded docx has no page 1 text");
+
+  // /deadlines: the card links to the assignment and shows a paperclip with the count.
+  await goto(page, `${baseUrl}/deadlines`);
+  const card = await page
+    .$eval(`a[href='/assignments/${id}']`, (a) => ({
+      text: a.innerText,
+      clip: a.querySelector("[aria-label$='attachments'], [aria-label$='attachment']")?.getAttribute("aria-label") ?? null,
+    }))
+    .catch(() => null);
+  check(card, `/deadlines has no link to /assignments/${id}`);
+  check(card.text.includes(assignment.title), `deadline card text "${card.text.slice(0, 80)}"`);
+  const clip = `${files.length} ${files.length === 1 ? "attachment" : "attachments"}`;
+  check(card.clip === clip, `paperclip label "${card.clip}" != "${clip}"`);
+  await checkFits(page, "/deadlines");
+
+  // The assignment page: instructions as text, attachments with the right actions.
+  await clickThrough(page, `a[href='/assignments/${id}']`, assignment.title);
+  check(new URL(page.url()).pathname === `/assignments/${id}`, `deadline card opened ${page.url()}`);
+  const detail = await page.evaluate(() => ({
+    h1: document.querySelector("h1")?.textContent.trim(),
+    instructions: document.querySelector("article")?.innerText ?? "",
+    rows: [...document.querySelectorAll("ul[aria-label='Attachments'] > li")].map((li) => ({
+      text: li.innerText,
+      links: [...li.querySelectorAll("a")].map((a) => a.getAttribute("href")),
+    })),
+    body: document.body.innerText,
+  }));
+  check(detail.h1 === assignment.title, `assignment h1 "${detail.h1}"`);
+  const firstLine = squash(assignment.description.split("\n").find((line) => line.trim()));
+  check(squash(detail.instructions).includes(firstLine), `instructions do not show "${firstLine}"`);
+  check(detail.rows.length === files.length, `${detail.rows.length} attachment rows, DB has ${files.length}`);
+  const docxHref = `/assignments/${id}/files/${docx.id}`;
+  const docxRow = detail.rows.find((r) => r.text.includes(docx.title));
+  check(docxRow?.links.includes(docxHref), `docx row links ${JSON.stringify(docxRow?.links)}`);
+  const otherRow = detail.rows.find((r) => r.text.includes(other.title));
+  check(otherRow, `no row for ${other.title}`);
+  const canvasLinks = assignment.canvas_url ? [assignment.canvas_url] : [];
+  check(sameSet(otherRow.links, canvasLinks), `'other' row links ${JSON.stringify(otherRow.links)}, expected ${JSON.stringify(canvasLinks)}`);
+  check(detail.body.includes("Pluto reads PDF and Word files only."), "no PDF/Word-only note");
+  await checkFits(page, "assignment page");
+
+  // The Word attachment shows its text.
+  await clickThrough(page, `a[href='${docxHref}']`, docx.title);
+  const file = await page.evaluate(() => ({
+    h1: document.querySelector("h1")?.textContent.trim(),
+    text: document.querySelector("article[aria-label='Page 1']")?.innerText ?? "",
+    back: document.querySelector("a[href^='/assignments/']")?.getAttribute("href"),
+  }));
+  check(file.h1 === docx.title, `attachment h1 "${file.h1}"`);
+  check(file.back === `/assignments/${id}`, `back link ${file.back}`);
+  const firstPageLine = squash(pages[0].text.split("\n").find((line) => line.trim()));
+  check(squash(file.text).includes(firstPageLine), `page 1 does not show "${firstPageLine}"`);
+  await checkFits(page, "attachment page");
+
+  // The other student gets not-found on both URLs.
+  const context = await browser.createBrowserContext();
+  try {
+    const other = await newPage(context);
+    ctx.otherPage = other;
+    await signIn(other, baseUrl, env.OTHER_STUDENT_EMAIL, env.OTHER_STUDENT_PASSWORD);
+    for (const path of [`/assignments/${id}`, docxHref]) {
+      await goto(other, `${baseUrl}${path}`);
+      const body = await other.$eval("body", (el) => el.innerText);
+      check(NOT_FOUND.test(body), `other student's ${path} is not a not-found page`);
+      check(!body.includes(assignment.title) && !body.includes(docx.title), `other student sees ${path}`);
+    }
+  } finally {
+    await context.close().catch(() => {});
+    ctx.otherPage = undefined;
+  }
+
+  // Leave the 390px assignment page up for the run's screenshot.
+  await goto(page, `${baseUrl}/assignments/${id}`);
+  return `/deadlines card -> /assignments/${id} "${assignment.title}" (${clip}); instructions shown; ${docx.title} page 1 text shown; ${other.title} listed without a viewer; other@ gets not-found on both URLs; no overflow at 390px`;
+}
+
 export const MOCK_SCENARIOS = [
   { id: 1, name: "vague request -> questions card -> saved note", run: s1 },
   { id: 2, name: "study guide suggestion chip", run: s2 },
@@ -500,4 +617,5 @@ export const MOCK_SCENARIOS = [
   { id: 7, name: "non-notes question saves nothing", run: s7 },
   { id: 8, name: "SMS: plain-text class question, magic link", run: s8 },
   { id: 9, name: "other student cannot see or delete", run: s9 },
+  { id: 13, name: "assignment page, attachments, paperclip", run: s13 },
 ];

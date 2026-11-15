@@ -1,9 +1,10 @@
-/** Codes the 7 read tools (and `save_study_guide`) throw as `ToolError`. */
+/** Codes the 8 read tools (and `save_study_guide`) throw as `ToolError`. */
 export type ToolErrorCode =
   | "invalid_input"
   | "course_not_found"
   | "course_ambiguous"
   | "file_not_found"
+  | "assignment_not_found"
   | "db_error";
 
 /** Codes only the write tool throws, as `WriteToolError`. */

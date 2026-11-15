@@ -1,5 +1,5 @@
 // `npm run e2e:chat`: end-to-end check of web chat, saved notes and SMS (handoff section 4).
-//   npm run e2e:chat                       scenarios 1-9, PLUTO_LLM=mock
+//   npm run e2e:chat                       scenarios 1-9 and 13, PLUTO_LLM=mock
 //   npm run e2e:chat -- --llm gemini       scenarios 10-12, real Gemini
 //   --port <n>        port for the run's own `next dev` (default 3500)
 //   --base-url <url>  reuse a running server instead (not started or stopped here)

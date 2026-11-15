@@ -5,6 +5,7 @@ const STATUS_BY_CODE: Record<ToolError["code"], number> = {
   course_not_found: 404,
   course_ambiguous: 409,
   file_not_found: 404,
+  assignment_not_found: 404,
   db_error: 500,
 };
 

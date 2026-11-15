@@ -11,6 +11,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { PlutoDb } from "@pluto/core/context";
 import { AlertDeadlineChangeRequest, INTERNAL_SECRET_HEADER } from "@pluto/core/contract";
+import { syncAssignmentFiles, type AssignmentFilesSyncResult } from "./assignment-files-sync";
 import type { CanvasClient } from "./client";
 import { syncCanvasFiles, type FilesSyncDeps, type FilesSyncResult } from "./files-sync";
 import { errorText } from "./map";
@@ -101,7 +102,7 @@ export type DemoDateChangeDeps = {
   /** A fixtures client that serves the demo set (see `createDemoFixturesFetch`). */
   client: CanvasClient;
   notifier: DeadlineNotifier;
-  /** When set, PDFs are downloaded and ingested after the metadata sync. */
+  /** When set, PDFs (notes, then assignment attachments) are downloaded and ingested after the metadata sync. */
   files?: Pick<FilesSyncDeps, "download" | "ingest">;
   now?: Date;
 };
@@ -109,6 +110,7 @@ export type DemoDateChangeDeps = {
 export type DemoDateChangeResult = {
   sync: SyncResult;
   files: FilesSyncResult | null;
+  assignmentFiles: AssignmentFilesSyncResult | null;
   alerts: AlertOutcome[];
 };
 
@@ -130,7 +132,15 @@ export async function runDemoDateChange(deps: DemoDateChangeDeps): Promise<DemoD
         now: deps.now,
       })
     : null;
-  return { sync, files, alerts: [...deps.notifier.outcomes] };
+  const assignmentFiles = deps.files
+    ? await syncAssignmentFiles({
+        admin: deps.admin,
+        studentId: deps.studentId,
+        client: deps.client,
+        download: deps.files.download,
+      })
+    : null;
+  return { sync, files, assignmentFiles, alerts: [...deps.notifier.outcomes] };
 }
 
 // ---------------------------------------------------------------- demo fixtures

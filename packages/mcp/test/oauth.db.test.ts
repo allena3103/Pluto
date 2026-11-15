@@ -73,6 +73,7 @@ describe.skipIf(SKIP_DB_TESTS)("mcp oauth bearer against local supabase", () => 
   let courseAId = "";
   let courseAName = "";
   let fileAId = "";
+  let assignmentAId = "";
   const secretA = `a-secret-${uniqueName("notes")}`;
 
   beforeAll(async () => {
@@ -106,24 +107,26 @@ describe.skipIf(SKIP_DB_TESTS)("mcp oauth bearer against local supabase", () => 
         .single(),
       "grade group A",
     ) as { id: string };
-    must(
-      await service
-        .from("assignments")
-        .insert({
-          student_id: studentA.id,
-          course_id: courseA.id,
-          grade_group_id: group.id,
-          title: `Essay ${secretA}`,
-          points_possible: 100,
-          score: 90,
-          graded: true,
-          submitted: true,
-          due_at: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-        })
-        .select("id")
-        .single(),
-      "assignment A",
-    );
+    assignmentAId = (
+      must(
+        await service
+          .from("assignments")
+          .insert({
+            student_id: studentA.id,
+            course_id: courseA.id,
+            grade_group_id: group.id,
+            title: `Essay ${secretA}`,
+            points_possible: 100,
+            score: 90,
+            graded: true,
+            submitted: true,
+            due_at: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+          })
+          .select("id")
+          .single(),
+        "assignment A",
+      ) as { id: string }
+    ).id;
   });
 
   afterAll(async () => {
@@ -144,6 +147,7 @@ describe.skipIf(SKIP_DB_TESTS)("mcp oauth bearer against local supabase", () => 
       get_deadlines: { course: courseAName },
       get_grades: { course: courseAName },
       get_crunch_weeks: {},
+      get_assignment: { assignmentId: assignmentAId },
     };
     for (const name of TOOL_NAMES) {
       const result = await callTool(tokenA, name, calls[name]);
@@ -161,6 +165,7 @@ describe.skipIf(SKIP_DB_TESTS)("mcp oauth bearer against local supabase", () => 
       ["get_deadlines", {}],
       ["get_grades", {}],
       ["get_crunch_weeks", {}],
+      ["get_assignment", { assignmentId: assignmentAId }],
     ];
     const blobs: string[] = [];
     for (const [name, args] of calls) {
@@ -169,7 +174,8 @@ describe.skipIf(SKIP_DB_TESTS)("mcp oauth bearer against local supabase", () => 
     }
     const blob = blobs.join("\n");
     // courseAName is not checked: B sent it, and course_not_found echoes the requested name.
-    for (const secret of [secretA, courseAId, fileAId, studentA!.id]) {
+    // assignmentAId is checked: assignment_not_found does not echo it.
+    for (const secret of [secretA, courseAId, fileAId, assignmentAId, studentA!.id]) {
       expect(blob).not.toContain(secret);
     }
   });

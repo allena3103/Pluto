@@ -12,7 +12,7 @@ import path from "node:path";
 import type { PlutoDb } from "@pluto/core/context";
 import { ingestFile, NOTES_BUCKET } from "@pluto/core/ingest";
 import type { CanvasClient } from "./client";
-import { errorText, fileStoragePath } from "./map";
+import { DOCX_CONTENT_TYPE, errorText, fileStoragePath, PDF_CONTENT_TYPES } from "./map";
 import type { CanvasCourseFile } from "./types";
 
 export const FILE_DOWNLOAD_MAX_BYTES = 50 * 1024 * 1024;
@@ -21,8 +21,20 @@ export const FILE_DOWNLOAD_TIMEOUT_MS = 30_000;
 // skipped without using the cap, so a sync cut short by the route's time limit resumes next time.
 const DEFAULT_MAX_FILES = 100;
 const MAX_REDIRECTS = 3;
-const PDF_CONTENT_TYPES = new Set(["application/pdf", "application/x-pdf"]);
-const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"
+
+/**
+ * What a download must look like per type: the response content type and the first bytes.
+ * A docx is a zip ("PK\x03\x04"); some file hosts serve it as a generic binary type.
+ */
+const DOWNLOAD_RULES: Record<"pdf" | "docx", { accept: string; contentTypes: Record<string, true>; magic: number[]; label: string }> = {
+  pdf: { accept: "application/pdf", contentTypes: PDF_CONTENT_TYPES, magic: [0x25, 0x50, 0x44, 0x46, 0x2d], label: "a PDF" },
+  docx: {
+    accept: DOCX_CONTENT_TYPE,
+    contentTypes: { [DOCX_CONTENT_TYPE]: true, "application/octet-stream": true, "application/zip": true },
+    magic: [0x50, 0x4b, 0x03, 0x04],
+    label: "a Word document",
+  },
+};
 
 export type FilesSyncResult = {
   downloaded: number;
@@ -186,7 +198,7 @@ async function syncOne(
       throw new DownloadError("storage path does not match <student_id>/<file_id>.pdf");
     }
 
-    const bytes = await downloadPdf(file.url, deps.download);
+    const bytes = await downloadCanvasFile(file.url, deps.download, "pdf");
     result.downloaded += 1;
 
     const { error: uploadError } = await admin.storage
@@ -235,13 +247,16 @@ function sameHost(url: URL, baseUrl: string): boolean {
 }
 
 /**
- * GETs a Canvas file. Follows up to three redirects by hand so the token is only ever
- * sent to the configured Canvas host. Errors never include the URL (it may be signed).
+ * GETs a Canvas file of the given type. Follows up to three redirects by hand so the token is
+ * only ever sent to the configured Canvas host. Checks the content type, the 50 MB cap and the
+ * first bytes. Errors never include the URL (it may be signed).
  */
-export async function downloadPdf(
+export async function downloadCanvasFile(
   rawUrl: string,
   download: FilesSyncDeps["download"],
+  fileType: "pdf" | "docx",
 ): Promise<Uint8Array> {
+  const rules = DOWNLOAD_RULES[fileType];
   const fetchImpl = download.fetch ?? fetch;
   const signal = AbortSignal.timeout(FILE_DOWNLOAD_TIMEOUT_MS);
   let url: URL;
@@ -254,7 +269,7 @@ export async function downloadPdf(
   let response: Response | null = null;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     if (url.protocol !== "https:") throw new DownloadError("file URL must use https");
-    const headers = new Headers({ accept: "application/pdf" });
+    const headers = new Headers({ accept: rules.accept });
     if (download.token && sameHost(url, download.baseUrl)) {
       headers.set("authorization", `Bearer ${download.token}`);
     }
@@ -284,9 +299,9 @@ export async function downloadPdf(
   }
 
   const contentType = (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
-  if (!PDF_CONTENT_TYPES.has(contentType)) {
+  if (!Object.hasOwn(rules.contentTypes, contentType)) {
     await response.body?.cancel();
-    throw new DownloadError(`file is not a PDF (content type ${contentType || "missing"})`);
+    throw new DownloadError(`file is not ${rules.label} (content type ${contentType || "missing"})`);
   }
 
   const declared = Number(response.headers.get("content-length"));
@@ -297,8 +312,8 @@ export async function downloadPdf(
 
   const bytes = await readCapped(response, FILE_DOWNLOAD_MAX_BYTES);
   if (bytes.byteLength === 0) throw new DownloadError("file is empty");
-  if (!PDF_MAGIC.every((byte, index) => bytes[index] === byte)) {
-    throw new DownloadError("file is not a PDF");
+  if (!rules.magic.every((byte, index) => bytes[index] === byte)) {
+    throw new DownloadError(`file is not ${rules.label}`);
   }
   return bytes;
 }
@@ -349,13 +364,13 @@ function findFixtureFilesDirectory(): string | null {
 }
 
 /**
- * Fixtures-mode download fetch: serves `https://fixtures.canvas.local/files/<name>.pdf`
- * from `packages/canvas/fixtures/demo/files/<name>.pdf` (synthetic PDFs). Anything else is 404.
+ * Fixtures-mode download fetch: serves `https://fixtures.canvas.local/files/<name>.<pdf|docx>`
+ * from `packages/canvas/fixtures/demo/files/` (synthetic files). Anything else is 404.
  */
 export function createFixtureFileFetch(directory: string | null = findFixtureFilesDirectory()): typeof fetch {
   return async (input) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    const match = /^\/files\/([a-z0-9-]+\.pdf)$/.exec(url.pathname);
+    const match = /^\/files\/([a-z0-9-]+\.(pdf|docx))$/.exec(url.pathname);
     if (!directory || url.hostname !== FIXTURES_FILES_HOST || !match) {
       return new Response("not found", { status: 404 });
     }
@@ -363,7 +378,10 @@ export function createFixtureFileFetch(directory: string | null = findFixtureFil
       const bytes = await readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ directory, match[1]!));
       return new Response(new Uint8Array(bytes), {
         status: 200,
-        headers: { "content-type": "application/pdf", "content-length": String(bytes.byteLength) },
+        headers: {
+          "content-type": DOWNLOAD_RULES[match[2] === "docx" ? "docx" : "pdf"].accept,
+          "content-length": String(bytes.byteLength),
+        },
       });
     } catch {
       return new Response("not found", { status: 404 });

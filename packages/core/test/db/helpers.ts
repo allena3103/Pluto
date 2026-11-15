@@ -24,6 +24,8 @@ export const OWNER_COLUMN: Record<string, string> = {
   alerts: "student_id",
   study_blocks: "student_id",
   sms_messages: "student_id",
+  assignment_files: "student_id",
+  assignment_file_pages: "student_id",
 };
 
 /** Tables a signed-in student may read (magic_links and phone_link_codes are service role only). */
@@ -143,6 +145,8 @@ export interface OwnedRows {
   alertId: string;
   studyBlockId: string;
   smsMessageId: string;
+  assignmentFileId: string;
+  assignmentFilePageId: string;
 }
 
 /** Service role creates one row in every table for the student. */
@@ -203,6 +207,19 @@ export async function createRowInEveryTable(service: SupabaseClient, studentId: 
     ends_at: new Date(Date.now() + 7_200_000).toISOString(),
   });
   const smsMessageId = await one("sms_messages", { direction: "inbound", body: "secret sms", provider: "simulator" });
+  const assignmentFileId = await one("assignment_files", {
+    assignment_id: assignmentId,
+    canvas_file_id: `rls-${tag}`,
+    title: `RLS Handout ${tag}.pdf`,
+    file_type: "pdf",
+    ingest_status: "ready",
+    page_count: 1,
+  });
+  const assignmentFilePageId = await one("assignment_file_pages", {
+    assignment_file_id: assignmentFileId,
+    page_number: 1,
+    text: `secret handout ${tag}`,
+  });
   return {
     studentId,
     courseId,
@@ -218,6 +235,8 @@ export async function createRowInEveryTable(service: SupabaseClient, studentId: 
     alertId,
     studyBlockId,
     smsMessageId,
+    assignmentFileId,
+    assignmentFilePageId,
   };
 }
 
@@ -228,12 +247,16 @@ export function insertPayloads(target: {
   fileId?: string;
   chatSessionId?: string;
   alertId?: string;
+  assignmentId?: string;
+  assignmentFileId?: string;
 }): Record<string, Record<string, unknown>> {
   const s = target.studentId;
   const courseId = target.courseId ?? randomUUID();
   const fileId = target.fileId ?? randomUUID();
   const sessionId = target.chatSessionId ?? randomUUID();
   const alertId = target.alertId ?? randomUUID();
+  const assignmentId = target.assignmentId ?? randomUUID();
+  const assignmentFileId = target.assignmentFileId ?? randomUUID();
   const soon = new Date(Date.now() + 3_600_000).toISOString();
   const later = new Date(Date.now() + 7_200_000).toISOString();
   return {
@@ -251,5 +274,7 @@ export function insertPayloads(target: {
     alerts: { student_id: s, kind: "crunch_week", message: "intruder" },
     study_blocks: { student_id: s, alert_id: alertId, title: "intruder", starts_at: soon, ends_at: later },
     sms_messages: { student_id: s, direction: "inbound", body: "intruder" },
+    assignment_files: { student_id: s, assignment_id: assignmentId, canvas_file_id: "intruder", title: "intruder", file_type: "pdf" },
+    assignment_file_pages: { student_id: s, assignment_file_id: assignmentFileId, page_number: 99, text: "intruder" },
   };
 }

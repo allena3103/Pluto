@@ -170,3 +170,54 @@ on conflict (id) do update set
   canvas_assignment_id = excluded.canvas_assignment_id;
 
 -- No `files` rows here: the ingest task uploads and ingests the synthetic PDFs (scripts/seed.ts seedFiles()).
+
+-- ---------------------------------------------------------------- assignment instructions and attachments
+-- Lab Report 3 (Biology 151, due in week +3) carries Canvas instructions and two linked files:
+-- a Word handout whose text is already read (no storage object: the web shows docx as text),
+-- and a spreadsheet that is listed by name only.
+-- Same data as the Canvas fixtures (packages/canvas/fixtures/courses/seed-bio-151: seed-112's
+-- description links files 25001 and 25002), so a fixtures-mode sync keeps these rows as they are.
+update public.assignments
+set canvas_url = 'https://canvas.example.edu/courses/151/assignments/112',
+    description = 'Write a lab report on the onion root tip mitosis lab. Include an introduction, methods, results with your cell counts for each phase, and a discussion of what the mitotic index tells you. Follow the section list in the handout and record your counts in the data template. Submit one PDF.'
+where id = 'a0000000-0000-4000-8000-000000000112'
+  and student_id = '11111111-1111-4111-8111-111111111111';
+
+-- A sync may have stored the same Canvas files under other ids; the seeded ids win.
+delete from public.assignment_files
+where student_id = '11111111-1111-4111-8111-111111111111'
+  and assignment_id = 'a0000000-0000-4000-8000-000000000112'
+  and canvas_file_id in ('25001', '25002')
+  and id not in ('af000000-0000-4000-8000-000000000001', 'af000000-0000-4000-8000-000000000002');
+
+insert into public.assignment_files (
+  id, student_id, assignment_id, canvas_file_id, title, file_type, size_bytes, canvas_updated_at, ingest_status, page_count
+)
+values
+  ('af000000-0000-4000-8000-000000000001', '11111111-1111-4111-8111-111111111111', 'a0000000-0000-4000-8000-000000000112',
+   '25001', 'Lab_3_Mitosis_Handout.docx', 'docx', 20172, '2026-11-03T14:00:00Z', 'ready', 1),
+  ('af000000-0000-4000-8000-000000000002', '11111111-1111-4111-8111-111111111111', 'a0000000-0000-4000-8000-000000000112',
+   '25002', 'Mitosis_Data_Template.xlsx', 'other', 9830, '2026-11-03T14:05:00Z', 'skipped', null)
+on conflict (id) do update set
+  student_id = excluded.student_id,
+  assignment_id = excluded.assignment_id,
+  canvas_file_id = excluded.canvas_file_id,
+  title = excluded.title,
+  file_type = excluded.file_type,
+  size_bytes = excluded.size_bytes,
+  canvas_updated_at = excluded.canvas_updated_at,
+  storage_path = null,
+  ingest_status = excluded.ingest_status,
+  ingest_error = null,
+  ingest_attempts = 0,
+  page_count = excluded.page_count,
+  updated_at = now();
+
+insert into public.assignment_file_pages (student_id, assignment_file_id, page_number, text)
+values (
+  '11111111-1111-4111-8111-111111111111', 'af000000-0000-4000-8000-000000000001', 1,
+  'Lab 3 Handout: Mitosis in Onion Root Tips. Count 200 cells under the microscope and record how many are in interphase, prophase, metaphase, anaphase and telophase. Your report must include a mitotic index table, a labeled drawing of each phase, and a discussion of why the root tip has so many dividing cells. Length: 4 to 6 pages, double spaced. Due at 11:59 PM; late reports lose 10 percent per day.'
+)
+on conflict (assignment_file_id, page_number) do update set
+  student_id = excluded.student_id,
+  text = excluded.text;

@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@pluto/core/database.types";
 import type { PlutoDb } from "@pluto/core/context";
 import { AlertDeadlineChangeRequest, INTERNAL_SECRET_HEADER } from "@pluto/core/contract";
+import { ASSIGNMENT_FILES_BUCKET } from "@pluto/core/assignment-ingest";
 import { NOTES_BUCKET } from "@pluto/core/ingest";
 import { createCanvasClient, type CanvasClient } from "../../src/client";
 import {
@@ -98,9 +99,11 @@ async function createUser(db: PlutoDb): Promise<string> {
 }
 
 async function cleanup(db: PlutoDb, studentId: string): Promise<void> {
-  const { data } = await db.storage.from(NOTES_BUCKET).list(studentId, { limit: 1000 });
-  const paths = (data ?? []).map((object) => `${studentId}/${object.name}`);
-  if (paths.length > 0) await db.storage.from(NOTES_BUCKET).remove(paths);
+  for (const bucket of [NOTES_BUCKET, ASSIGNMENT_FILES_BUCKET]) {
+    const { data } = await db.storage.from(bucket).list(studentId, { limit: 1000 });
+    const paths = (data ?? []).map((object) => `${studentId}/${object.name}`);
+    if (paths.length > 0) await db.storage.from(bucket).remove(paths);
+  }
   const { error } = await db.auth.admin.deleteUser(studentId);
   if (error) console.warn(`cleanup: could not delete ${studentId}: ${error.message}`);
 }
@@ -135,6 +138,7 @@ function summary(result: DemoDateChangeResult) {
     dueDateChanges: result.sync.dueDateChanges.map((change) => `${change.title}: ${change.oldDueAt} -> ${change.newDueAt}`),
     syncErrors: result.sync.errors,
     files: result.files,
+    assignmentFiles: result.assignmentFiles,
     alerts: result.alerts.map((alert) => `${alert.title}: ${alert.status}`),
   };
 }
@@ -192,6 +196,8 @@ describe.skipIf(SKIP_DB_TESTS)("runDemoDateChange", () => {
     expect(Date.parse(before.due_at!) - Date.parse(after1.due_at!)).toBe(2 * 24 * 60 * 60 * 1000);
     expect(after1.due_changed_at).not.toBeNull();
     expect(first.files).toMatchObject({ ingested: 3, failed: 0 });
+    // Statistics 240's proposal PDF + Word file, and Biology 151's Lab Report 3 handout.
+    expect(first.assignmentFiles).toMatchObject({ downloaded: 3, ingested: 3, failed: 0, errors: [] });
 
     const { data: sms } = await admin
       .from("sms_messages")
@@ -211,6 +217,7 @@ describe.skipIf(SKIP_DB_TESTS)("runDemoDateChange", () => {
     expect(route.posts).toHaveLength(1);
     expect(counts2).toEqual(counts1);
     expect(second.files).toMatchObject({ downloaded: 0, skipped: 3 });
+    expect(second.assignmentFiles).toMatchObject({ downloaded: 0, skipped: 3 });
 
     // Rehearsal case: something moved the date back, then the demo runs again within the
     // hour. The notifier's duplicate guard still sends nothing.

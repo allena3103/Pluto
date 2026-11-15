@@ -16,6 +16,16 @@ type AssignmentRow = Database["public"]["Tables"]["assignments"]["Row"];
 type CourseRow = Database["public"]["Tables"]["courses"]["Row"];
 type GradeGroupRow = Database["public"]["Tables"]["grade_groups"]["Row"];
 type FileRow = Database["public"]["Tables"]["files"]["Row"];
+type AssignmentFileRow = Database["public"]["Tables"]["assignment_files"]["Row"];
+type AssignmentFilePageRow = Database["public"]["Tables"]["assignment_file_pages"]["Row"];
+type DemoSnapshot = {
+  courses: CourseRow[];
+  gradeGroups: GradeGroupRow[];
+  assignments: AssignmentRow[];
+  files: FileRow[];
+  assignmentFiles: AssignmentFileRow[];
+  assignmentFilePages: AssignmentFilePageRow[];
+};
 
 function service(): PlutoDb {
   const env = dbEnv();
@@ -55,6 +65,7 @@ function withEdits(
     },
     listCourseFiles: (courseId) => client.listCourseFiles(courseId),
     listModuleItems: (courseId) => client.listModuleItems(courseId),
+    getCourseFile: (courseId, fileId) => client.getCourseFile(courseId, fileId),
   };
 }
 
@@ -142,6 +153,31 @@ describe.skipIf(SKIP_DB_TESTS)("syncCanvas fixtures", () => {
     expect(first.errors).toEqual([]);
     expect(first.dueDateChanges).toEqual([]);
     expect(calls).toEqual([]);
+    // seed-123 links a PDF, a Word file and a spreadsheet; seed-112 a Word file and a spreadsheet.
+    expect(first.assignmentFiles).toEqual({ inserted: 5, updated: 0, removed: 0 });
+
+    const { data: proposal, error: proposalError } = await db
+      .from("assignments")
+      .select("id, description, canvas_url")
+      .eq("student_id", student.id)
+      .eq("canvas_assignment_id", "seed-123")
+      .single();
+    if (proposalError) throw new Error(proposalError.message);
+    expect(proposal.description).toContain("Write a two-page proposal for your final project.");
+    expect(proposal.description).toContain("- The dataset & how many rows it has\n  - a link or the file name");
+    expect(proposal.canvas_url).toBe("https://fixtures.canvas.local/courses/seed-stat-240/assignments/seed-123");
+    const { data: attachments, error: attachmentsError } = await db
+      .from("assignment_files")
+      .select("title, file_type, ingest_status, assignment_id")
+      .eq("student_id", student.id)
+      .eq("assignment_id", proposal.id)
+      .order("canvas_file_id");
+    if (attachmentsError) throw new Error(attachmentsError.message);
+    expect(attachments).toEqual([
+      { title: "Project Proposal Guidelines.pdf", file_type: "pdf", ingest_status: "pending", assignment_id: proposal.id },
+      { title: "Proposal Template.docx", file_type: "docx", ingest_status: "pending", assignment_id: proposal.id },
+      { title: "Data Dictionary.xlsx", file_type: "other", ingest_status: "skipped", assignment_id: proposal.id },
+    ]);
     expect(firstCounts).toEqual({ courses: 3, grade_groups: 9, assignments: 12, files: 3 });
     expect(first.courses).toEqual({ inserted: 3, updated: 0 });
     expect(first.gradeGroups).toEqual({ inserted: 9, updated: 0 });
@@ -186,6 +222,7 @@ describe.skipIf(SKIP_DB_TESTS)("syncCanvas fixtures", () => {
     const secondCounts = await counts(db, student.id);
     logSync("second", second, secondCounts);
     expect(secondCounts).toEqual(firstCounts);
+    expect(second.assignmentFiles).toEqual({ inserted: 0, updated: 5, removed: 0 });
     expect(second.dueDateChanges).toEqual([]);
     expect(second.courses.inserted).toBe(0);
     expect(second.assignments.inserted).toBe(0);
@@ -479,18 +516,35 @@ describe.skipIf(SKIP_DB_TESTS)("seeded demo student fixtures sync", () => {
       expect(afterEssay?.previous_due_at).toBe(beforeEssay?.previous_due_at);
       expect(afterEssay?.due_changed_at).toBe(beforeEssay?.due_changed_at);
       expect(Date.parse(afterEssay?.due_at ?? "")).toBe(Date.parse(beforeEssay?.due_at ?? ""));
+
+      // The seeded Lab Report 3 attachments match the fixtures, so the sync keeps them as they are.
+      const labReport = (snapshot: DemoSnapshot) => ({
+        description: snapshot.assignments.find((row) => row.canvas_assignment_id === "seed-112")?.description,
+        files: snapshot.assignmentFiles
+          .filter((row) => row.assignment_id === "a0000000-0000-4000-8000-000000000112")
+          .map((row) => ({
+            id: row.id,
+            canvasFileId: row.canvas_file_id,
+            title: row.title,
+            fileType: row.file_type,
+            sizeBytes: row.size_bytes,
+            canvasUpdatedAt: Date.parse(row.canvas_updated_at ?? ""),
+            status: row.ingest_status,
+            pageCount: row.page_count,
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id)),
+        pages: snapshot.assignmentFilePages.map((page) => `${page.assignment_file_id}/${page.page_number}: ${page.text}`).sort(),
+      });
+      expect(labReport(before).files.map((file) => file.canvasFileId)).toEqual(["25001", "25002"]);
+      expect(labReport(after)).toEqual(labReport(before));
+      expect(result.assignmentFiles.removed).toBe(0);
     } finally {
       await restoreDemo(db, before);
     }
   });
 });
 
-async function demoSnapshot(db: PlutoDb): Promise<{
-  courses: CourseRow[];
-  gradeGroups: GradeGroupRow[];
-  assignments: AssignmentRow[];
-  files: FileRow[];
-}> {
+async function demoSnapshot(db: PlutoDb): Promise<DemoSnapshot> {
   const courses = await db
     .from("courses")
     .select("*")
@@ -511,28 +565,27 @@ async function demoSnapshot(db: PlutoDb): Promise<{
     .select("*")
     .eq("student_id", DEMO_STUDENT_ID)
     .order("id", { ascending: true });
+  const assignmentFiles = await db.from("assignment_files").select("*").eq("student_id", DEMO_STUDENT_ID);
+  const assignmentFilePages = await db.from("assignment_file_pages").select("*").eq("student_id", DEMO_STUDENT_ID);
   if (courses.error) throw new Error(courses.error.message);
   if (gradeGroups.error) throw new Error(gradeGroups.error.message);
   if (assignments.error) throw new Error(assignments.error.message);
   if (files.error) throw new Error(files.error.message);
+  if (assignmentFiles.error) throw new Error(assignmentFiles.error.message);
+  if (assignmentFilePages.error) throw new Error(assignmentFilePages.error.message);
   return {
     courses: courses.data ?? [],
     gradeGroups: gradeGroups.data ?? [],
     assignments: assignments.data ?? [],
     files: files.data ?? [],
+    assignmentFiles: assignmentFiles.data ?? [],
+    assignmentFilePages: assignmentFilePages.data ?? [],
   };
 }
 
-async function restoreDemo(
-  db: PlutoDb,
-  before: {
-    courses: CourseRow[];
-    gradeGroups: GradeGroupRow[];
-    assignments: AssignmentRow[];
-    files: FileRow[];
-  },
-): Promise<void> {
+async function restoreDemo(db: PlutoDb, before: DemoSnapshot): Promise<void> {
   const after = await demoSnapshot(db);
+  await deleteAdded(db, "assignment_files", before.assignmentFiles, after.assignmentFiles);
   await deleteAdded(db, "courses", before.courses, after.courses);
   await deleteAdded(db, "assignments", before.assignments, after.assignments);
   await deleteAdded(db, "files", before.files, after.files);
@@ -574,6 +627,8 @@ async function restoreDemo(
         graded: row.graded,
         submitted: row.submitted,
         canvas_assignment_id: row.canvas_assignment_id,
+        description: row.description,
+        canvas_url: row.canvas_url,
       })
       .eq("student_id", DEMO_STUDENT_ID)
       .eq("id", row.id);
@@ -598,11 +653,20 @@ async function restoreDemo(
       .eq("id", row.id);
     if (error) throw new Error(`restore file ${row.id}: ${error.message}`);
   }
+  // The sync deletes attachment rows (and their pages) that the fixtures do not link: put them back.
+  if (before.assignmentFiles.length > 0) {
+    const { error } = await db.from("assignment_files").upsert(before.assignmentFiles, { onConflict: "id" });
+    if (error) throw new Error(`restore assignment files: ${error.message}`);
+  }
+  if (before.assignmentFilePages.length > 0) {
+    const { error } = await db.from("assignment_file_pages").upsert(before.assignmentFilePages, { onConflict: "id" });
+    if (error) throw new Error(`restore assignment file pages: ${error.message}`);
+  }
 }
 
 async function deleteAdded(
   db: PlutoDb,
-  table: "courses" | "grade_groups" | "assignments" | "files",
+  table: "courses" | "grade_groups" | "assignments" | "files" | "assignment_files",
   before: Array<{ id: string }>,
   after: Array<{ id: string }>,
 ): Promise<void> {

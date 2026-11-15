@@ -94,3 +94,27 @@ select
   r.points, r.score, r.graded, r.submitted,
   'seed-' || r.n
 from rows r cross join base b;
+
+-- ---------------------------------------------------------------- assignment instructions and attachments
+-- Same as supabase/seed.sql: Lab Report 3 has Canvas instructions, a Word handout (text already read,
+-- no storage object) and a spreadsheet listed by name only.
+update public.assignments
+set canvas_url = 'https://canvas.example.edu/courses/151/assignments/112',
+    description = 'Write a lab report on the onion root tip mitosis lab. Include an introduction, methods, results with your cell counts for each phase, and a discussion of what the mitotic index tells you. Follow the section list in the handout and record your counts in the data template. Submit one PDF.'
+where id = 'a0000000-0000-4000-8000-300000000112'
+  and student_id = '33333333-3333-4333-8333-333333333333';
+
+insert into public.assignment_files (
+  id, student_id, assignment_id, canvas_file_id, title, file_type, size_bytes, canvas_updated_at, ingest_status, page_count
+)
+values
+  ('af000000-0000-4000-8000-300000000001', '33333333-3333-4333-8333-333333333333', 'a0000000-0000-4000-8000-300000000112',
+   '25001', 'Lab_3_Mitosis_Handout.docx', 'docx', 20172, '2026-11-03T14:00:00Z', 'ready', 1),
+  ('af000000-0000-4000-8000-300000000002', '33333333-3333-4333-8333-333333333333', 'a0000000-0000-4000-8000-300000000112',
+   '25002', 'Mitosis_Data_Template.xlsx', 'other', 9830, '2026-11-03T14:05:00Z', 'skipped', null);
+
+insert into public.assignment_file_pages (student_id, assignment_file_id, page_number, text)
+values (
+  '33333333-3333-4333-8333-333333333333', 'af000000-0000-4000-8000-300000000001', 1,
+  'Lab 3 Handout: Mitosis in Onion Root Tips. Count 200 cells under the microscope and record how many are in interphase, prophase, metaphase, anaphase and telophase. Your report must include a mitotic index table, a labeled drawing of each phase, and a discussion of why the root tip has so many dividing cells. Length: 4 to 6 pages, double spaced. Due at 11:59 PM; late reports lose 10 percent per day.'
+);

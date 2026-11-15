@@ -24,6 +24,8 @@ function assignment(overrides: Partial<CanvasAssignment> = {}): CanvasAssignment
     score: null,
     graded: false,
     submitted: false,
+    descriptionHtml: null,
+    htmlUrl: null,
     ...overrides,
   };
 }
@@ -47,6 +49,9 @@ describe("disk fixtures fetch", () => {
     expect(await disk.listAssignments("seed-hist-105")).toEqual(await real.listAssignments("seed-hist-105"));
     expect(await disk.listCourseFiles("seed-stat-240")).toEqual(await real.listCourseFiles("seed-stat-240"));
     expect(await disk.listModuleItems("seed-bio-151")).toEqual(await real.listModuleItems("seed-bio-151"));
+    expect(await disk.listAssignments("seed-stat-240")).toEqual(await real.listAssignments("seed-stat-240"));
+    expect(await disk.getCourseFile("seed-stat-240", "24002")).toEqual(await real.getCourseFile("seed-stat-240", "24002"));
+    expect(await disk.getCourseFile("seed-stat-240", "99999")).toBeNull();
   });
 });
 

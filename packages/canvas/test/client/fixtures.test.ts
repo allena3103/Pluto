@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createCanvasClient } from "../../src/client";
+import { classifyFileType, linkedFileIds } from "../../src/map";
 import { CanvasNotFoundError } from "../../src/types";
 
 describe("canvas fixtures mode", () => {
@@ -47,6 +48,25 @@ describe("canvas fixtures mode", () => {
       moduleName: "Week 7: Primary Sources",
       canvasFileId: "hist-file-1",
     });
+  });
+
+  it("links a PDF, a Word file and a spreadsheet from the Project Proposal description", async () => {
+    const client = createCanvasClient({ baseUrl: "https://fixtures.canvas.local", token: "unused", mode: "fixtures" });
+    const proposal = (await client.listAssignments("seed-stat-240")).find((row) => row.canvasAssignmentId === "seed-123");
+    expect(proposal?.htmlUrl).toBe("https://fixtures.canvas.local/courses/seed-stat-240/assignments/seed-123");
+
+    const ids = linkedFileIds(proposal?.descriptionHtml ?? null, "seed-stat-240");
+    expect(ids).toEqual(["24001", "24002", "24003"]);
+    const files = await Promise.all(ids.map((id) => client.getCourseFile("seed-stat-240", id)));
+    expect(files.map((file) => file && [file.title, classifyFileType(file)])).toEqual([
+      ["Project Proposal Guidelines.pdf", "pdf"],
+      ["Proposal Template.docx", "docx"],
+      ["Data Dictionary.xlsx", "other"],
+    ]);
+    // Attachments are not notes: none of them is in the course's file listing.
+    const notes = await client.listCourseFiles("seed-stat-240");
+    expect(notes.some((file) => ids.includes(file.canvasFileId))).toBe(false);
+    await expect(client.getCourseFile("seed-stat-240", "24004")).resolves.toBeNull();
   });
 
   it("resolves seeded due_at templates to exact UTC instants", async () => {
