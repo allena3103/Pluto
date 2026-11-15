@@ -118,6 +118,41 @@ describe("mock agent", () => {
       expect(result.questions).toBeUndefined();
       expect(runTool).toHaveBeenCalledWith("search_notes", expect.anything());
     });
+
+    it("asks which class for a vague notes request instead of searching", async () => {
+      const runTool = vi.fn(async () => twoCourses);
+      const result = await runAgent({ llm: "mock", channel: "web", message: "lets take a look at my class notes", runTool });
+      expect(runTool).toHaveBeenCalledTimes(1);
+      expect(runTool).toHaveBeenCalledWith("list_courses", {});
+      expect(result.questions?.[0]).toMatchObject({ id: "class", options: ["History 105", "Biology 110"] });
+      expect(result.text).not.toMatch(/couldn't find/i);
+    });
+
+    it("reads the chosen class's notes once the vague request is answered", async () => {
+      const runTool = vi.fn(async (name: string) => (name === "list_courses" ? twoCourses : recentNotes));
+      const result = await runAgent({
+        llm: "mock",
+        channel: "web",
+        message: "lets take a look at my class notes\n\nWhich class? Biology 110\nWhich notes should I use? Whole term",
+        runTool,
+      });
+      expect(runTool).toHaveBeenLastCalledWith("get_recent_notes", { course: "Biology 110", days: 120 });
+      expect(result.text.startsWith("# Biology 110 notes")).toBe(true);
+      expect(result.citations).toHaveLength(1);
+    });
+
+    it("asks for the class in plain text on SMS", async () => {
+      const runTool = vi.fn(async () => twoCourses);
+      const result = await runAgent({ llm: "mock", channel: "sms", message: "show me my notes", runTool });
+      expect(result.questions).toBeUndefined();
+      expect(result.text).toBe("Which class? History 105, Biology 110");
+    });
+
+    it("still searches when the request names a topic", async () => {
+      const runTool = searchRunner();
+      await runAgent({ llm: "mock", channel: "web", message: "show me my notes on the treaty", runTool });
+      expect(runTool).toHaveBeenCalledWith("search_notes", expect.objectContaining({ query: "treaty" }));
+    });
   });
 
   it("sets a magic link for SMS without putting that URL in the text", async () => {

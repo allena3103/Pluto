@@ -33,23 +33,35 @@ export function mockToolCall(message: string): MockCall {
 // Words that describe the request, not the topic.
 const FILLER: Record<string, true> = Object.fromEntries(
   [
-    "about", "and", "any", "are", "can", "class", "course", "did", "does", "explain", "find", "for", "from",
-    "has", "have", "history", "how", "lecture", "lectures", "mine", "note", "notes", "our", "say", "says",
-    "show", "summarize", "tell", "that", "the", "this", "was", "were", "what", "what's", "whats", "when",
-    "where", "which", "who", "why", "with", "you", "your", "105",
+    "about", "all", "and", "any", "are", "can", "check", "class", "classes", "course", "did", "does", "explain",
+    "find", "for", "from", "get", "give", "has", "have", "history", "how", "lecture", "lectures", "let", "let's",
+    "lets", "look", "mine", "need", "note", "notes", "open", "our", "over", "please", "pull", "read", "review",
+    "say", "says", "see", "show", "slides", "some", "summarize", "take", "tell", "that", "the", "this", "want",
+    "was", "were", "what", "what's", "whats", "when", "where", "which", "who", "why", "with", "you", "your", "105",
   ].map((word) => [word, true]),
 );
+
+function topicWords(message: string): string[] {
+  return message
+    .toLowerCase()
+    .split(/[^a-z0-9']+/)
+    .filter((word) => word.length > 2 && FILLER[word] !== true);
+}
 
 /**
  * `search_notes` uses websearch_to_tsquery, which ANDs every word, so a whole question rarely matches.
  * Keep the topic words and OR them; fall back to the raw message when nothing is left.
  */
 export function mockSearchQuery(message: string): string {
-  const words = message
-    .toLowerCase()
-    .split(/[^a-z0-9']+/)
-    .filter((word) => word.length > 2 && FILLER[word] !== true);
+  const words = topicWords(message);
   return words.length > 0 ? words.join(" or ").slice(0, 500) : message.trim().slice(0, 500);
+}
+
+const NOTES_WORDS = /\b(notes?|lectures?|class(es)?|slides|readings?)\b/i;
+
+/** "let's look at my class notes": about notes, but no topic to search for. */
+export function isVagueNotesRequest(message: string): boolean {
+  return NOTES_WORDS.test(message) && topicWords(message).length === 0 && mockToolCall(message).name === "search_notes";
 }
 
 type SearchHit = { title: string; page: number };
@@ -174,7 +186,7 @@ function daysFor(message: string): number {
 type RecentPage = { page: number; text: string };
 type RecentFile = { title: string; pages: RecentPage[] };
 
-function studyGuideText(course: string, result: unknown): string {
+function notesText(heading: string, course: string, result: unknown): string {
   const files = (result && typeof result === "object" ? (result as { files?: unknown }).files : undefined) as
     | RecentFile[]
     | undefined;
@@ -186,22 +198,30 @@ function studyGuideText(course: string, result: unknown): string {
     });
     return [`## ${file.title}`, ...bullets].join("\n");
   });
-  return [`# ${course} study guide`, ...sections].join("\n\n");
+  return [`# ${heading}`, ...sections].join("\n\n");
 }
 
 /**
- * Web "study guide" requests: ask for the class when there are several and none is named,
- * otherwise read that class's recent notes. Keeps the clarifying-question path testable without Gemini.
+ * Notes requests that need a class: study guides, and vague asks like "let's look at my class notes".
+ * Asks for the class when there are several and none is named (web: question card; SMS: one short
+ * question), otherwise reads that class's recent notes. Keeps the clarifying path testable without Gemini.
+ * Answers arrive as the original request plus "Question? answer" lines, so the first line is the request.
  */
-async function runMockStudyGuide(input: RunAgentInput, runTool: AgentToolRunner): Promise<AgentResult> {
+async function runMockClassNotes(input: RunAgentInput, runTool: AgentToolRunner): Promise<AgentResult> {
   const courses = courseNames(await withDeadline(runTool("list_courses", {}), TOOL_TIMEOUT_MS, input.signal));
   const text = input.message.toLowerCase();
+  const studyGuide = /study guide/i.test(input.message);
   const named = courses.find((name) => text.includes(name.toLowerCase()));
   const course = named ?? (courses.length === 1 ? courses[0] : undefined);
   if (!course) {
     if (courses.length === 0) return { text: "I couldn't find any classes yet.", citations: [] };
+    if (input.channel === "sms") {
+      return { text: `Which class? ${courses.slice(0, 8).join(", ")}`.slice(0, 299), citations: [] };
+    }
     return {
-      text: "Happy to make that study guide. A couple of quick questions first:",
+      text: studyGuide
+        ? "Happy to make that study guide. A couple of quick questions first:"
+        : "Sure! Which notes do you want to look at?",
       citations: [],
       questions: [
         { id: "class", prompt: "Which class?", options: courses.slice(0, 8), multiple: false, allowText: false },
@@ -214,15 +234,22 @@ async function runMockStudyGuide(input: RunAgentInput, runTool: AgentToolRunner)
     TOOL_TIMEOUT_MS,
     input.signal,
   );
-  return { text: studyGuideText(course, result), citations: collectCitations(result) };
+  const heading = studyGuide ? `${course} study guide` : `${course} notes`;
+  const reply = notesText(heading, course, result);
+  return {
+    text: input.channel === "sms" ? `Your recent ${course} notes are ready.` : reply,
+    citations: collectCitations(result),
+  };
 }
 
 export async function runMock(input: RunAgentInput, runTool: AgentToolRunner): Promise<AgentResult> {
   if (input.signal?.aborted) return { text: EMPTY_REPLY_TEXT, citations: [] };
 
-  if (input.channel === "web" && /study guide/i.test(input.message)) {
+  const request = input.message.split("\n", 1)[0] ?? "";
+  const studyGuide = input.channel === "web" && /study guide/i.test(request);
+  if (studyGuide || isVagueNotesRequest(request)) {
     try {
-      return await runMockStudyGuide(input, runTool);
+      return await runMockClassNotes(input, runTool);
     } catch {
       return { text: TOOL_FAILURE_TEXT, citations: [] };
     }
