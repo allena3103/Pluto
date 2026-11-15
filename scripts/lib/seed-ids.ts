@@ -43,3 +43,11 @@ export const SEED_COUNTS = {
   demo: { courses: 3, grade_groups: 9, assignments: 33 },
   other: { courses: 1, grade_groups: 1, assignments: 2 },
 } as const;
+
+/** Shared judge demo account (`npm run seed:judge`, scripts/seed-judge.sql). Same synthetic data as the demo student. */
+export const JUDGE_STUDENT_ID = "33333333-3333-4333-8333-333333333333";
+export const JUDGE_COURSE_IDS: Record<keyof typeof COURSE_IDS, string> = {
+  history105: "c0000000-0000-4000-8000-300000000001",
+  biology151: "c0000000-0000-4000-8000-300000000002",
+  statistics240: "c0000000-0000-4000-8000-300000000003",
+};

@@ -23,7 +23,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { useStartNewChat } from "@/components/chat/new-chat";
 import { cn } from "@/lib/utils";
 
-type NavLink = { href: string; label: string; icon: LucideIcon; tint: string };
+type NavLink = { href: string; label: string; icon: LucideIcon; tint: string; sms?: boolean };
 
 const PRIMARY_LINKS: readonly NavLink[] = [
   { href: "/notes", label: "Notes", icon: FileText, tint: "bg-sky-tint text-sky-700" },
@@ -34,8 +34,8 @@ const PRIMARY_LINKS: readonly NavLink[] = [
 
 const SETTINGS_LINKS: readonly NavLink[] = [
   { href: "/settings/canvas", label: "Canvas", icon: Plug, tint: "" },
-  { href: "/settings/phone", label: "Phone", icon: Smartphone, tint: "" },
-  { href: "/sms-sim", label: "SMS sim", icon: MessageSquareText, tint: "" },
+  { href: "/settings/phone", label: "Phone", icon: Smartphone, tint: "", sms: true },
+  { href: "/sms-sim", label: "SMS sim", icon: MessageSquareText, tint: "", sms: true },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -68,8 +68,10 @@ function NewChatButton({ onDone }: { onDone?: () => void }) {
   );
 }
 
-function NavSections({ onNavigate }: { onNavigate?: () => void }) {
+/** `judge`: the shared judge demo account, which has no SMS. */
+function NavSections({ judge, onNavigate }: { judge: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const settingsLinks = judge ? SETTINGS_LINKS.filter((link) => !link.sms) : SETTINGS_LINKS;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -111,7 +113,7 @@ function NavSections({ onNavigate }: { onNavigate?: () => void }) {
           Settings
         </p>
         <ul className="mt-2 space-y-0.5">
-          {SETTINGS_LINKS.map(({ href, label, icon: Icon }) => {
+          {settingsLinks.map(({ href, label, icon: Icon }) => {
             const active = isActive(pathname, href);
             return (
               <li key={href}>
@@ -143,7 +145,7 @@ function NavSections({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 /** Desktop (md+) slim left sidebar. */
-export function AppSidebar() {
+export function AppSidebar({ judge }: { judge: boolean }) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-border/70 bg-white/55 px-4 py-5 backdrop-blur-sm md:flex">
       <Link href="/" className="rounded-full px-2 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-none">
@@ -152,13 +154,13 @@ export function AppSidebar() {
       <div className="mt-6">
         <NewChatButton />
       </div>
-      <NavSections />
+      <NavSections judge={judge} />
     </aside>
   );
 }
 
 /** Mobile top bar with a slide-in drawer holding the same links. */
-export function MobileTopBar() {
+export function MobileTopBar({ judge }: { judge: boolean }) {
   const [open, setOpen] = useState(false);
   const startNewChat = useStartNewChat();
 
@@ -198,7 +200,7 @@ export function MobileTopBar() {
             <div className="mt-5">
               <NewChatButton onDone={() => setOpen(false)} />
             </div>
-            <NavSections onNavigate={() => setOpen(false)} />
+            <NavSections judge={judge} onNavigate={() => setOpen(false)} />
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>

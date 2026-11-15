@@ -115,7 +115,8 @@ export default async function AssignmentFilePage({ params, searchParams }: Props
     return notice("Could not read this file", "Open it from the assignment in Canvas instead.");
   }
 
-  const page = parsePageParam(rawPage, file.page_count);
+  // A ready file with no text has page_count 0; page 1 must still be valid, or ?page=1 redirects to itself.
+  const page = parsePageParam(rawPage, file.page_count === null ? null : Math.max(1, file.page_count));
   if (page === null) redirect(assignmentFilePath(assignmentId, attachmentId, 1));
 
   const pagesLabel = file.page_count ? ` · ${file.page_count} ${file.page_count === 1 ? "page" : "pages"}` : "";

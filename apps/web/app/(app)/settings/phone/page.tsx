@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { Smartphone } from "lucide-react";
+import { isJudgeUser } from "@/lib/judge";
 import { createClient } from "@/lib/supabase/server";
 import { PageShell } from "@/components/page-shell";
 import { PhoneLink } from "./phone-link";
@@ -9,6 +11,7 @@ export default async function PhoneSettingsPage() {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
+  if (isJudgeUser(user)) redirect("/");
 
   let phone: string | null = null;
   let loadFailed = false;

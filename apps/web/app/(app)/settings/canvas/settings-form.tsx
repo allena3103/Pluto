@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -32,6 +32,9 @@ const DEFAULT_BASE_URL = "https://umamherst.instructure.com";
 // Shown to the student (read-only) so they can open Canvas and create a token.
 // The API still gets the plain host in `baseUrl`; it rejects URLs with a path.
 const CANVAS_TOKEN_PAGE_URL = `${DEFAULT_BASE_URL}/profile/settings`;
+
+// Same shape the token route accepts: 20 to 200 characters, no spaces.
+const TOKEN_SHAPE = /^\S{20,200}$/;
 
 function parseError(body: unknown, fallback: string): string {
   if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
@@ -103,13 +106,9 @@ export function CanvasSettingsForm({ initialConnected, initialBaseUrl }: CanvasS
     }
   }
 
-  const handleSave = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  // Saves the token, then runs the first sync.
+  const saveToken = (token: string) => {
     setError(null);
-
-    const formData = new FormData(event.currentTarget);
-    const token = String(formData.get("token") ?? "");
-
     startTransition(async () => {
       try {
         const response = await fetch("/api/canvas/token", {
@@ -136,6 +135,24 @@ export function CanvasSettingsForm({ initialConnected, initialBaseUrl }: CanvasS
         }
       }
     });
+  };
+
+  const handleSave = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    saveToken(String(formData.get("token") ?? ""));
+  };
+
+  // Pasting a whole token saves it right away, so the student doesn't need the Save button.
+  const handleTokenPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    if (isPending) return;
+    const input = event.currentTarget;
+    const pasted = event.clipboardData.getData("text").trim();
+    const replacesAll = input.value === "" || (input.selectionStart === 0 && input.selectionEnd === input.value.length);
+    if (!replacesAll || !TOKEN_SHAPE.test(pasted)) return;
+    event.preventDefault();
+    input.value = pasted;
+    saveToken(pasted);
   };
 
   const handleSync = () => {
@@ -184,46 +201,77 @@ export function CanvasSettingsForm({ initialConnected, initialBaseUrl }: CanvasS
         {statusText}
       </p>
 
+      <div className="rounded-2xl border border-primary/25 bg-lilac p-4 sm:p-5">
+        <h2 className="text-base font-extrabold text-foreground">Connect Canvas in 4 steps</h2>
+        <ol className="mt-2.5 list-decimal space-y-1.5 pl-5 text-sm font-semibold text-foreground marker:font-extrabold marker:text-primary">
+          <li>
+            Click <strong className="font-extrabold">Open Canvas</strong> and log in.
+          </li>
+          <li>
+            Scroll to <strong className="font-extrabold">Approved Integrations</strong> and click{" "}
+            <strong className="font-extrabold">+ New Access Token</strong>.
+          </li>
+          <li>
+            Type &quot;Pluto&quot; as the purpose, then click <strong className="font-extrabold">Generate Token</strong>
+            .
+          </li>
+          <li>Copy the token and paste it below.</li>
+        </ol>
+      </div>
+
       <form className="space-y-4" onSubmit={handleSave}>
         <div className="space-y-1.5">
           <label htmlFor="canvas-token-page" className="block text-sm font-bold text-foreground">
             Canvas settings link
           </label>
-          <div className="flex items-center gap-2">
-            <Input
-              ref={linkInputRef}
-              id="canvas-token-page"
-              type="url"
-              value={CANVAS_TOKEN_PAGE_URL}
-              readOnly
-              onFocus={(event) => event.currentTarget.select()}
-              className="bg-muted text-muted-foreground"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-lg"
-              className="shrink-0"
-              onClick={handleCopy}
-              aria-label={copied ? "Link copied" : "Copy link"}
-              title={copied ? "Copied" : "Copy link"}
-            >
-              {copied ? <Check className="text-emerald-600" /> : <Copy />}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <Input
+                ref={linkInputRef}
+                id="canvas-token-page"
+                type="url"
+                value={CANVAS_TOKEN_PAGE_URL}
+                readOnly
+                onFocus={(event) => event.currentTarget.select()}
+                className="bg-muted text-muted-foreground"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-lg"
+                className="shrink-0"
+                onClick={handleCopy}
+                aria-label={copied ? "Link copied" : "Copy link"}
+                title={copied ? "Copied" : "Copy link"}
+              >
+                {copied ? <Check className="text-emerald-600" /> : <Copy />}
+              </Button>
+            </div>
+            <Button asChild variant="sunrise" className="shrink-0">
+              <a href={CANVAS_TOKEN_PAGE_URL} target="_blank" rel="noopener noreferrer">
+                Open Canvas
+                <ExternalLink />
+              </a>
             </Button>
           </div>
           <p className="text-xs font-semibold text-muted-foreground" aria-live="polite">
-            {copied ? "Link copied." : "Open this page in Canvas and create a new access token."}
+            {copied ? "Link copied." : null}
           </p>
         </div>
 
         <label className="block space-y-1.5">
           <span className="text-sm font-bold text-foreground">Canvas personal access token</span>
-          <Input ref={tokenInputRef} name="token" type="password" autoComplete="off" required />
+          <Input
+            ref={tokenInputRef}
+            name="token"
+            type="password"
+            autoComplete="off"
+            onPaste={handleTokenPaste}
+            required
+          />
         </label>
 
-        {error ? (
-          <p className="rounded-2xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700">{error}</p>
-        ) : null}
+        {error ? <p className="rounded-2xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700">{error}</p> : null}
         {syncStatus ? (
           <p className="rounded-2xl bg-muted px-4 py-2.5 text-sm font-semibold text-foreground">{syncStatus}</p>
         ) : null}

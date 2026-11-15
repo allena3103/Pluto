@@ -6,7 +6,14 @@ import { join } from "node:path";
 import { ingestFile, NOTES_BUCKET, notesStoragePath } from "@pluto/core/ingest";
 import type { PlutoDb } from "@pluto/core/context";
 import { repoRoot } from "./env";
-import { COURSE_IDS, DEMO_STUDENT_ID, OTHER_COURSE_ID, OTHER_STUDENT_ID } from "./seed-ids";
+import {
+  COURSE_IDS,
+  DEMO_STUDENT_ID,
+  JUDGE_COURSE_IDS,
+  JUDGE_STUDENT_ID,
+  OTHER_COURSE_ID,
+  OTHER_STUDENT_ID,
+} from "./seed-ids";
 
 export interface ManifestEntry {
   file: string;
@@ -72,14 +79,25 @@ async function seedOne(admin: PlutoDb, item: SeedFile): Promise<number> {
   return result.pageCount ?? 0;
 }
 
-export async function seedLectureFiles(admin: PlutoDb): Promise<void> {
-  const manifest = readManifest();
-  const items: SeedFile[] = manifest.map((entry) => ({
-    studentId: DEMO_STUDENT_ID,
-    courseId: COURSE_IDS[entry.courseKey],
+async function seedItems(admin: PlutoDb, items: SeedFile[]): Promise<void> {
+  let pages = 0;
+  for (const item of items) pages += await seedOne(admin, item);
+  console.log(`seed: ${items.length} lecture PDFs uploaded and ingested (${pages} pages)`);
+}
+
+/** Every manifest PDF for one student, in that student's copy of the seeded courses. */
+function manifestItems(studentId: string, courseIds: Record<keyof typeof COURSE_IDS, string>): SeedFile[] {
+  return readManifest().map((entry) => ({
+    studentId,
+    courseId: courseIds[entry.courseKey],
     entry,
     title: entry.title,
   }));
+}
+
+export async function seedLectureFiles(admin: PlutoDb): Promise<void> {
+  const manifest = readManifest();
+  const items = manifestItems(DEMO_STUDENT_ID, COURSE_IDS);
   const otherEntry = manifest.find((entry) => entry.file === OTHER_STUDENT_SEED_FILE);
   if (!otherEntry) throw new Error(`seed: ${OTHER_STUDENT_SEED_FILE} missing from manifest`);
   items.push({
@@ -89,7 +107,10 @@ export async function seedLectureFiles(admin: PlutoDb): Promise<void> {
     title: "Other student's private notes",
   });
 
-  let pages = 0;
-  for (const item of items) pages += await seedOne(admin, item);
-  console.log(`seed: ${items.length} lecture PDFs uploaded and ingested (${pages} pages)`);
+  await seedItems(admin, items);
+}
+
+/** The judge demo account's lecture PDFs (`npm run seed:judge`). */
+export async function seedJudgeLectureFiles(admin: PlutoDb): Promise<void> {
+  await seedItems(admin, manifestItems(JUDGE_STUDENT_ID, JUDGE_COURSE_IDS));
 }

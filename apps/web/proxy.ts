@@ -15,18 +15,6 @@ function nextWithPath(request: NextRequest) {
   });
 }
 
-// Temporary: with PLUTO_AUTO_LOGIN_DEMO=1 every visitor without a session is signed in
-// as the demo student (DEMO_STUDENT_EMAIL / DEMO_STUDENT_PASSWORD), and the login and
-// signup pages send them home. Unset the flag to bring normal sign-in back.
-const AUTH_PAGES = new Set(["/login", "/signup"]);
-
-function demoCredentials(): { email: string; password: string } | null {
-  if (process.env.PLUTO_AUTO_LOGIN_DEMO !== "1") return null;
-  const email = process.env.DEMO_STUDENT_EMAIL;
-  const password = process.env.DEMO_STUDENT_PASSWORD;
-  return email && password ? { email, password } : null;
-}
-
 function redirectKeepingCookies(target: URL, response: NextResponse): NextResponse {
   const redirectResponse = NextResponse.redirect(target);
   response.cookies.getAll().forEach((cookie) => {
@@ -72,18 +60,6 @@ export async function proxy(request: NextRequest) {
   }
 
   const { pathname } = request.nextUrl;
-  const demo = demoCredentials();
-  if (demo) {
-    if (!user && (!isPublicPath(pathname) || AUTH_PAGES.has(pathname))) {
-      // setAll above copies the new session cookies onto both the forwarded request and the response.
-      const { data, error } = await supabase.auth.signInWithPassword(demo);
-      if (!error) user = data.user;
-    }
-    if (user && AUTH_PAGES.has(pathname)) {
-      return redirectKeepingCookies(new URL("/", request.url), response);
-    }
-  }
-
   if (!user && !isPublicPath(pathname)) {
     const loginUrl = new URL(loginRedirectForPath(`${pathname}${request.nextUrl.search}`), request.url);
     return redirectKeepingCookies(loginUrl, response);
