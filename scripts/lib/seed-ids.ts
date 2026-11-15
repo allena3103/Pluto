@@ -31,6 +31,8 @@ export const OTHER_COURSE_NAME = "Chemistry 111";
 
 /** The one upcoming History 105 assignment whose due date moved (date-change demo). */
 export const DATE_CHANGED_ASSIGNMENT_ID = "a0000000-0000-4000-8000-000000000101";
+/** Biology 151 "Lab Report 3: Mitosis": seeded instructions, a Word handout (read) and a spreadsheet (listed only). */
+export const ATTACHMENT_ASSIGNMENT_ID = "a0000000-0000-4000-8000-000000000112";
 
 /** The heavy exam that anchors the crunch week (3 weeks after the current week, Mon-Sun). */
 export const CRUNCH_EXAM_ASSIGNMENT_ID = "a0000000-0000-4000-8000-000000000103";
