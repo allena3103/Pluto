@@ -233,14 +233,14 @@ isOneToOne: false
                   ]
                 },"magic_links": {
                   Row: {
-                    "created_at": string,"expires_at": string,"file_id": string,"id": string,"page": number,"student_id": string,"token_hash": string,"used_at": string | null
+                    "created_at": string,"expires_at": string,"file_id": string | null,"id": string,"page": number,"saved_note_id": string | null,"student_id": string,"token_hash": string,"used_at": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"expires_at": string,"file_id": string,"id"?: string,"page"?: number,"student_id": string,"token_hash": string,"used_at"?: string | null
+                    "created_at"?: string,"expires_at": string,"file_id"?: string | null,"id"?: string,"page"?: number,"saved_note_id"?: string | null,"student_id": string,"token_hash": string,"used_at"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"expires_at"?: string,"file_id"?: string,"id"?: string,"page"?: number,"student_id"?: string,"token_hash"?: string,"used_at"?: string | null
+                    "created_at"?: string,"expires_at"?: string,"file_id"?: string | null,"id"?: string,"page"?: number,"saved_note_id"?: string | null,"student_id"?: string,"token_hash"?: string,"used_at"?: string | null
                   }
                   Relationships: [
                     {
@@ -255,6 +255,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "profiles"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "magic_links_student_id_saved_note_id_fkey"
+      columns: ["student_id","saved_note_id"]
+isOneToOne: false
+      referencedRelation: "saved_notes"
+      referencedColumns: ["student_id","id"]
     }
                   ]
                 },"phone_link_codes": {
@@ -293,14 +299,14 @@ isOneToOne: false
                   ]
                 },"saved_notes": {
                   Row: {
-                    "body": string,"course_id": string | null,"created_at": string,"id": string,"session_id": string | null,"sources": NonNullable<Json>,"student_id": string,"title": string
+                    "body": string,"course_id": string | null,"created_at": string,"id": string,"session_id": string | null,"source": string,"sources": NonNullable<Json>,"student_id": string,"title": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "body": string,"course_id"?: string | null,"created_at"?: string,"id"?: string,"session_id"?: string | null,"sources"?: NonNullable<Json>,"student_id": string,"title": string
+                    "body": string,"course_id"?: string | null,"created_at"?: string,"id"?: string,"session_id"?: string | null,"source"?: string,"sources"?: NonNullable<Json>,"student_id": string,"title": string
                   }
                   Update: {
-                    "body"?: string,"course_id"?: string | null,"created_at"?: string,"id"?: string,"session_id"?: string | null,"sources"?: NonNullable<Json>,"student_id"?: string,"title"?: string
+                    "body"?: string,"course_id"?: string | null,"created_at"?: string,"id"?: string,"session_id"?: string | null,"source"?: string,"sources"?: NonNullable<Json>,"student_id"?: string,"title"?: string
                   }
                   Relationships: [
                     {

@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { handleOpen } from "./handler";
 
-// GET /open/:token -> 302 to /notes/<fileId>?page=<n> (signed in) or /login?error=link.
+// GET /open/:token -> 302 to /notes/<fileId>?page=<n> or /notes/saved/<id> (signed in), or /login?error=link.
 // Service role is used only after the token is parsed, to consume it atomically
 // and to sign in the student it was minted for.
 export const runtime = "nodejs";
