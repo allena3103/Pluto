@@ -77,14 +77,14 @@ isOneToOne: false
                   ]
                 },"assignment_files": {
                   Row: {
-                    "assignment_id": string,"canvas_file_id": string,"canvas_updated_at": string | null,"created_at": string,"file_type": string,"id": string,"ingest_error": string | null,"ingest_status": string,"page_count": number | null,"size_bytes": number | null,"storage_path": string | null,"student_id": string,"title": string,"updated_at": string
+                    "assignment_id": string,"canvas_file_id": string,"canvas_updated_at": string | null,"created_at": string,"file_type": string,"id": string,"ingest_attempts": number,"ingest_error": string | null,"ingest_status": string,"page_count": number | null,"size_bytes": number | null,"storage_path": string | null,"student_id": string,"title": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "assignment_id": string,"canvas_file_id": string,"canvas_updated_at"?: string | null,"created_at"?: string,"file_type": string,"id"?: string,"ingest_error"?: string | null,"ingest_status"?: string,"page_count"?: number | null,"size_bytes"?: number | null,"storage_path"?: string | null,"student_id": string,"title": string,"updated_at"?: string
+                    "assignment_id": string,"canvas_file_id": string,"canvas_updated_at"?: string | null,"created_at"?: string,"file_type": string,"id"?: string,"ingest_attempts"?: number,"ingest_error"?: string | null,"ingest_status"?: string,"page_count"?: number | null,"size_bytes"?: number | null,"storage_path"?: string | null,"student_id": string,"title": string,"updated_at"?: string
                   }
                   Update: {
-                    "assignment_id"?: string,"canvas_file_id"?: string,"canvas_updated_at"?: string | null,"created_at"?: string,"file_type"?: string,"id"?: string,"ingest_error"?: string | null,"ingest_status"?: string,"page_count"?: number | null,"size_bytes"?: number | null,"storage_path"?: string | null,"student_id"?: string,"title"?: string,"updated_at"?: string
+                    "assignment_id"?: string,"canvas_file_id"?: string,"canvas_updated_at"?: string | null,"created_at"?: string,"file_type"?: string,"id"?: string,"ingest_attempts"?: number,"ingest_error"?: string | null,"ingest_status"?: string,"page_count"?: number | null,"size_bytes"?: number | null,"storage_path"?: string | null,"student_id"?: string,"title"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {

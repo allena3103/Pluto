@@ -36,6 +36,8 @@ export type SavedAssignmentFile = {
   canvasFileId: string;
   fileType: string;
   ingestStatus: string;
+  canvasUpdatedAt: string | null;
+  ingestAttempts: number;
 };
 
 /** `pdf` and `docx` are downloaded and read; anything else is listed by name only. */
@@ -511,7 +513,26 @@ export function buildAssignmentFileRow(input: {
     file_type: fileType,
     size_bytes: size !== null && Number.isFinite(size) && size >= 0 ? Math.round(size) : null,
     canvas_updated_at: updatedAt && !Number.isNaN(Date.parse(updatedAt)) ? updatedAt : null,
-    ingest_status: fileType === "other" ? "skipped" : (input.existing?.ingestStatus ?? "pending"),
+    ...attemptState(fileType, input.existing, updatedAt),
     updated_at: input.now.toISOString(),
   };
+}
+
+/**
+ * Status and read attempts to write. A newer Canvas version of the file earns fresh read
+ * attempts, and a failed row goes back to `pending`; a ready row stays ready (it is downloaded
+ * again because its object is now older than the file).
+ */
+function attemptState(
+  fileType: AttachmentFileType,
+  existing: SavedAssignmentFile | null,
+  incomingUpdatedAt: string | null,
+): { ingest_status: string; ingest_attempts: number } {
+  if (fileType === "other") return { ingest_status: "skipped", ingest_attempts: 0 };
+  if (!existing) return { ingest_status: "pending", ingest_attempts: 0 };
+  const incoming = Date.parse(incomingUpdatedAt ?? "");
+  const saved = Date.parse(existing.canvasUpdatedAt ?? "");
+  const newer = !Number.isNaN(incoming) && (Number.isNaN(saved) || incoming > saved);
+  if (!newer) return { ingest_status: existing.ingestStatus, ingest_attempts: existing.ingestAttempts };
+  return { ingest_status: existing.ingestStatus === "failed" ? "pending" : existing.ingestStatus, ingest_attempts: 0 };
 }

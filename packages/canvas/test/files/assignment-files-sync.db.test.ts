@@ -4,12 +4,13 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@pluto/core/database.types";
 import type { PlutoDb } from "@pluto/core/context";
-import { ASSIGNMENT_FILES_BUCKET } from "@pluto/core/assignment-ingest";
+import { ASSIGNMENT_FILES_BUCKET, ingestAssignmentFile, READ_LIMITS, READ_TOO_BIG_MESSAGE, readDocument } from "@pluto/core/assignment-ingest";
 import { NOTES_BUCKET } from "@pluto/core/ingest";
 import { syncAssignmentFiles, type AssignmentFilesSyncResult } from "../../src/assignment-files-sync";
 import { createCanvasClient, type CanvasClient } from "../../src/client";
 import { createFixtureFileFetch } from "../../src/files-sync";
 import { syncCanvas } from "../../src/sync";
+import { makeDocx } from "../../../core/test/ingest/assignment-ingest-docx";
 import { dbEnv, SKIP_DB_TESTS } from "../db-env";
 
 const TOKEN = "canvas-attachments-test-token-DO-NOT-LEAK";
@@ -36,7 +37,8 @@ function fileLink(id: number, name: string): string {
   return `<a class="instructure_file_link instructure_scribd_file inline_disabled" title="${name}" href="${CANVAS}/courses/77/files/${id}?wrap=1" target="_blank" data-api-endpoint="${CANVAS}/api/v1/courses/77/files/${id}" data-api-returntype="File">${name}</a>`;
 }
 
-type CanvasState = { linksDocx: boolean };
+/** `docxUpdatedAt`: the Word file's Canvas `updated_at` (default 2026-11-01). */
+type CanvasState = { linksDocx: boolean; docxUpdatedAt?: string };
 
 /**
  * Live-mode Canvas for one course whose Files tab is hidden (403). One assignment links a PDF
@@ -83,7 +85,7 @@ function canvasApi(state: CanvasState): typeof fetch {
       case "/api/v1/courses/77/files/11":
         return json(meta(11, "BIA_Project_Description.pdf", "application/pdf"));
       case "/api/v1/courses/77/files/12":
-        return json(meta(12, "BIA_Template.docx", DOCX));
+        return json({ ...meta(12, "BIA_Template.docx", DOCX), updated_at: state.docxUpdatedAt ?? "2026-11-01T00:00:00Z" });
       case "/api/v1/courses/77/files/13":
         return json(meta(13, "Systems.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
       default:
@@ -356,6 +358,57 @@ describe.skipIf(SKIP_DB_TESTS)("assignment attachments sync", () => {
     log("retry", again);
     expect(again).toEqual({ downloaded: 1, ingested: 1, skipped: 1, failed: 0, errors: [] });
     expect((await attachmentRows(admin, student)).map((row) => row.ingest_status)).toEqual(["ready", "ready", "skipped"]);
+    warn.mockRestore();
+  });
+
+  it("a Word file too complex to read fails in its worker, is tried twice, then waits for a newer Canvas version", async () => {
+    const admin = database();
+    const student = await createUser(admin);
+    created.push(student);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const state: CanvasState = { linksDocx: true };
+    expect((await syncCanvas({ db: admin, studentId: student, client: liveClient(state) })).errors).toEqual([]);
+
+    // ~3 MB of tiny paragraphs: passes every byte check; its parse runs out of a small worker heap.
+    const bomb = makeDocx(Array.from({ length: 60_000 }, () => "a"));
+    const tinyHeap = { ...READ_LIMITS, maxOldGenerationSizeMb: 16, maxYoungGenerationSizeMb: 4 };
+    const ingest: typeof ingestAssignmentFile = (db, input) =>
+      ingestAssignmentFile(db, input, { read: (bytes, fileType) => readDocument(bytes, fileType, tinyHeap) });
+    const bombDownloads = () =>
+      downloads((url) =>
+        url.pathname === "/files/12/download"
+          ? new Response(bomb.slice(), { status: 200, headers: { "content-type": DOCX } })
+          : null,
+      );
+    const run = (fetch: typeof globalThis.fetch) =>
+      syncAssignmentFiles({ admin, studentId: student, client: liveClient(state), download: { baseUrl: CANVAS, token: TOKEN, fetch }, ingest });
+    const docxRow = async () => (await attachmentRows(admin, student)).find((row) => row.canvas_file_id === "12")!;
+
+    const first = await run(bombDownloads().fetch);
+    log("bomb-1", first);
+    expect(first).toMatchObject({ downloaded: 2, ingested: 1, failed: 1, errors: [`attachment 12: ingest failed: ${READ_TOO_BIG_MESSAGE}`] });
+    expect(await docxRow()).toMatchObject({ ingest_status: "failed", ingest_error: READ_TOO_BIG_MESSAGE, ingest_attempts: 1 });
+
+    const second = await run(bombDownloads().fetch);
+    log("bomb-2", second);
+    expect(second).toMatchObject({ downloaded: 1, failed: 1 });
+    expect(await docxRow()).toMatchObject({ ingest_status: "failed", ingest_attempts: 2 });
+
+    // Two tries used up: the next sync doesn't even download it.
+    const third = bombDownloads();
+    const skipped = await run(third.fetch);
+    log("bomb-3", skipped);
+    expect(skipped).toEqual({ downloaded: 0, ingested: 0, skipped: 2, failed: 0, errors: [] });
+    expect(third.calls).toEqual([]);
+
+    // The teacher uploads a fixed version: the metadata sync resets the row and it is read again.
+    state.docxUpdatedAt = "2026-11-10T00:00:00Z";
+    expect((await syncCanvas({ db: admin, studentId: student, client: liveClient(state) })).errors).toEqual([]);
+    expect(await docxRow()).toMatchObject({ ingest_status: "pending", ingest_attempts: 0 });
+    const fixed = await run(downloads().fetch);
+    log("bomb-fixed", fixed);
+    expect(fixed).toEqual({ downloaded: 1, ingested: 1, skipped: 1, failed: 0, errors: [] });
+    expect(await docxRow()).toMatchObject({ ingest_status: "ready", ingest_error: null, ingest_attempts: 0, page_count: 1 });
     warn.mockRestore();
   });
 

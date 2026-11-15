@@ -4,10 +4,10 @@
  * 1-based). Kept apart from notes (`files` / `file_pages`) on purpose.
  * Server-only: `ingestAssignmentFile` needs a service-role client.
  */
+import { Worker } from "node:worker_threads";
 import { inflateRawSync } from "node:zlib";
-import mammoth from "mammoth";
 import type { PlutoDb } from "./context";
-import { extractPdfPages, INGEST_MAX_BYTES, INGEST_MAX_PAGES } from "./ingest";
+import { INGEST_MAX_BYTES, INGEST_MAX_PAGES } from "./ingest";
 
 export const ASSIGNMENT_FILES_BUCKET = "assignment-files";
 /** A Word file has no pages: its text is cut into pages of about this many characters at paragraph ends. */
@@ -21,6 +21,14 @@ const DOCX_MAX_RATIO = 200;
 const RATIO_CHECK_FLOOR = 1024 * 1024;
 /** Written before the text is read, so a crash while reading leaves a `failed` row, not a `pending` one. */
 export const INTERRUPTED_MESSAGE = "Interrupted while reading";
+/** Reads of one Canvas version of a file; after this many the sync waits for a newer version. */
+export const MAX_READ_ATTEMPTS = 2;
+export const READ_TOO_BIG_MESSAGE = "File too large or complex to read";
+export const READ_TIMEOUT_MESSAGE = "Timed out reading file";
+
+/** Limits for the worker that parses one file. The worker is ended when it passes either. */
+export type ReadLimits = { timeoutMs: number; maxOldGenerationSizeMb: number; maxYoungGenerationSizeMb: number };
+export const READ_LIMITS: ReadLimits = { timeoutMs: 20_000, maxOldGenerationSizeMb: 512, maxYoungGenerationSizeMb: 64 };
 
 export type AssignmentDocumentType = "pdf" | "docx";
 
@@ -46,28 +54,106 @@ export function assignmentFileStoragePath(
 }
 
 /**
- * Text of every page, in order: index 0 is page 1. PDF pages come from unpdf (whitespace
- * collapsed, a page without selectable text is ""). A Word file's paragraphs (blank line
- * between them) are packed into pages of up to `DOCX_PAGE_CHARS`; a file without text has no pages.
+ * Text of every page, in order: index 0 is page 1, read in a worker (see `readDocument`). PDF
+ * pages have whitespace collapsed (a page without selectable text is ""). A Word file's
+ * paragraphs (blank line between them) are packed into pages of up to `DOCX_PAGE_CHARS`; a file
+ * without text has no pages. The caller keeps its bytes: the worker gets a copy.
  */
-export async function extractDocumentPages(bytes: Uint8Array, fileType: AssignmentDocumentType): Promise<string[]> {
-  if (fileType === "pdf") return extractPdfPages(bytes);
-  if (bytes.byteLength === 0) throw new Error("Word file is empty");
-  if (bytes.byteLength > INGEST_MAX_BYTES) throw new Error("Word file is larger than 50 MB");
-  checkDocxZip(bytes);
-  const { value } = await mammoth.extractRawText({
-    buffer: Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
-  });
-  const pages = packPages(paragraphsOf(value), DOCX_PAGE_CHARS);
-  if (pages.length > INGEST_MAX_PAGES) throw new Error(`Word file has more than ${INGEST_MAX_PAGES} pages of text`);
-  return pages;
+export async function extractDocumentPages(
+  bytes: Uint8Array,
+  fileType: AssignmentDocumentType,
+  limits: ReadLimits = READ_LIMITS,
+): Promise<string[]> {
+  return (await readDocument(bytes.slice(), fileType, limits)).pages;
 }
 
 /**
- * Refuses a Word file that would unpack to too much before mammoth (which unpacks every part
- * into memory) sees it. Reads the zip's central directory the way JSZip does, checks the
- * declared sizes, then unpacks every entry with a hard output limit so a lying header is caught.
- * Only stored and deflate entries are accepted; ZIP64, encryption and prepended data are not.
+ * Same as `extractDocumentPages`, but the bytes are moved to the worker (not copied) and come
+ * back in the result: `bytes` itself is detached afterwards. Parsing runs in a worker thread
+ * with its own heap limit and a timer, so a file that is too big or too complex fails with an
+ * error instead of taking the server down. Word files pass `checkDocxZip` first.
+ */
+export async function readDocument(
+  bytes: Uint8Array,
+  fileType: AssignmentDocumentType,
+  limits: ReadLimits = READ_LIMITS,
+): Promise<{ pages: string[]; bytes: Uint8Array }> {
+  const label = fileType === "pdf" ? "PDF" : "Word file";
+  if (bytes.byteLength === 0) throw new Error(`${label} is empty`);
+  if (bytes.byteLength > INGEST_MAX_BYTES) throw new Error(`${label} is larger than 50 MB`);
+  if (fileType === "docx") checkDocxZip(bytes);
+  const { text, bytes: returned } = await readInWorker(bytes, fileType, limits);
+  if (fileType === "pdf") {
+    if (!Array.isArray(text) || !text.every((page) => typeof page === "string")) throw new Error("PDF reader returned no text");
+    return { pages: text.map((page: string) => page.replace(/\s+/g, " ").trim()), bytes: returned };
+  }
+  if (typeof text !== "string") throw new Error("Word reader returned no text");
+  const pages = packPages(paragraphsOf(text), DOCX_PAGE_CHARS);
+  if (pages.length > INGEST_MAX_PAGES) throw new Error(`Word file has more than ${INGEST_MAX_PAGES} pages of text`);
+  return { pages, bytes: returned };
+}
+
+async function readInWorker(
+  bytes: Uint8Array,
+  fileType: AssignmentDocumentType,
+  limits: ReadLimits,
+): Promise<{ text: unknown; bytes: Uint8Array }> {
+  // Moved, not copied. A view over part of a larger (or shared) buffer is copied once first.
+  const owned =
+    bytes.buffer instanceof ArrayBuffer && bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+      ? bytes.buffer
+      : bytes.slice().buffer;
+  let worker: Worker;
+  try {
+    worker = new Worker(new URL("./document-extract.worker.mjs", import.meta.url), {
+      resourceLimits: {
+        maxOldGenerationSizeMb: limits.maxOldGenerationSizeMb,
+        maxYoungGenerationSizeMb: limits.maxYoungGenerationSizeMb,
+      },
+    });
+  } catch (error) {
+    throw new Error(`Could not start the file reader: ${shortMessage(error)}`, { cause: error });
+  }
+
+  type Outcome = { text: unknown; bytes: Uint8Array };
+  // Executor form: Promise.withResolvers is past this repo's ES2023 lib. The first outcome wins.
+  const promise = new Promise<Outcome>((resolve, reject) => {
+    setTimeout(() => reject(new Error(READ_TIMEOUT_MESSAGE)), limits.timeoutMs).unref();
+    worker.once("message", (message: unknown) => {
+      if (!message || typeof message !== "object" || !("buffer" in message) || !(message.buffer instanceof ArrayBuffer)) {
+        reject(new Error("The file reader sent a bad reply"));
+      } else if ("ok" in message && message.ok === true && "text" in message) {
+        resolve({ text: message.text, bytes: new Uint8Array(message.buffer) });
+      } else {
+        reject(new Error("message" in message && typeof message.message === "string" ? message.message : "Could not read the file"));
+      }
+    });
+    // Out of memory ends the worker with ERR_WORKER_OUT_OF_MEMORY; anything else is a reader error.
+    // `on`, not `once`: an `error` with no listener would throw in this thread.
+    worker.on("error", (error: Error & { code?: unknown }) =>
+      reject(
+        error.code === "ERR_WORKER_OUT_OF_MEMORY"
+          ? new Error(READ_TOO_BIG_MESSAGE)
+          : new Error(`Could not read the file: ${shortMessage(error)}`),
+      ),
+    );
+    worker.once("exit", () => reject(new Error(READ_TOO_BIG_MESSAGE)));
+  });
+  worker.postMessage({ fileType, buffer: owned, maxPages: INGEST_MAX_PAGES }, [owned]);
+  try {
+    return await promise;
+  } finally {
+    void worker.terminate();
+  }
+}
+
+/**
+ * A cheap first filter before the worker (the real guard) parses a Word file. Reads the zip's
+ * central directory the way JSZip does, checks the declared sizes, then unpacks every entry with
+ * a hard output limit so a lying header is caught. Refuses anything JSZip would read differently:
+ * multi-disk or ZIP64 markers in the end record (JSZip switches to the ZIP64 directory), a
+ * declared entry count that differs from the central headers actually there (JSZip reads every
+ * header it finds), and prepended data. Only stored and deflate entries are accepted.
  */
 export function checkDocxZip(bytes: Uint8Array): void {
   const data = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -84,16 +170,23 @@ export function checkDocxZip(bytes: Uint8Array): void {
     }
   }
   if (end < 0) throw damaged();
+  const disk = data.readUInt16LE(end + 4);
+  const directoryDisk = data.readUInt16LE(end + 6);
+  const entriesOnDisk = data.readUInt16LE(end + 8);
   const entryCount = data.readUInt16LE(end + 10);
   const directorySize = data.readUInt32LE(end + 12);
   const directoryOffset = data.readUInt32LE(end + 16);
-  if (entryCount === 0xffff || directoryOffset === 0xffffffff) throw unsupported();
+  if ([disk, directoryDisk, entriesOnDisk, entryCount].includes(0xffff)) throw unsupported();
+  if (directorySize === 0xffffffff || directoryOffset === 0xffffffff) throw unsupported();
+  if (disk !== 0 || directoryDisk !== 0 || entriesOnDisk !== entryCount) throw unsupported();
+  if (entryCount === 0) throw damaged();
   // No bytes before the zip or between the entries and the directory: JSZip would shift its offsets.
   if (directoryOffset + directorySize !== end) throw damaged();
 
   const entries: Array<{ method: number; compressed: number; size: number; local: number }> = [];
   let declared = 0;
-  for (let at = directoryOffset, index = 0; index < entryCount; index += 1) {
+  let at = directoryOffset;
+  for (let index = 0; index < entryCount; index += 1) {
     if (at + 46 > end || data.readUInt32LE(at) !== 0x02014b50) throw damaged();
     const flags = data.readUInt16LE(at + 8);
     const method = data.readUInt16LE(at + 10);
@@ -107,6 +200,8 @@ export function checkDocxZip(bytes: Uint8Array): void {
     entries.push({ method, compressed, size, local: data.readUInt32LE(at + 42) });
     at += 46 + data.readUInt16LE(at + 28) + data.readUInt16LE(at + 30) + data.readUInt16LE(at + 32);
   }
+  // The declared entries must fill the directory exactly: no extra headers JSZip would also read.
+  if (at !== end) throw damaged();
 
   let unpacked = 0;
   for (const entry of entries) {
@@ -195,20 +290,23 @@ function shortMessage(err: unknown): string {
 }
 
 /**
- * Reads the text out of `bytes`, uploads them to `<student_id>/<assignment_file_id>.<type>`,
- * replaces the row's pages and marks it `ready` with `page_count`. Returns null when the
- * student has no such row. Any failure ends in `failed` with `ingest_error` set (no URLs);
- * if even that write fails, it throws. Idempotent: ingesting twice leaves the same rows.
+ * Reads the text out of `bytes` (in a worker, see `readDocument`; `bytes` is detached
+ * afterwards), uploads them to `<student_id>/<assignment_file_id>.<type>`, replaces the row's
+ * pages and marks it `ready` with `page_count`. Each read counts one `ingest_attempts`. Returns
+ * null when the student has no such row. Any failure ends in `failed` with `ingest_error` set
+ * (no URLs); if even that write fails, it throws. Idempotent: ingesting twice leaves the same rows.
+ * `options.read` is a test seam for the reader.
  */
 export async function ingestAssignmentFile(
   admin: PlutoDb,
   input: { studentId: string; assignmentFileId: string; bytes: Uint8Array; fileType: AssignmentDocumentType },
+  options: { read?: typeof readDocument } = {},
 ): Promise<AssignmentIngestResult | null> {
   const { studentId, assignmentFileId, bytes, fileType } = input;
   if (!studentId) throw new TypeError("studentId is required");
   const { data: row, error: rowError } = await admin
     .from("assignment_files")
-    .select("id, file_type")
+    .select("id, file_type, ingest_attempts")
     .eq("id", assignmentFileId)
     .eq("student_id", studentId)
     .maybeSingle();
@@ -217,20 +315,26 @@ export async function ingestAssignmentFile(
 
   try {
     if (row.file_type !== fileType) throw new Error(`file type ${fileType} does not match the saved ${row.file_type}`);
-    // If the process dies while reading, the row says so and the sync tries never-read rows first.
+    // If the process dies while reading, the row says so, the attempt counts, and the sync tries
+    // never-read rows first and gives up on this version after MAX_READ_ATTEMPTS.
     const { error: startError } = await admin
       .from("assignment_files")
-      .update({ ingest_status: "failed", ingest_error: INTERRUPTED_MESSAGE, updated_at: new Date().toISOString() })
+      .update({
+        ingest_status: "failed",
+        ingest_error: INTERRUPTED_MESSAGE,
+        ingest_attempts: row.ingest_attempts + 1,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", assignmentFileId)
       .eq("student_id", studentId);
     if (startError) throw new Error(`could not record the attempt: ${startError.message}`);
-    const pages = await extractDocumentPages(bytes, fileType);
+    const { pages, bytes: stored } = await (options.read ?? readDocument)(bytes, fileType);
 
     const path = assignmentFileStoragePath(studentId, assignmentFileId, fileType);
     const upload = await withTimeout(
       admin.storage
         .from(ASSIGNMENT_FILES_BUCKET)
-        .upload(path, bytes, { contentType: ASSIGNMENT_FILE_CONTENT_TYPES[fileType], upsert: true }),
+        .upload(path, stored, { contentType: ASSIGNMENT_FILE_CONTENT_TYPES[fileType], upsert: true }),
       UPLOAD_TIMEOUT_MS,
       "storage upload",
     );
@@ -259,6 +363,8 @@ export async function ingestAssignmentFile(
       .update({
         ingest_status: "ready",
         ingest_error: null,
+        // The count is of failed reads in a row; a good read clears it.
+        ingest_attempts: 0,
         page_count: pages.length,
         storage_path: path,
         updated_at: new Date().toISOString(),

@@ -182,18 +182,29 @@ describe("attachment rows", () => {
       size_bytes: 20_172,
       canvas_updated_at: "2026-10-01T12:00:00Z",
       ingest_status: "pending",
+      ingest_attempts: 0,
       updated_at: NOW.toISOString(),
     });
     expect(JSON.stringify(docx)).not.toContain("verifier");
 
-    const kept = buildAssignmentFileRow({
-      studentId: STUDENT,
+    const saved = {
+      id: "f1",
       assignmentId: "a1",
-      file: file(),
-      existing: { id: "f1", assignmentId: "a1", canvasFileId: "12345678", fileType: "docx", ingestStatus: "ready" },
-      now: NOW,
-    });
-    expect(kept.ingest_status).toBe("ready");
+      canvasFileId: "12345678",
+      fileType: "docx",
+      canvasUpdatedAt: "2026-10-01T12:00:00+00:00",
+    };
+    const row = (existing: { ingestStatus: string; ingestAttempts: number }, updatedAt = "2026-10-01T12:00:00Z") =>
+      buildAssignmentFileRow({ studentId: STUDENT, assignmentId: "a1", file: file({ updatedAt }), existing: { ...saved, ...existing }, now: NOW });
+
+    // Same Canvas version: status and attempts stay (a used-up failure stays failed).
+    expect(row({ ingestStatus: "ready", ingestAttempts: 0 })).toMatchObject({ ingest_status: "ready", ingest_attempts: 0 });
+    expect(row({ ingestStatus: "failed", ingestAttempts: 2 })).toMatchObject({ ingest_status: "failed", ingest_attempts: 2 });
+    // A newer version: fresh attempts; a failed row goes back to pending, a ready one keeps its text.
+    expect(row({ ingestStatus: "failed", ingestAttempts: 2 }, "2026-11-02T00:00:00Z")).toMatchObject({ ingest_status: "pending", ingest_attempts: 0 });
+    expect(row({ ingestStatus: "ready", ingestAttempts: 1 }, "2026-11-02T00:00:00Z")).toMatchObject({ ingest_status: "ready", ingest_attempts: 0 });
+    // An older or unreadable date is not a newer version.
+    expect(row({ ingestStatus: "failed", ingestAttempts: 2 }, "2026-09-01T00:00:00Z")).toMatchObject({ ingest_status: "failed", ingest_attempts: 2 });
 
     const sheet = buildAssignmentFileRow({
       studentId: STUDENT,

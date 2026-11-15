@@ -5,13 +5,15 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import mammoth from "mammoth";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   ASSIGNMENT_FILES_BUCKET,
   assignmentFileStoragePath,
   ingestAssignmentFile,
   INTERRUPTED_MESSAGE,
+  READ_LIMITS,
+  READ_TOO_BIG_MESSAGE,
+  readDocument,
   type AssignmentDocumentType,
 } from "../../src/assignment-ingest";
 import type { PlutoDb } from "../../src/context";
@@ -69,9 +71,19 @@ describe.skipIf(SKIP_DB_TESTS)("ingestAssignmentFile", () => {
 
   async function state(id: string) {
     return must(
-      await service.from("assignment_files").select("ingest_status, ingest_error, page_count, storage_path").eq("id", id).single(),
+      await service
+        .from("assignment_files")
+        .select("ingest_status, ingest_error, ingest_attempts, page_count, storage_path")
+        .eq("id", id)
+        .single(),
       "attachment row",
-    ) as { ingest_status: string; ingest_error: string | null; page_count: number | null; storage_path: string | null };
+    ) as {
+      ingest_status: string;
+      ingest_error: string | null;
+      ingest_attempts: number;
+      page_count: number | null;
+      storage_path: string | null;
+    };
   }
 
   async function pages(id: string) {
@@ -99,7 +111,8 @@ describe.skipIf(SKIP_DB_TESTS)("ingestAssignmentFile", () => {
 
   it("stores a PDF, fills 1-based pages, and is idempotent", async () => {
     const id = await newAttachment(owner!.id, "pdf");
-    const first = await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: id, bytes: PDF_BYTES, fileType: "pdf" });
+    // Each read moves its bytes to the reader, so every call gets its own copy.
+    const first = await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: id, bytes: PDF_BYTES.slice(), fileType: "pdf" });
     expect(first).toEqual({ assignmentFileId: id, status: "ready", pageCount: pdfEntry.pages.length });
 
     const saved = await pages(id);
@@ -109,6 +122,7 @@ describe.skipIf(SKIP_DB_TESTS)("ingestAssignmentFile", () => {
     expect(await state(id)).toEqual({
       ingest_status: "ready",
       ingest_error: null,
+      ingest_attempts: 0,
       page_count: pdfEntry.pages.length,
       storage_path: `${owner!.id}/${id}.pdf`,
     });
@@ -118,7 +132,7 @@ describe.skipIf(SKIP_DB_TESTS)("ingestAssignmentFile", () => {
     expect(object.data?.type).toBe("application/pdf");
     expect(object.data?.size).toBe(PDF_BYTES.byteLength);
 
-    expect(await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: id, bytes: PDF_BYTES, fileType: "pdf" })).toEqual(first);
+    expect(await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: id, bytes: PDF_BYTES.slice(), fileType: "pdf" })).toEqual(first);
     expect(await pages(id)).toHaveLength(pdfEntry.pages.length);
 
     // Attachments never become notes.
@@ -126,28 +140,41 @@ describe.skipIf(SKIP_DB_TESTS)("ingestAssignmentFile", () => {
     expect(count).toBe(0);
   });
 
-  it("marks the row failed while the text is read, so a crash mid-read never leaves it pending", async () => {
+  it("marks the row failed and counts the attempt while the text is read; a good read clears the count", async () => {
     const id = await newAttachment(owner!.id, "docx");
-    const real = mammoth.extractRawText;
-    const seen: Array<{ ingest_status: string; ingest_error: string | null }> = [];
-    const spy = vi.spyOn(mammoth, "extractRawText").mockImplementation(async (input) => {
-      const { ingest_status, ingest_error } = await state(id);
-      seen.push({ ingest_status, ingest_error });
-      return real(input);
-    });
-    try {
-      const result = await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: id, bytes: DOCX_BYTES, fileType: "docx" });
-      expect(result?.status).toBe("ready");
-    } finally {
-      spy.mockRestore();
+    const seen: Array<{ ingest_status: string; ingest_error: string | null; ingest_attempts: number }> = [];
+    const result = await ingestAssignmentFile(
+      admin,
+      { studentId: owner!.id, assignmentFileId: id, bytes: DOCX_BYTES.slice(), fileType: "docx" },
+      {
+        read: async (bytes, fileType) => {
+          const { ingest_status, ingest_error, ingest_attempts } = await state(id);
+          seen.push({ ingest_status, ingest_error, ingest_attempts });
+          return readDocument(bytes, fileType);
+        },
+      },
+    );
+    expect(result?.status).toBe("ready");
+    expect(seen).toEqual([{ ingest_status: "failed", ingest_error: INTERRUPTED_MESSAGE, ingest_attempts: 1 }]);
+    expect(await state(id)).toMatchObject({ ingest_status: "ready", ingest_error: null, ingest_attempts: 0 });
+  });
+
+  it("a file too complex to read fails cleanly, keeps its attempt count and stores nothing", async () => {
+    const id = await newAttachment(owner!.id, "docx");
+    const bomb = makeDocx(Array.from({ length: 60_000 }, () => "a"));
+    const tinyHeap = { ...READ_LIMITS, maxOldGenerationSizeMb: 16, maxYoungGenerationSizeMb: 4 };
+    const read: typeof readDocument = (bytes, fileType) => readDocument(bytes, fileType, tinyHeap);
+    for (const attempt of [1, 2]) {
+      const result = await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: id, bytes: bomb.slice(), fileType: "docx" }, { read });
+      expect(result).toEqual({ assignmentFileId: id, status: "failed", error: READ_TOO_BIG_MESSAGE });
+      expect(await state(id)).toMatchObject({ ingest_status: "failed", ingest_error: READ_TOO_BIG_MESSAGE, ingest_attempts: attempt, storage_path: null });
     }
-    expect(seen).toEqual([{ ingest_status: "failed", ingest_error: INTERRUPTED_MESSAGE }]);
-    expect(await state(id)).toMatchObject({ ingest_status: "ready", ingest_error: null });
+    expect(await pages(id)).toEqual([]);
   });
 
   it("stores a Word file with its content type; the owner can read it and the bystander cannot", async () => {
     const id = await newAttachment(owner!.id, "docx");
-    const result = await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: id, bytes: DOCX_BYTES, fileType: "docx" });
+    const result = await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: id, bytes: DOCX_BYTES.slice(), fileType: "docx" });
     expect(result).toEqual({ assignmentFileId: id, status: "ready", pageCount: 1 });
     expect((await pages(id)).map((page) => page.text)).toEqual([
       "BIA Project Description\n\nList three critical business processes.",
@@ -177,7 +204,7 @@ describe.skipIf(SKIP_DB_TESTS)("ingestAssignmentFile", () => {
     expect(broken?.error).toBeTruthy();
     expect(await state(id)).toMatchObject({ ingest_status: "failed", page_count: null, storage_path: null });
 
-    const mismatched = await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: id, bytes: PDF_BYTES, fileType: "pdf" });
+    const mismatched = await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: id, bytes: PDF_BYTES.slice(), fileType: "pdf" });
     expect(mismatched).toMatchObject({ status: "failed", error: "file type pdf does not match the saved docx" });
     expect(await pages(id)).toEqual([]);
     const { data: objects } = await service.storage.from(ASSIGNMENT_FILES_BUCKET).list(owner!.id, { search: id });
@@ -186,12 +213,12 @@ describe.skipIf(SKIP_DB_TESTS)("ingestAssignmentFile", () => {
 
   it("returns null for an unknown row or another student's row and writes nothing", async () => {
     expect(
-      await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: randomUUID(), bytes: DOCX_BYTES, fileType: "docx" }),
+      await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: randomUUID(), bytes: DOCX_BYTES.slice(), fileType: "docx" }),
     ).toBeNull();
 
     const foreign = await newAttachment(bystander!.id, "docx");
     expect(
-      await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: foreign, bytes: DOCX_BYTES, fileType: "docx" }),
+      await ingestAssignmentFile(admin, { studentId: owner!.id, assignmentFileId: foreign, bytes: DOCX_BYTES.slice(), fileType: "docx" }),
     ).toBeNull();
     expect(await state(foreign)).toMatchObject({ ingest_status: "pending", storage_path: null });
     const { data: objects } = await service.storage.from(ASSIGNMENT_FILES_BUCKET).list(owner!.id, { search: foreign });

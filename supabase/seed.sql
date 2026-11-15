@@ -209,6 +209,7 @@ on conflict (id) do update set
   storage_path = null,
   ingest_status = excluded.ingest_status,
   ingest_error = null,
+  ingest_attempts = 0,
   page_count = excluded.page_count,
   updated_at = now();
 

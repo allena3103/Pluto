@@ -546,7 +546,7 @@ async function loadAssignmentFiles(
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await db
       .from("assignment_files")
-      .select("id, assignment_id, canvas_file_id, file_type, ingest_status")
+      .select("id, assignment_id, canvas_file_id, file_type, ingest_status, canvas_updated_at, ingest_attempts")
       .eq("student_id", studentId)
       .order("id", { ascending: true })
       .range(from, from + pageSize - 1);
@@ -561,6 +561,8 @@ async function loadAssignmentFiles(
         canvasFileId: row.canvas_file_id,
         fileType: row.file_type,
         ingestStatus: row.ingest_status,
+        canvasUpdatedAt: row.canvas_updated_at,
+        ingestAttempts: row.ingest_attempts,
       });
     }
     if ((data ?? []).length < pageSize) return found;

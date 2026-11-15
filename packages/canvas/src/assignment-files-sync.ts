@@ -14,6 +14,7 @@ import type { PlutoDb } from "@pluto/core/context";
 import {
   ASSIGNMENT_FILES_BUCKET,
   ingestAssignmentFile,
+  MAX_READ_ATTEMPTS,
   type AssignmentDocumentType,
 } from "@pluto/core/assignment-ingest";
 import type { CanvasClient } from "./client";
@@ -51,6 +52,7 @@ type AttachmentRow = {
   ingest_status: string;
   canvas_updated_at: string | null;
   storage_path: string | null;
+  ingest_attempts: number;
 };
 
 export async function syncAssignmentFiles(
@@ -66,11 +68,13 @@ export async function syncAssignmentFiles(
   const uploadedAt = await loadUploadTimes(admin, studentId, result);
   if (!uploadedAt) return result;
 
-  // Never-read rows first, failed ones last, so a file that keeps failing (or crashed the
-  // process mid-read) can't hold up the rest. The sort is stable: oldest first within a group.
+  // Never-read rows first, failed ones last, so a file that keeps failing can't hold up the
+  // rest. The sort is stable: oldest first within a group. A file whose text could not be read
+  // after MAX_READ_ATTEMPTS tries waits for a newer version from Canvas (sync resets the count).
   const order = (row: AttachmentRow) => (row.ingest_status === "pending" ? 0 : row.ingest_status === "failed" ? 2 : 1);
   const due = rows
     .filter((row) => !isCurrent(row, uploadedAt.get(`${row.id}.${row.file_type}`)))
+    .filter((row) => !(row.ingest_status === "failed" && row.ingest_attempts >= MAX_READ_ATTEMPTS))
     .sort((a, b) => order(a) - order(b));
   const batch = due.slice(0, options.maxFiles ?? DEFAULT_MAX_FILES);
   result.skipped += rows.length - batch.length;
@@ -111,7 +115,7 @@ async function loadRows(
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await admin
       .from("assignment_files")
-      .select("id, assignment_id, canvas_file_id, file_type, ingest_status, canvas_updated_at, storage_path")
+      .select("id, assignment_id, canvas_file_id, file_type, ingest_status, canvas_updated_at, storage_path, ingest_attempts")
       .eq("student_id", studentId)
       .in("file_type", ["pdf", "docx"])
       .order("created_at", { ascending: true })
