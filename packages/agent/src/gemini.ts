@@ -37,6 +37,7 @@ function systemInstruction(channel: "web" | "sms"): string {
     shared,
     "Never put URLs or links in the reply: the app shows the cited pages as sources and saves answers built from notes to the student's Notes page.",
     "Short Markdown (headings, bullet lists, bold) is fine when it helps, for example in a study guide.",
+    "Never use LaTeX or $...$ math: the app does not render it. Write formulas in plain text with Unicode, such as CO₂, H₂O, NADH or x².",
     `If the answer depends on a detail the student did not give and the conversation does not settle it, usually which class or which weeks of notes, call ${ASK_TOOL_NAME} instead of guessing.`,
     `Vague notes requests that name no class or topic, such as "let's look at my class notes" or "summarize my notes", always need ${ASK_TOOL_NAME}; never answer them with a search or with "I couldn't find that".`,
     "Call list_courses first and offer the real course names as options. Ask at most 3 questions, only what you need. Do not ask when the student has a single class or already answered.",
