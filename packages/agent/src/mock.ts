@@ -1,4 +1,5 @@
 import { collectCitations } from "./citations";
+import { parsePlanRequest, runMockPlan } from "./plan";
 import { withDeadline } from "./timeout";
 import {
   EMPTY_REPLY_TEXT,
@@ -226,6 +227,9 @@ export async function runMock(input: RunAgentInput, runTool: AgentToolRunner): P
       return { text: TOOL_FAILURE_TEXT, citations: [] };
     }
   }
+
+  const plan = parsePlanRequest(input.message);
+  if (plan) return runMockPlan(input, runTool, plan);
 
   const call = mockToolCall(input.message);
   let result: unknown;

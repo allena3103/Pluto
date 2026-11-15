@@ -70,7 +70,8 @@ export function crunchMessage(week: CrunchWeek | undefined, calendarUrl: string)
   return (
     `Pluto: your heaviest week is ${formatDateOnly(week.weekStart)}-${formatDateOnly(week.weekEnd)}: ` +
     `${count} ${count === 1 ? "thing" : "things"} due${weight}. ` +
-    `I added a ${STUDY_BLOCK_MINUTES}-minute study block before each. Add them to your calendar: ${calendarUrl}`
+    `I added a ${STUDY_BLOCK_MINUTES}-minute study block before each. Add them to your calendar: ${calendarUrl} ` +
+    `Want a plan? Reply YES.`
   );
 }
 
