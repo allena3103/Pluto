@@ -16,6 +16,7 @@
     "smoke": "tsx scripts/smoke/index.ts",
     "env:local": "node scripts/env-local.mjs",
     "seed": "tsx scripts/seed.ts",
+    "seed:judge": "tsx scripts/seed-judge.ts",
     "dev": "node scripts/dev.mjs",
     "e2e:chat": "node scripts/e2e/chat-notes.mjs"
   },

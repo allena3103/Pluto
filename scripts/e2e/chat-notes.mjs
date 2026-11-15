@@ -79,7 +79,6 @@ try {
         NEXT_PUBLIC_APP_URL: `http://localhost:${port}`,
         SMS_PROVIDER: "simulator",
         CANVAS_MODE: "fixtures",
-        PLUTO_AUTO_LOGIN_DEMO: "",
       },
     });
     baseUrl = server.baseUrl;

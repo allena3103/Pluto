@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppSidebar, MobileTopBar } from "@/components/app-nav";
 import { PwaRegister } from "@/components/pwa-register";
+import { isJudgeUser } from "@/lib/judge";
 import { PLUTO_PATH_HEADER, loginRedirectForPath } from "@/lib/safe-next";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,11 +27,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect(loginRedirectForPath(path));
   }
 
+  const judge = isJudgeUser(user);
+
   return (
     <div className="flex h-dvh w-full overflow-hidden">
-      <AppSidebar />
+      <AppSidebar judge={judge} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <MobileTopBar />
+        <MobileTopBar judge={judge} />
         <main className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</main>
       </div>
       <PwaRegister />

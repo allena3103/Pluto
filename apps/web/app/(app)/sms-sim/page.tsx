@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import { MessageSquareText } from "lucide-react";
 import { SmsSim, type SimMessage } from "@/components/sms-sim/sms-sim";
 import { PageShell } from "@/components/page-shell";
+import { isJudgeUser } from "@/lib/judge";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +14,7 @@ export default async function SmsSimPage() {
   const { data } = await supabase.auth.getUser();
   const user = data.user;
   if (!user) return null;
+  if (isJudgeUser(user)) redirect("/");
 
   // The viewer's own client: RLS plus an explicit student filter.
   const [profile, messages] = await Promise.all([

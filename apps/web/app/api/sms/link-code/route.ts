@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isJudgeUser } from "@/lib/judge";
 import { createLinkCode, issueLinkCode, LINK_CODE_PATTERN } from "@/lib/phone-link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +16,10 @@ export async function POST() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
   const userId = !error && data.user ? data.user.id : null;
+  // The shared judge account has no SMS: a linked phone would get every judge's texts.
+  if (isJudgeUser(data.user)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const issued = await issueLinkCode({
     userId,

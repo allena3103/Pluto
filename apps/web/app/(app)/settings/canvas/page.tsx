@@ -1,4 +1,5 @@
 import { Plug } from "lucide-react";
+import { isJudgeUser } from "@/lib/judge";
 import { createClient } from "@/lib/supabase/server";
 import { PageShell } from "@/components/page-shell";
 import { CanvasSettingsForm } from "./settings-form";
@@ -29,7 +30,16 @@ export default async function CanvasSettingsPage() {
       icon={Plug}
       tint="lilac"
     >
-      <CanvasSettingsForm initialConnected={connected} initialBaseUrl={baseUrl} />
+      {isJudgeUser(authData.user) ? (
+        <div className="rounded-3xl border border-violet-200 bg-lilac p-5">
+          <p className="text-sm font-semibold text-violet-900">
+            Canvas linking is off on the judge demo account, because every judge shares it. The sample courses
+            were loaded the same way a Canvas sync loads a student&apos;s real classes.
+          </p>
+        </div>
+      ) : (
+        <CanvasSettingsForm initialConnected={connected} initialBaseUrl={baseUrl} />
+      )}
     </PageShell>
   );
 }

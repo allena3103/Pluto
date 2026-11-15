@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { judgeCredentials } from "@/lib/judge";
 import { safeNext } from "@/lib/safe-next";
 import { AuthShell } from "@/components/auth-shell";
+import { JudgeLogin } from "./judge-login";
 import { LoginForm } from "./login-form";
 
 export default async function LoginPage({
@@ -30,6 +32,7 @@ export default async function LoginPage({
     <AuthShell
       title="Welcome back!"
       description="Sign in to Pluto, your friendly study buddy."
+      banner={judgeCredentials() ? <JudgeLogin next={next} /> : null}
       footer={
         <>
           New to Pluto?{" "}
