@@ -99,7 +99,7 @@ export function agentHandoff(url: string): string {
     "Transport: streamable HTTP",
     "Auth: OAuth. A browser window opens once so I can sign in to Pluto. No API key is needed.",
     "",
-    `Pluto gives you my courses, lecture notes, deadlines and grades. ${ACCESS_SUMMARY} Tools:`,
+    `${ACCESS_SUMMARY} Tools:`,
     ...MCP_TOOLS.map((tool) => `- ${tool.name}: ${tool.summary}`),
     "",
     "If you can run shell commands and this is Claude Code, run:",

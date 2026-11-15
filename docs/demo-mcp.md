@@ -5,7 +5,7 @@ One URL, every AI. Rehearse each script twice before going on stage.
 ## Pre-flight checklist
 - [ ] Hosted env: `APP_URL` is the public origin; `PLUTO_DEMO_MCP_TOKEN` is set (32+ chars); `PLUTO_DEMO_MCP_URL_ENABLED=1` (demo only); `SMS_PROVIDER=sendblue` with the `SENDBLUE_*` keys.
 - [ ] Migration `20261114060000` (`saved_notes.source`, magic links to saved notes) is applied on the hosted DB.
-- [ ] Demo phone is linked to the demo student in Settings.
+- [ ] Demo phone is linked to the demo student (Settings, phone: `/settings/phone`).
 - [ ] Sendblue 24-hour window is open: text the Pluto number from the demo phone first, within 24 hours of the show.
 - [ ] Open `<APP_URL>/mcp`. Claude, ChatGPT and Cursor each connected, and each has run `list_courses` once.
 - [ ] Backup screen recording of every script below is on the laptop.
@@ -24,7 +24,7 @@ OAuth first, sign in as the demo student when the window opens.
 2. **One-click prompts (about 30 s).** In Claude press +, then Pluto, pick **Quiz me** (or **Study guide**), type `History 105`, send. In Cursor type `/` and pick the Pluto prompt. ChatGPT has no MCP prompts: paste the matching example from `/mcp`.
 3. **Same URL in three AIs (about 60 s).** Show `/mcp`, copy the URL once. Show Claude, ChatGPT and Cursor side by side, each with Pluto connected. Type `List my courses. Use Pluto.` in all three.
 4. **Quiz with citations (about 60 s).** Type verbatim: `Quiz me on my History 105 notes with 8 questions. Put the answers at the end, each linking to the exact page. Use Pluto.` Scroll to Answers, tap an answer link: the notes page opens at that page.
-5. **Crunch text, reply YES, plan (about 60 s).** Open `/sms-sim` (or use the demo alert button there) to send the crunch-week alert. It ends "Want a plan? Reply YES." Reply `YES` from the demo phone within 24 hours. Pluto texts back a plan for that week.
+5. **Crunch text, reply YES, plan (about 60 s).** Open `/sms-sim` and press **Crunch week alert** to send the crunch-week text. It ends "Want a plan? Reply YES." Reply `YES` from the demo phone within 24 hours. Pluto texts back a plan for that week.
 
 ## Fallbacks
 - OAuth fails: fallback URL with the demo token.
