@@ -1,4 +1,5 @@
-import { TOOL_NAMES, type ToolName } from "@pluto/core/contract";
+import { TOOL_NAMES, WRITE_TOOL_NAMES, type ToolName, type WriteToolName } from "@pluto/core/contract";
+import { PROMPTS } from "@pluto/mcp/prompts";
 
 /** Name the server gets in every client config. */
 export const MCP_SERVER_NAME = "pluto";
@@ -14,9 +15,41 @@ export const TOOL_SUMMARIES: Record<ToolName, string> = {
   get_crunch_weeks: "Your busiest weeks ahead, ranked.",
 };
 
-export type McpTool = { name: ToolName; summary: string };
+/** Same for the write tool(s). Typed by WriteToolName so a new one cannot be left out. */
+export const WRITE_TOOL_SUMMARIES: Record<WriteToolName, string> = {
+  save_study_guide: "Saves a finished study guide to your Notes and texts you a link. It only adds one note.",
+};
 
-export const MCP_TOOLS: readonly McpTool[] = TOOL_NAMES.map((name) => ({ name, summary: TOOL_SUMMARIES[name] }));
+export type McpTool = { name: ToolName | WriteToolName; summary: string; write: boolean };
+
+export const MCP_READ_TOOLS: readonly McpTool[] = TOOL_NAMES.map((name) => ({
+  name,
+  summary: TOOL_SUMMARIES[name],
+  write: false,
+}));
+
+export const MCP_WRITE_TOOLS: readonly McpTool[] = WRITE_TOOL_NAMES.map((name) => ({
+  name,
+  summary: WRITE_TOOL_SUMMARIES[name],
+  write: true,
+}));
+
+/** Every tool the server offers: the read tools, then the write tool. */
+export const MCP_TOOLS: readonly McpTool[] = [...MCP_READ_TOOLS, ...MCP_WRITE_TOOLS];
+
+/** The accurate access line shown on the page and in the agent handoff. */
+export const ACCESS_SUMMARY =
+  "It reads your own courses, notes, deadlines and grades. The one write tool, save_study_guide, only saves a study guide to your Notes and texts you a link to it. It cannot edit or delete anything.";
+
+/** The three one-click prompts, straight from the server so the page cannot drift from it. */
+export const MCP_PROMPTS = PROMPTS;
+
+/** Where each client shows the server's prompts. */
+export const PROMPT_LOCATIONS: readonly { client: string; where: string }[] = [
+  { client: "Claude", where: "Press the + menu in the chat box, then Pluto." },
+  { client: "Cursor", where: "Type / in the chat box and pick a Pluto prompt." },
+  { client: "ChatGPT", where: "ChatGPT has no MCP prompts. Copy the matching example prompt below instead." },
+];
 
 /** The server URL shown on the page. `appUrl` is the deployed origin; a trailing slash is dropped. */
 export function mcpServerUrl(appUrl: string): string {
@@ -66,7 +99,7 @@ export function agentHandoff(url: string): string {
     "Transport: streamable HTTP",
     "Auth: OAuth. A browser window opens once so I can sign in to Pluto. No API key is needed.",
     "",
-    "Pluto is a read-only view of my courses, lecture notes, deadlines and grades. Tools:",
+    `Pluto gives you my courses, lecture notes, deadlines and grades. ${ACCESS_SUMMARY} Tools:`,
     ...MCP_TOOLS.map((tool) => `- ${tool.name}: ${tool.summary}`),
     "",
     "If you can run shell commands and this is Claude Code, run:",
@@ -81,6 +114,8 @@ export function agentHandoff(url: string): string {
 
 export const EXAMPLE_PROMPTS: readonly string[] = [
   "Build me a study guide from my History 105 notes from the past 2 weeks, use Pluto.",
+  "Build me a study guide from my History 105 notes from the past 2 weeks, use Pluto, and save it to Pluto.",
+  "Quiz me on my History 105 notes with 8 questions. Put the answers at the end, each linking to the exact page. Use Pluto.",
   "What is due this week, and which of my weeks ahead are the busiest? Use Pluto.",
   "Where do my notes cover the causes of World War I? Use Pluto and link the pages.",
 ];

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { TOOL_NAMES } from "@pluto/core/contract";
+import { TOOL_NAMES, WRITE_TOOL_NAMES } from "@pluto/core/contract";
+import { PROMPT_NAMES } from "@pluto/mcp/prompts";
 import {
+  ACCESS_SUMMARY,
+  EXAMPLE_PROMPTS,
+  MCP_PROMPTS,
   MCP_TOOLS,
   agentHandoff,
   claudeCodeCommand,
@@ -20,7 +24,20 @@ describe("mcp-connect", () => {
   });
 
   it("lists every contract tool", () => {
-    expect(MCP_TOOLS.map((tool) => tool.name)).toEqual([...TOOL_NAMES]);
+    expect(MCP_TOOLS.map((tool) => tool.name)).toEqual([...TOOL_NAMES, ...WRITE_TOOL_NAMES]);
+    expect(MCP_TOOLS).toHaveLength(8);
+    expect(MCP_TOOLS.filter((tool) => tool.write).map((tool) => tool.name)).toEqual(["save_study_guide"]);
+  });
+
+  it("lists every prompt and no longer claims read-only", () => {
+    expect(MCP_PROMPTS.map((p) => p.name)).toEqual([...PROMPT_NAMES]);
+    expect(ACCESS_SUMMARY).toContain("cannot edit or delete");
+    expect(agentHandoff(URL_)).not.toMatch(/read-only/i);
+  });
+
+  it("has the save and citation example prompts", () => {
+    expect(EXAMPLE_PROMPTS.some((p) => /save it to Pluto/.test(p))).toBe(true);
+    expect(EXAMPLE_PROMPTS.some((p) => /Quiz me/.test(p) && /exact page/.test(p))).toBe(true);
   });
 
   it("builds the Claude Code command", () => {

@@ -4,6 +4,7 @@ import { BookmarkCheck, FileText } from "lucide-react";
 import { notePath } from "@pluto/core/deep-links";
 import { MarkdownText } from "@/components/markdown-text";
 import { DeleteSavedNoteButton } from "@/components/notes/delete-saved-note-button";
+import { Badge } from "@/components/ui/badge";
 import { PageShell } from "@/components/page-shell";
 import { parseSources } from "@/lib/saved-notes";
 import { createClient } from "@/lib/supabase/server";
@@ -32,7 +33,7 @@ export default async function SavedNotePage({ params }: Props) {
 
   const { data: note, error } = await supabase
     .from("saved_notes")
-    .select("id, course_id, title, body, sources, created_at")
+    .select("id, course_id, title, body, sources, created_at, source")
     .eq("id", noteId)
     .eq("student_id", studentId)
     .maybeSingle();
@@ -58,10 +59,15 @@ export default async function SavedNotePage({ params }: Props) {
     <PageShell
       back={BACK_TO_NOTES}
       title={note.title}
-      description={`${course?.name ?? "Across classes"} · Saved from chat ${formatSavedAt(note.created_at)}`}
+      description={`${course?.name ?? "Across classes"} · Saved from ${note.source === "mcp" ? "your AI" : "chat"} ${formatSavedAt(note.created_at)}`}
       icon={BookmarkCheck}
       tint="mint"
     >
+      {note.source === "mcp" ? (
+        <Badge variant="secondary" className="mb-3">
+          From Claude
+        </Badge>
+      ) : null}
       <article className="rounded-3xl border border-border/80 bg-card p-5 text-[0.97rem] leading-relaxed text-foreground shadow-warm sm:p-6">
         <MarkdownText text={note.body} />
       </article>
