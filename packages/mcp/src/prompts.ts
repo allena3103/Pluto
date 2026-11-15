@@ -120,7 +120,7 @@ function studyGuide(args: RawArgs): string {
     `1. Call get_recent_notes with course "${course}" and days ${days}.`,
     "2. If the result has `truncated: true`, call get_note_pages for each file's remaining pages (from pagesIncluded + 1) until you have everything.",
     "3. Write the guide with these sections: Key ideas, Key terms, Timeline or process (only where it fits the material), Likely exam questions.",
-    `4. Save it by calling save_study_guide with a title like "${course} study guide", the full guide as the body with the page links kept, and the course "${course}".`,
+    `4. Save it by calling save_study_guide with a title like "${course} study guide", the full guide as \`markdown\` with the page links kept, and the course "${course}".`,
     "5. Tell me the guide was saved to my Pluto notes and that Pluto texted me a link to it.",
   ].join("\n");
 }
