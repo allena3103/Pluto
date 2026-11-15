@@ -243,12 +243,66 @@ export const Deadline = z.object({
   /** Grade group name (e.g. "Exams"); null when the assignment is in no group. */
   weightGroup: z.string().nullable(),
   status: DeadlineStatus,
+  /** Files linked from the assignment's instructions in Canvas; read them with get_assignment. */
+  attachmentCount: Count,
 });
 export type Deadline = z.infer<typeof Deadline>;
 
 /** Soonest due first. */
 export const GetDeadlinesOutput = z.object({
   deadlines: z.array(Deadline),
+});
+
+// ---------------------------------------------------------------------------
+// Tool: get_assignment
+// ---------------------------------------------------------------------------
+
+/** Shared by the instructions and every attachment's pages. */
+export const ASSIGNMENT_TEXT_CAP_CHARS = 60_000;
+
+export const GetAssignmentInput = z.object({
+  /** From get_deadlines. */
+  assignmentId: Id,
+});
+
+export const AssignmentFilePage = z.object({
+  page: PageNumber,
+  text: z.string(),
+});
+
+export const AssignmentAttachment = z.object({
+  attachmentId: Id,
+  /** File name as in Canvas, e.g. "BIA_Project_Description.docx". */
+  title: z.string(),
+  /** pdf and docx are read; other files (spreadsheets, databases) are listed by name only. */
+  fileType: z.enum(["pdf", "docx", "other"]),
+  /** ready: `pages` holds the text; pending: not downloaded yet; failed/skipped: no text. */
+  status: z.enum(["pending", "ready", "failed", "skipped"]),
+  pageCount: Count.nullable(),
+  /** Absolute URL to the file in the web app: `/assignments/<assignmentId>/files/<attachmentId>`. */
+  url: z.url({ protocol: /^https?$/ }),
+  pages: z.array(AssignmentFilePage),
+});
+export type AssignmentAttachment = z.infer<typeof AssignmentAttachment>;
+
+/**
+ * The instructions and attachment text share `ASSIGNMENT_TEXT_CAP_CHARS`. When `truncated`
+ * is true, some attachment pages were left out; the student can open `url`.
+ */
+export const GetAssignmentOutput = z.object({
+  assignmentId: Id,
+  courseId: Id,
+  courseName: z.string(),
+  title: z.string(),
+  dueAt: Timestamp.nullable(),
+  points: z.number().min(0).nullable(),
+  status: DeadlineStatus,
+  /** The assignment description from Canvas as plain text; null when it has none. */
+  instructions: z.string().nullable(),
+  /** Absolute URL to the assignment in the web app: `/assignments/<assignmentId>`. */
+  url: z.url({ protocol: /^https?$/ }),
+  attachments: z.array(AssignmentAttachment),
+  truncated: z.boolean(),
 });
 
 // ---------------------------------------------------------------------------
@@ -362,6 +416,13 @@ export const TOOLS = {
       "Read-only. Lists assignments due in the next `daysAhead` days (default 30), optionally for one course, with due date, previous due date if it moved, points, weight group and status. Use it for questions about what is due and when.",
     input: GetDeadlinesInput,
     output: GetDeadlinesOutput,
+  },
+  get_assignment: {
+    name: "get_assignment",
+    description:
+      "Read-only. Returns one assignment's instructions from Canvas and the text of its attached files (PDF and Word), with links to open them in Pluto. Get `assignmentId` from get_deadlines. Use it when the student asks what an assignment requires or to see its handout or attachment.",
+    input: GetAssignmentInput,
+    output: GetAssignmentOutput,
   },
   get_grades: {
     name: "get_grades",
