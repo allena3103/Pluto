@@ -9,10 +9,12 @@ import type {
   CanvasMode,
   CanvasModuleFileItem,
 } from "./types";
-import { CanvasHttpError } from "./types";
+import { CanvasHttpError, CanvasNotFoundError } from "./types";
 
 const MODE_FIXTURES: CanvasMode = "fixtures";
 const MODE_LIVE: CanvasMode = "live";
+/** Parallel file lookups when a course's files are read from Modules. Small to stay clear of Canvas throttling. */
+const MODULE_FILE_CONCURRENCY = 4;
 
 type CanvasCourseApi = {
   id: number | string;
@@ -85,6 +87,54 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
     sleep: options.sleep,
   });
 
+  async function listModuleItems(canvasCourseId: string): Promise<CanvasModuleFileItem[]> {
+    try {
+      const rows = await http.getPaginatedArray({
+        path: courseApiPath(canvasCourseId, "modules"),
+        endpointName: "module items",
+        searchParams: new URLSearchParams({
+          "include[]": "items",
+          per_page: "100",
+        }),
+      });
+      return rows.flatMap(mapModuleItems).filter((item): item is CanvasModuleFileItem => item !== null);
+    } catch (error) {
+      if (error instanceof CanvasHttpError && error.status === 403) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Many courses hide the Files tab, so `/files` is 403 for students while the same PDFs are
+   * linked from Modules. Read each module file by id instead. Files the student can't open
+   * (locked or unpublished: 403/404) are skipped; auth and rate-limit errors still throw.
+   */
+  async function listModuleFiles(canvasCourseId: string): Promise<CanvasCourseFile[]> {
+    const ids = [...new Set((await listModuleItems(canvasCourseId)).map((item) => item.canvasFileId))];
+    const files: CanvasCourseFile[] = [];
+    for (let start = 0; start < ids.length; start += MODULE_FILE_CONCURRENCY) {
+      const batch = await Promise.all(
+        ids.slice(start, start + MODULE_FILE_CONCURRENCY).map(async (fileId) => {
+          try {
+            const row = await http.getObject({
+              path: courseApiPath(canvasCourseId, `files/${encodeURIComponent(fileId)}`),
+              endpointName: "module file",
+            });
+            return row ? mapCourseFile(row) : null;
+          } catch (error) {
+            if (error instanceof CanvasNotFoundError) return null;
+            if (error instanceof CanvasHttpError && error.status === 403) return null;
+            throw error;
+          }
+        }),
+      );
+      for (const file of batch) if (file) files.push(file);
+    }
+    return files;
+  }
+
   return {
     async listCourses() {
       const rows = await http.getPaginatedArray({
@@ -137,32 +187,15 @@ export function createCanvasClient(options: CanvasClientOptions): CanvasClient {
           const key = courseApiPath(canvasCourseId, "files");
           if (!warnedPaths.has(key)) {
             warnedPaths.add(key);
-            console.warn(`Canvas files disabled for ${key}; treating as empty.`);
+            console.warn(`Canvas files tab hidden for ${key}; reading files from modules.`);
           }
-          return [];
+          return listModuleFiles(canvasCourseId);
         }
         throw error;
       }
     },
 
-    async listModuleItems(canvasCourseId) {
-      try {
-        const rows = await http.getPaginatedArray({
-          path: courseApiPath(canvasCourseId, "modules"),
-          endpointName: "module items",
-          searchParams: new URLSearchParams({
-            "include[]": "items",
-            per_page: "100",
-          }),
-        });
-        return rows.flatMap(mapModuleItems).filter((item): item is CanvasModuleFileItem => item !== null);
-      } catch (error) {
-        if (error instanceof CanvasHttpError && error.status === 403) {
-          return [];
-        }
-        throw error;
-      }
-    },
+    listModuleItems,
   };
 }
 

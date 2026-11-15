@@ -2,7 +2,13 @@ import { DeepLink, TOOL_NAMES } from "@pluto/core/contract";
 import { ToolError } from "@pluto/core/tools/index";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildToolDeclarations } from "../src/declarations";
-import { DEFAULT_GEMINI_FAST_MODEL, DEFAULT_GEMINI_MODEL, runAgent, type AgentModelClient } from "../src/index";
+import {
+  DEFAULT_GEMINI_FAST_MODEL,
+  DEFAULT_GEMINI_MODEL,
+  MAX_TOOL_ROUNDS,
+  runAgent,
+  type AgentModelClient,
+} from "../src/index";
 
 const FILE_ID = "11111111-1111-4111-8111-111111111111";
 const DEEP_LINK = `http://localhost:3401/notes/${FILE_ID}?page=2`;
@@ -688,5 +694,26 @@ describe("gemini web replies", () => {
     const { client: finished } = scriptedClient([searchCall]);
     const done = await runAgent({ llm: "gemini", channel: "web", message: "q", runTool: async () => searchHit, client: finished });
     expect(done.partial).toBeUndefined();
+  });
+
+  it("answers from what it found with one tool-free turn when it runs out of rounds", async () => {
+    const requests: Array<{ tools: unknown[] }> = [];
+    const client: AgentModelClient = {
+      interactions: {
+        create: async (params) => {
+          requests.push(params);
+          if (params.tools.length > 0) return { steps: [{ ...searchCall, id: `call-${requests.length}` }] };
+          return { output_text: "I searched your notes but found no exam date." };
+        },
+      },
+    };
+    const runTool = vi.fn(async () => ({ results: [] }));
+    const result = await runAgent({ llm: "gemini", channel: "web", message: "check 240", runTool, client });
+
+    expect(runTool).toHaveBeenCalledTimes(MAX_TOOL_ROUNDS);
+    expect(requests).toHaveLength(MAX_TOOL_ROUNDS + 1);
+    expect(requests.at(-1)?.tools).toEqual([]);
+    expect(result.text).toBe("I searched your notes but found no exam date.");
+    expect(result.partial).toBeUndefined();
   });
 });
