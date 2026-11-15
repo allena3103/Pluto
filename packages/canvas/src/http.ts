@@ -43,6 +43,8 @@ type RetryDecision = {
 
 export type CanvasHttpClient = {
   getPaginatedArray: (options: PaginatedRequestOptions) => Promise<unknown[]>;
+  /** One request for a single JSON object (same origin, auth, timeout and retry rules). Null when the body is not an object. */
+  getObject: (options: PaginatedRequestOptions) => Promise<Record<string, unknown> | null>;
 };
 
 export function createCanvasHttpClient(options: CanvasHttpClientOptions): CanvasHttpClient {
@@ -89,6 +91,21 @@ export function createCanvasHttpClient(options: CanvasHttpClientOptions): Canvas
       }
 
       return rows;
+    },
+
+    async getObject(requestOptions) {
+      const pageResult = await requestPage({
+        url: toRequestUrl(baseUrl, requestOptions.path, requestOptions.searchParams),
+        path: requestOptions.path,
+        baseUrl,
+        includeAuthHeader: options.includeAuthHeader,
+        token: options.token,
+        fetchImpl,
+        timeoutMs,
+        sleep,
+      });
+      const data = pageResult.data;
+      return data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : null;
     },
   };
 }
