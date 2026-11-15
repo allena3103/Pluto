@@ -29,6 +29,7 @@ type SavedNoteRow = {
   course_id: string | null;
   title: string;
   created_at: string;
+  source: string;
 };
 
 /** Section key for chat answers that cite more than one class. Not a uuid, so it never collides. */
@@ -76,7 +77,7 @@ export default async function NotesPage() {
     supabase.from("courses").select("id, name, term").eq("student_id", user.id).order("name", { ascending: true }),
     supabase
       .from("saved_notes")
-      .select("id, course_id, title, created_at")
+      .select("id, course_id, title, created_at, source")
       .eq("student_id", user.id)
       .order("created_at", { ascending: false })
       .limit(SAVED_NOTES_LIMIT),
@@ -170,7 +171,7 @@ export default async function NotesPage() {
                 {course.saved.length > 0 ? (
                   <div className="space-y-2">
                     <p className="inline-flex rounded-full bg-mint/70 px-3 py-1 text-xs font-extrabold text-emerald-900">
-                      From chat
+                      Saved by chat or AI
                     </p>
                     <div className="space-y-2">
                       {course.saved.map((note) => (
@@ -185,8 +186,9 @@ export default async function NotesPage() {
                             <BookmarkCheck className="size-5 shrink-0 text-emerald-600" aria-hidden />
                             <div className="min-w-0 flex-1 space-y-1">
                               <p className="text-[0.95rem] font-bold break-words text-foreground">{note.title}</p>
-                              <p className="text-xs font-semibold text-muted-foreground">
-                                Saved {formatAddedAt(note.created_at)}
+                              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold text-muted-foreground">
+                                <span>Saved {formatAddedAt(note.created_at)}</span>
+                                {note.source === "mcp" ? <Badge variant="secondary">From Claude</Badge> : null}
                               </p>
                             </div>
                             <ChevronRight
