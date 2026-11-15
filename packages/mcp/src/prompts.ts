@@ -134,7 +134,7 @@ function cramPlan(args: RawArgs): string {
     "",
     "Steps:",
     `1. Call get_crunch_weeks with weeksAhead ${weeks} and take the week ranked 1.`,
-    "2. Call get_deadlines to see what is due that week (and the days around it).",
+    "2. Use that week's own `assignments` for what is due. If you also call get_deadlines, pass a `daysAhead` that reaches the end of that week (its `weekEnd`, counted from today, at most 365), because the default is only 30 days.",
     "3. For each deliverable, call search_notes for its topic to find the notes pages it needs.",
     "4. Write a day-by-day plan from today to the last due date. Use study blocks of 60 to 90 minutes, put the heaviest-weight items first, and link every block to the notes pages it needs.",
     "5. End with a one-line summary of the week and what to do first today.",
