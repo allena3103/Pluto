@@ -91,17 +91,23 @@ export async function runMockPlan(
   if (list.length === 0) return { text: planText(list) || EMPTY_REPLY_TEXT, citations: [] };
 
   // Notes for the first item, so the reply carries a citation (the host adds the link).
+  // `search_notes` ANDs words, so OR the title's topic words, then fall back to the course's notes.
+  const first = list[0]!;
+  const topic = first.title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3).join(" or ");
   let citations: AgentResult["citations"] = [];
-  try {
-    const first = list[0]!;
-    const found = await withDeadline(
-      runTool("search_notes", { query: first.title, course: first.courseName, limit: 3 }),
-      TOOL_TIMEOUT_MS,
-      input.signal,
-    );
-    citations = collectCitations(found);
-  } catch {
-    // The plan still stands without a note link.
+  for (const query of [topic, "lecture or week or notes"]) {
+    if (!query) continue;
+    try {
+      const found = await withDeadline(
+        runTool("search_notes", { query, course: first.courseName, limit: 3 }),
+        TOOL_TIMEOUT_MS,
+        input.signal,
+      );
+      citations = collectCitations(found);
+    } catch {
+      // The plan still stands without a note link.
+    }
+    if (citations.length > 0) break;
   }
   return { text: planText(list), citations };
 }

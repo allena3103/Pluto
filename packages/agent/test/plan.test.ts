@@ -35,7 +35,7 @@ describe("mock study plan", () => {
     const runTool = runner();
     const result = await runAgent({ message: REQUEST, channel: "sms", llm: "mock", runTool } as never);
     expect(runTool).toHaveBeenCalledWith("get_deadlines", { daysAhead: 10 });
-    expect(runTool).toHaveBeenCalledWith("search_notes", expect.objectContaining({ query: "Quiz 4", course: "Bio 101" }));
+    expect(runTool).toHaveBeenCalledWith("search_notes", expect.objectContaining({ query: "quiz", course: "Bio 101" }));
     expect(result.text.split("\n")).toEqual([
       "Your plan:",
       "Tue, Nov 17: Quiz 4 (Bio 101) due 10:00 AM; Lab 3 (Bio 101) due 5:00 PM",
