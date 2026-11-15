@@ -56,6 +56,39 @@ function freshRow(over: Partial<Row> = {}): Row {
 }
 
 describe("GET /open/[token]", () => {
+  it("a saved-note link signs in and redirects to /notes/saved/<id> once", async () => {
+    const NOTE = "55555555-5555-4555-8555-555555555555";
+    const f = fakes();
+    let used = false;
+    const consume = vi.fn(async (): Promise<ConsumedMagicLink | null> => {
+      if (used) return null;
+      used = true;
+      return { kind: "saved_note", studentId: STUDENT, savedNoteId: NOTE, redirectPath: "/ignored" };
+    });
+    const first = await handleOpen(TOKEN, deps(f, consume));
+    expect(first.status).toBe(302);
+    expect(first.headers.get("location")).toBe(`/notes/saved/${NOTE}`);
+    expect(first.headers.get("cache-control")).toBe("no-store, private");
+    expect(f.verifyOtp).toHaveBeenCalledTimes(1);
+
+    const second = await handleOpen(TOKEN, deps(f, consume));
+    expect(second.headers.get("location")).toBe(INVALID);
+    expect(f.verifyOtp).toHaveBeenCalledTimes(1);
+  });
+
+  it("a saved-note link fails if the session is not the token's student", async () => {
+    const f = fakes({ sessionUser: OTHER });
+    const consume = vi.fn(async (): Promise<ConsumedMagicLink | null> => ({
+      kind: "saved_note",
+      studentId: STUDENT,
+      savedNoteId: "55555555-5555-4555-8555-555555555555",
+      redirectPath: "",
+    }));
+    const response = await handleOpen(TOKEN, deps(f, consume));
+    expect(response.headers.get("location")).toBe(INVALID);
+    expect(f.signOut).toHaveBeenCalled();
+  });
+
   it("signs in and redirects to the exact notes page, uncached", async () => {
     const f = fakes();
     const res = await handleOpen(TOKEN, deps(f, store({ [TOKEN]: freshRow() })));

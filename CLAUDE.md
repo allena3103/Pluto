@@ -25,8 +25,8 @@ Cursor does not load Allen's personal `~/.claude/CLAUDE.md`, so the parts that a
 ## Rules
 - Stay inside the files your task owns (see your task file). Need a change elsewhere: ask your orchestrator; orchestrators ask the director.
 - Contract change needed: stop and tell your orchestrator; it goes to the director, who edits `docs/plan.md` first, then code follows.
-- MCP tools are read-only and scoped to the signed-in student. Every query filters by `student_id` explicitly AND runs with row-level security on. Never return another student's data.
-- The service-role key is server-only and only in routes that must act without a user session (SMS webhook, ingest, alerts, Canvas sync, magic-link open). Those routes verify a secret or signature first.
+- MCP tools are read-only except `save_study_guide` (rules in `docs/plan.md`, "MCP contract"), and scoped to the signed-in student. Every query filters by `student_id` explicitly AND runs with row-level security on. Never return another student's data.
+- The service-role key is server-only and only in routes that must act without a user session (SMS webhook, ingest, alerts, Canvas sync, magic-link open) and in the MCP `save_study_guide` text step. Those routes verify a secret, signature or token first.
 - Page numbers are 1-based everywhere.
 - Web: mobile first, every screen works at 390px width. Tailwind + shadcn/ui. Log in with Supabase Auth.
 - SMS: inbound text, find the student by phone, call the agent, text the answer back. Sendblue sandbox: a person must text the number first, then Pluto can reply for 24 hours. Cold outbound is untested; do not rely on it. Webhook payload gives `from_number` and `content`.

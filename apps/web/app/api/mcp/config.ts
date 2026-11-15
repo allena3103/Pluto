@@ -1,4 +1,4 @@
-import { DEMO_STUDENT_ID, type McpAuthConfig } from "@pluto/mcp/auth";
+import { DEMO_STUDENT_ID } from "@pluto/mcp/auth";
 import type { McpHandlerConfig } from "@pluto/mcp/handler";
 
 /** Env for both MCP routes. Missing server env returns undefined; callers respond, they do not throw at import. */
@@ -10,12 +10,14 @@ export function readMcpHandlerConfig(): McpHandlerConfig | undefined {
   if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey || !appUrl) {
     return undefined;
   }
-  const config: McpAuthConfig & { appUrl: string } = {
+  const config: McpHandlerConfig = {
     supabaseUrl,
     supabaseAnonKey,
     supabaseServiceRoleKey,
     appUrl,
     demoStudentId: process.env.PLUTO_DEMO_STUDENT_ID || DEMO_STUDENT_ID,
+    // save_study_guide text step: Sendblue only when SMS_PROVIDER=sendblue, else the simulator.
+    sms: { provider: process.env.SMS_PROVIDER === "sendblue" ? "sendblue" : "simulator", env: process.env },
   };
   const demoToken = process.env.PLUTO_DEMO_MCP_TOKEN;
   if (demoToken) config.demoToken = demoToken;

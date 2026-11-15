@@ -1,12 +1,17 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { makeToolContext } from "@pluto/core/context";
-import { authenticate, type AuthResult, type McpAuthConfig, type McpAuthMode } from "./auth";
+import { makeToolContext, type PlutoDb } from "@pluto/core/context";
+import type { SmsProvider } from "@pluto/core/sms";
+import { authenticate, createServiceRoleClient, type AuthResult, type McpAuthConfig, type McpAuthMode } from "./auth";
 import { bearerChallenge } from "./metadata";
 import { createPlutoMcpServer } from "./server";
 
 export type McpHandlerConfig = McpAuthConfig & {
   /** Web app origin, no trailing slash required. Deep links are built from this. */
   appUrl: string;
+  /** SMS settings for the `save_study_guide` text (`SMS_PROVIDER`, env with the Sendblue keys). */
+  sms?: { provider?: SmsProvider; env?: NodeJS.ProcessEnv; fetch?: typeof fetch };
+  /** Tests only: replaces the service-role factory used by the text step. */
+  createAdmin?: () => PlutoDb;
 };
 
 export type McpRequestOptions = McpAuthMode;
@@ -65,7 +70,13 @@ export async function handleMcpRequest(
     return json({ error: "server_error" }, 500);
   }
 
-  const server = createPlutoMcpServer(ctx, { redactErrors: urlMode });
+  // Lazy: the service-role client for the text step is built only when save_study_guide
+  // reaches that step (after auth succeeded and the note row exists).
+  const createAdmin = config.createAdmin ?? (() => createServiceRoleClient(config));
+  const server = createPlutoMcpServer(ctx, {
+    redactErrors: urlMode,
+    write: { createAdmin, ...(config.sms ? { sms: config.sms } : {}) },
+  });
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

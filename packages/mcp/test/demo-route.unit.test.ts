@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { TOOL_NAMES } from "@pluto/core/contract";
+import { TOOL_NAMES, WRITE_TOOL_NAMES } from "@pluto/core/contract";
 import { ACCEPT, UNIT_TOKEN, mcpResult, rpcBody } from "./request";
 import { POST } from "../../../apps/web/app/api/mcp/demo/[token]/route";
 
@@ -80,7 +80,7 @@ describe("demo url route", () => {
     const listed = await mcpResult(await POST(listRequest(), { params: Promise.resolve({ token: UNIT_TOKEN }) }));
     expect(listed.status).toBe(200);
     const tools = listed.body.result?.tools as Array<{ name: string }>;
-    expect(tools.map((tool) => tool.name).sort()).toEqual([...TOOL_NAMES].sort());
+    expect(tools.map((tool) => tool.name).sort()).toEqual([...TOOL_NAMES, ...WRITE_TOOL_NAMES].sort());
 
     const wrong = await POST(listRequest(), { params: Promise.resolve({ token: "x".repeat(32) }) });
     expect(wrong.status).toBe(404);

@@ -11,7 +11,9 @@
  * - Tool outputs are objects, never bare arrays, so fields can be added later.
  * - Every note result carries `deepLink`: an absolute URL to `/notes/<fileId>?page=<n>`
  *   (build it with `noteUrl` from `./deep-links`).
- * - All tools are read-only and scoped to the signed-in student.
+ * - Every tool is scoped to the signed-in student. The 7 tools in `TOOLS` are read-only;
+ *   the one write tool, `save_study_guide`, lives in `WRITE_TOOLS` so the web/SMS agent
+ *   (which iterates `TOOLS`) never sees it.
  */
 import { z } from "zod";
 import { parseNotePath } from "./deep-links";
@@ -390,6 +392,59 @@ export type ToolArgs<N extends ToolName> = z.output<(typeof TOOLS)[N]["input"]>;
 export type ToolOutput<N extends ToolName> = z.output<(typeof TOOLS)[N]["output"]>;
 
 // ---------------------------------------------------------------------------
+// Write tool: save_study_guide (MCP only; see docs/plan.md "Write tool rules")
+// ---------------------------------------------------------------------------
+
+/** Most cited pages kept on one saved guide. */
+export const SAVE_STUDY_GUIDE_MAX_SOURCES = 100;
+
+/** MCP saves allowed per student per rolling hour; the next one is `rate_limited`. */
+export const SAVE_STUDY_GUIDE_HOURLY_LIMIT = 10;
+
+export const SaveStudyGuideInput = z.object({
+  /** Short title shown on the Notes page, e.g. "History 105 study guide". */
+  title: z.string().trim().min(1).max(200),
+  /** The full guide in markdown, with page deep links (`/notes/<fileId>?page=<n>`) kept. */
+  markdown: z.string().min(1).max(60_000),
+  /** Course id or case-insensitive course name. Omit to use the class every cited file shares. */
+  course: CourseRef.optional(),
+});
+
+export const TextStatus = z.enum(["sent", "no_phone", "failed"]);
+export type TextStatus = z.infer<typeof TextStatus>;
+
+export const SaveStudyGuideOutput = z.object({
+  noteId: Id,
+  title: z.string(),
+  /** Class the note is filed under; null when none. */
+  courseName: z.string().nullable(),
+  /** Absolute web link to `/notes/saved/<noteId>` (sign-in required). */
+  url: z.url({ protocol: /^https?$/ }),
+  /** Cited pages kept in `sources` (own files, existing pages, deduped, at most 100). */
+  citedPages: Count,
+  /** `sent`: a magic link was texted; `no_phone`: no linked phone; `failed`: the text failed (the note is still saved). */
+  textStatus: TextStatus,
+});
+
+export const WRITE_TOOLS = {
+  save_study_guide: {
+    name: "save_study_guide",
+    description:
+      "Saves a finished study guide to the student's Pluto Notes page and texts the student's linked phone a one-time link to open it. Adds one note; never edits or deletes anything.",
+    input: SaveStudyGuideInput,
+    output: SaveStudyGuideOutput,
+  },
+} as const;
+
+export type WriteToolName = keyof typeof WRITE_TOOLS;
+
+export const WRITE_TOOL_NAMES = Object.keys(WRITE_TOOLS) as WriteToolName[];
+
+export type WriteToolInput<N extends WriteToolName> = z.input<(typeof WRITE_TOOLS)[N]["input"]>;
+export type WriteToolArgs<N extends WriteToolName> = z.output<(typeof WRITE_TOOLS)[N]["input"]>;
+export type WriteToolOutput<N extends WriteToolName> = z.output<(typeof WRITE_TOOLS)[N]["output"]>;
+
+// ---------------------------------------------------------------------------
 // Endpoints
 // ---------------------------------------------------------------------------
 
@@ -512,13 +567,15 @@ export const OpenParams = z.object({ token: UrlToken });
 
 /**
  * `/open/:token` returns no JSON. On a valid, unused, unexpired token it signs the
- * student in and redirects to the notes page (`notePath(fileId, page)`); otherwise
- * it redirects to `invalidLocation`.
+ * student in and redirects to the notes page (`notePath(fileId, page)`), or to the
+ * saved note (`/notes/saved/<id>`) for a saved-note link; otherwise it redirects to
+ * `invalidLocation`.
  */
 export const OPEN_RESPONSE = {
   kind: "redirect",
   status: 302,
   location: "/notes/<fileId>?page=<n>",
+  savedNoteLocation: "/notes/saved/<id>",
   invalidLocation: "/login?error=link",
 } as const;
 

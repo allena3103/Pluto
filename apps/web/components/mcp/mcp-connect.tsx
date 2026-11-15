@@ -1,11 +1,14 @@
 "use client";
 
 import { Tabs } from "radix-ui";
-import { Bot, Download, Sparkles, Wrench } from "lucide-react";
+import { Bot, Download, MousePointerClick, Sparkles, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  ACCESS_SUMMARY,
   EXAMPLE_PROMPTS,
+  MCP_PROMPTS,
   MCP_TOOLS,
+  PROMPT_LOCATIONS,
   agentHandoff,
   claudeCodeCommand,
   codexCommand,
@@ -71,8 +74,8 @@ export function McpConnect({ serverUrl }: { serverUrl: string }) {
           <CopyButton text={serverUrl} label="Copy URL" variant="sunrise" size="default" className="shrink-0" />
         </div>
         <p className="mt-3 text-sm font-medium text-muted-foreground">
-          Streamable HTTP. You sign in with your Pluto account when the app asks, so there is no key to paste. It is
-          read-only and only sees your own data.
+          Streamable HTTP. You sign in with your Pluto account when the app asks, so there is no key to paste. It only
+          sees your own data, and the one thing it can write is a study guide saved to your Notes.
         </p>
       </section>
 
@@ -121,9 +124,9 @@ export function McpConnect({ serverUrl }: { serverUrl: string }) {
 
           <Tabs.Content value="claude" className="mt-2 space-y-3 focus-visible:outline-none">
             <Steps>
-              <li>In Claude, open Settings, then Connectors.</li>
-              <li>Choose Add custom connector.</li>
-              <li>Name it Pluto and paste the server URL.</li>
+              <li>In Claude, open Customize, then Connectors.</li>
+              <li>Press +, then Add custom connector.</li>
+              <li>Name it Pluto, paste the server URL and press Add.</li>
               <li>Press Connect and sign in to Pluto.</li>
             </Steps>
             <div className="flex flex-wrap gap-2">
@@ -174,11 +177,14 @@ export function McpConnect({ serverUrl }: { serverUrl: string }) {
 
           <Tabs.Content value="chatgpt" className="mt-2 space-y-3 focus-visible:outline-none">
             <Steps>
-              <li>In ChatGPT, open Settings, then Apps &amp; Connectors.</li>
+              <li>In ChatGPT, open Settings, then Apps (called Apps &amp; Connectors in some versions).</li>
               <li>Turn on Developer mode under Advanced settings.</li>
-              <li>Choose Create, name it Pluto and paste the server URL.</li>
+              <li>Choose Create app, name it Pluto and paste the server URL.</li>
               <li>Pick OAuth and sign in to Pluto.</li>
             </Steps>
+            <p className="text-sm font-medium text-muted-foreground">
+              Developer mode depends on your ChatGPT plan and may need a workspace admin to turn it on.
+            </p>
             <CopyButton text={serverUrl} label="Copy URL" />
           </Tabs.Content>
 
@@ -191,6 +197,40 @@ export function McpConnect({ serverUrl }: { serverUrl: string }) {
             <CodeBlock code={codexCommand(serverUrl)} label="Codex CLI" />
           </Tabs.Content>
         </Tabs.Root>
+      </section>
+
+      {/* One-click prompts */}
+      <section aria-labelledby="mcp-prompts" className={CARD}>
+        <div id="mcp-prompts">
+          <SectionTitle icon={MousePointerClick}>One-click prompts</SectionTitle>
+        </div>
+        <ul className="mt-3 divide-y divide-border/70">
+          {MCP_PROMPTS.map((prompt) => (
+            <li key={prompt.name} className="py-2.5">
+              <p className="text-sm font-bold text-foreground">
+                {prompt.title} <code className="font-mono text-xs font-semibold text-muted-foreground">{prompt.name}</code>
+              </p>
+              <p className="mt-0.5 text-sm font-medium text-muted-foreground">{prompt.description}</p>
+              <p className="mt-1 text-xs font-semibold text-muted-foreground">
+                Asks for:{" "}
+                {prompt.arguments.map((arg, index) => (
+                  <span key={arg.name}>
+                    {index > 0 ? ", " : ""}
+                    <code className="font-mono font-bold">{arg.name}</code>
+                    {arg.required ? "" : " (optional)"}
+                  </span>
+                ))}
+              </p>
+            </li>
+          ))}
+        </ul>
+        <ul className="mt-3 space-y-1 text-sm font-medium text-foreground/90">
+          {PROMPT_LOCATIONS.map((item) => (
+            <li key={item.client}>
+              <span className="font-extrabold">{item.client}:</span> {item.where}
+            </li>
+          ))}
+        </ul>
       </section>
 
       {/* Try it */}
@@ -211,18 +251,25 @@ export function McpConnect({ serverUrl }: { serverUrl: string }) {
       {/* Tools */}
       <section aria-labelledby="mcp-tools" className={CARD}>
         <div id="mcp-tools">
-          <SectionTitle icon={Wrench}>What your AI can read</SectionTitle>
+          <SectionTitle icon={Wrench}>What your AI can do</SectionTitle>
         </div>
         <ul className="mt-3 divide-y divide-border/70">
           {MCP_TOOLS.map((tool) => (
             <li key={tool.name} className="flex flex-col gap-0.5 py-2.5 sm:flex-row sm:items-baseline sm:gap-4">
-              <code className="shrink-0 font-mono text-sm font-bold text-foreground sm:w-44">{tool.name}</code>
+              <code className="shrink-0 font-mono text-sm font-bold text-foreground sm:w-44">
+                {tool.name}
+                {tool.write ? (
+                  <span className="ml-2 rounded-full bg-mint/70 px-2 py-0.5 font-sans text-[0.7rem] font-extrabold text-emerald-900">
+                    saves
+                  </span>
+                ) : null}
+              </code>
               <span className="text-sm font-medium text-muted-foreground">{tool.summary}</span>
             </li>
           ))}
         </ul>
         <p className="mt-3 text-sm font-medium text-muted-foreground">
-          All {MCP_TOOLS.length} tools are read-only. Your AI cannot change anything in Pluto.
+          {ACCESS_SUMMARY}
         </p>
       </section>
     </div>

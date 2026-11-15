@@ -1,5 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
-import { TOOL_NAMES } from "@pluto/core/contract";
+import { TOOL_NAMES, WRITE_TOOL_NAMES } from "@pluto/core/contract";
+
+const ALL_TOOL_NAMES = [...TOOL_NAMES, ...WRITE_TOOL_NAMES];
 import { TOOL_HANDLERS } from "@pluto/core/tools/index";
 import { handleMcpRequest } from "../src/handler";
 import { ACCEPT, CHALLENGE, INVALID_CHALLENGE, UNIT_TOKEN, mcpResult, postMcp, rpcBody, unitConfig } from "./request";
@@ -59,11 +61,11 @@ describe("mcp demo url token", () => {
     }
   });
 
-  test("flag 1 with the right token lists the seven tools", async () => {
+  test("flag 1 with the right token lists the eight tools", async () => {
     const response = await mcpResult(await urlCall(unitConfig({ demoUrlFlag: "1" }), UNIT_TOKEN));
     expect(response.status).toBe(200);
     const tools = response.body.result?.tools as Array<{ name: string }>;
-    expect(tools.map((tool) => tool.name).sort()).toEqual([...TOOL_NAMES].sort());
+    expect(tools.map((tool) => tool.name).sort()).toEqual([...ALL_TOOL_NAMES].sort());
   });
 
   test("flag 1 with the wrong token is 404 without WWW-Authenticate", async () => {
@@ -117,7 +119,7 @@ describe("mcp demo url token", () => {
     const listed = await mcpResult(await postMcp(flagged, listBody, `Bearer ${UNIT_TOKEN}`));
     expect(listed.status).toBe(200);
     const tools = listed.body.result?.tools as Array<{ name: string }>;
-    expect(tools).toHaveLength(TOOL_NAMES.length);
+    expect(tools).toHaveLength(ALL_TOOL_NAMES.length);
 
     const missing = await postMcp(flagged, listBody);
     expect(missing.status).toBe(401);
@@ -154,7 +156,7 @@ describe("mcp tool errors", () => {
 });
 
 describe("mcp tools/list", () => {
-  test("initialize and tools/list expose the seven contract tools", async () => {
+  test("initialize and tools/list expose the seven read tools and save_study_guide", async () => {
     const config = unitConfig();
     const token = `Bearer ${UNIT_TOKEN}`;
 
@@ -180,15 +182,27 @@ describe("mcp tools/list", () => {
       description?: string;
       inputSchema?: { properties?: Record<string, unknown> };
       outputSchema?: Record<string, unknown>;
-      annotations?: { readOnlyHint?: boolean };
+      annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean };
     }>;
-    expect(tools.map((tool) => tool.name).sort()).toEqual([...TOOL_NAMES].sort());
+    expect(tools.map((tool) => tool.name).sort()).toEqual([...ALL_TOOL_NAMES].sort());
+    expect(tools).toHaveLength(8);
     for (const tool of tools) {
       expect(tool.description?.length).toBeGreaterThan(0);
       expect(tool.inputSchema).toBeTruthy();
       expect(tool.outputSchema).toBeTruthy();
-      expect(tool.annotations?.readOnlyHint).toBe(true);
+      if (tool.name === "save_study_guide") {
+        expect(tool.annotations).toEqual({ readOnlyHint: false, destructiveHint: false, idempotentHint: false });
+      } else {
+        expect(tool.annotations?.readOnlyHint).toBe(true);
+      }
     }
+    const save = tools.find((tool) => tool.name === "save_study_guide");
+    const saveSchema = JSON.stringify(save?.inputSchema);
+    expect(saveSchema).toContain("title");
+    expect(saveSchema).toContain("markdown");
+    expect(saveSchema).toContain("course");
+    expect(String(initialized.body.result?.instructions)).toContain("save_study_guide");
+    expect(String(initialized.body.result?.instructions)).not.toContain("read-only view");
     const notePages = tools.find((tool) => tool.name === "get_note_pages");
     const schemaText = JSON.stringify(notePages?.inputSchema);
     expect(schemaText).toContain("fileId");

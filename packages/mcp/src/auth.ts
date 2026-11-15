@@ -80,7 +80,11 @@ export function bearerToken(request: Request): string | undefined {
   return match?.[1];
 }
 
-function createServiceRoleClient(config: McpAuthConfig): PlutoDb {
+/**
+ * Service-role client with the 10s Supabase timeout. Exported for the handler's lazy
+ * `save_study_guide` text-step factory; call it only after auth succeeded.
+ */
+export function createServiceRoleClient(config: McpAuthConfig): PlutoDb {
   return createClient<Database>(config.supabaseUrl, config.supabaseServiceRoleKey, {
     auth: {
       persistSession: false,

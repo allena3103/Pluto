@@ -63,13 +63,13 @@ Ten groups of data, and every row belongs to one student with row-level security
 | files | Lecture PDFs and syllabi | course, title, week label, added date, source (Canvas or manual), storage path, ingest status |
 | file\_pages | Searchable text | file, page number, page text, search index |
 | chat\_sessions and chat\_messages | Web and SMS conversations | session, role, text, cited file and page, channel |
-| saved\_notes | Web chat answers built from notes (study guides, summaries), shown on the Notes page by class | class (null when the answer cites several), chat session, title, body, cited file pages |
-| magic\_links | One-time links sent by SMS | token, student, target file and page, expiry |
+| saved\_notes | Study guides and summaries built from notes: web chat answers, and guides Claude saves through the MCP `save_study_guide` tool; shown on the Notes page by class | class (null when the answer cites several), chat session (null for MCP saves), source (`chat` or `mcp`), title, body, cited file pages |
+| magic\_links | One-time links sent by SMS | token, student, target (a file page or a saved note, exactly one), expiry |
 | alerts | Proactive alerts | student, kind (crunch week or date change), week or assignment, message, sent time, calendar feed token |
 
 ## MCP contract
 
-Seven read-only tools, so a wrong tool call from Claude can never change student data.
+Seven read-only tools plus one write tool, `save_study_guide`. The write tool can only add a saved note for the signed-in student and text that student; it never edits or deletes anything.
 
 | Tool | Inputs | Returns |
 | --- | --- | --- |
@@ -80,13 +80,28 @@ Seven read-only tools, so a wrong tool call from Claude can never change student
 | get\_deadlines | optional course, days ahead (default 30) | title, due date, previous due date if it moved, points, weight group, status |
 | get\_grades | optional course | score and weight per group, running weighted grade, count of ungraded items |
 | get\_crunch\_weeks | weeks ahead (default 8) | weeks ranked by number and weight of deliverables due (stretch; also feeds the SMS alert) |
+| save\_study\_guide (write) | title (1-200 chars), markdown body (1-60,000 chars) that cites pages with deep links, optional course (name or id) | saved note id, title, class name or null, web link to the saved note, number of cited pages kept, text status (`sent`, `no_phone` or `failed`) |
 
 - **Auth:** the student signs in with their Pluto account through OAuth; every call is scoped to that student.
 - **Size rule:** get\_recent\_notes stops at a fixed text cap and sets the truncated flag; Claude then calls get\_note\_pages for the rest.
 - **Citations:** every result carries a deep link to the exact page in the web app, so the study guide can cite pages.
 - **Changes:** a tool name or field changes here first, then in code.
+- **Write tool rules (`save_study_guide`):**
+  - Inserts one `saved_notes` row with `source = 'mcp'` for the signed-in student, then texts that student's linked phone a magic link that opens the saved guide. A failed or skipped text never undoes the save.
+  - Cited pages are the deep links (`/notes/<fileId>?page=<n>`) in the body that point at the student's own files and existing pages; anything else is dropped without being read. At most 100 kept.
+  - Class: the `course` input when given (resolved like every other tool, `course_not_found` otherwise); else the class every cited file shares; else none.
+  - Limit: 10 MCP saves per student per rolling hour; the 11th returns the `rate_limited` tool error and saves and texts nothing.
+  - Works on every MCP auth method (OAuth, demo bearer, demo URL token). OAuth inserts with the student's own token under RLS; the demo methods use the service role with an explicit `student_id`. The text step (magic link + SMS) uses the service role, created only after auth succeeded and the row exists, with the student id from auth, never from tool input.
+  - Published with `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: false`. Not offered to the web or SMS agent (web chat already saves its own notes).
+- **Prompts:** the server publishes three MCP prompts (read-only text templates; clients show them as one-click options):
 
-* **Client support:** standard remote MCP over streamable HTTP at `/api/mcp` with OAuth, so Claude and ChatGPT connect to the same server. Test ChatGPT at build step 4; the live demo runs in Claude.
+| Prompt | Arguments | Asks the model to |
+| --- | --- | --- |
+| study\_guide | course (required), days (optional, default 14) | read the course's recent notes (`get_recent_notes`, then `get_note_pages` when truncated), write a study guide citing every fact with its deep link, then save it with `save_study_guide` |
+| cram\_plan | weeks (optional, default 8) | find the heaviest week (`get_crunch_weeks`), read what is due (`get_deadlines`), find the notes for each item (`search_notes`), and write a day-by-day plan with page links |
+| quiz\_me | course (required), topic (optional), count (optional, default 8) | write a practice quiz from the notes, answers at the end, each answer linking to the exact page it comes from |
+
+* **Client support:** standard remote MCP over streamable HTTP at `/api/mcp` with OAuth, so Claude, ChatGPT and Cursor connect to the same server. Test ChatGPT at build step 4; the live demo runs in Claude.
 
 ## Internal API contract
 
@@ -99,9 +114,9 @@ Ten endpoints connect the web app, the agent and the integrations; settle each o
 | /api/agent/reply | SMS webhook | student id, text, channel | reply text and optional deep link |
 | /api/grades | web grade view | optional course | same data as get\_grades |
 | /api/magic-link | the agent, internally | student id, file id, page | one-time URL |
-| /open/:token | a phone tapping the link | token | signs the student in, opens the PDF at the page |
-| /api/sms/inbound | Sendblue | incoming message | finds the student by phone, calls agent/reply, texts the answer |
-| /api/alerts/demo | the demo button | student id | sends the crunch-week SMS with a calendar link |
+| /open/:token | a phone tapping the link | token | signs the student in, opens the PDF at the page, or the saved note for a saved-note link |
+| /api/sms/inbound | Sendblue | incoming message | finds the student by phone, calls agent/reply, texts the answer. A YES-style reply within 24 hours of a sent crunch-week alert gets a study plan for that alert's week, built by the same agent and tools |
+| /api/alerts/demo | the demo button | student id | sends the crunch-week SMS with a calendar link, ending with "Want a plan? Reply YES." |
 | /cal/:token.ics | Apple or Google Calendar | feed token | study blocks as a calendar feed |
 | /api/alerts/deadline-change | Canvas sync, after each sync | student id, assignment id, old and new due date | texts the student the new date with a calendar link |
 
@@ -191,3 +206,4 @@ Director-owned. Newest last.
 | 2026-11-14 | `/api/mcp` accepts any valid Supabase access token for the student (web session or OAuth-issued); tokens are not audience-bound to `/api/mcp`. The demo bearer and URL token are unchanged. |
 | 2026-11-14 | `POST /api/canvas/sync` (not one of the ten endpoints): signed-in student, or `x-internal-secret` with body `studentId`. The env Canvas token is used only with the env base URL and only for the demo student; profile URLs must be single-label `*.instructure.com`. `/api/magic-link` and `/open/:token` join the service-role allowed list. |
 | 2026-11-14 | Web chat changes: (1) reply text has no URLs (prompt + server strip; the mock no longer appends the deep link); links stay SMS-only. (2) Web replies that cite notes pages are saved to new `saved_notes` (migration `20261114050000`, student select/insert/delete own, no update; composite FKs to `courses` and `chat_sessions`) and listed on `/notes` under their class, with `/notes/saved/<id>`. (3) Web agent gets `ask_clarifying_questions` (1-3 questions, options with single/multiple pick, optional typed answer); `/api/chat` streams new events `questions` and `saved_note`. (4) Stop button aborts the request; the server then saves no reply and no note. |
+| 2026-11-14 | MCP demo features (Allen, 18:45; integration branch `agent/mcp-demo`, plan `orchestrations/plans/mcp-demo.md`): (1) MCP gets one write tool, `save_study_guide` (rules in "MCP contract"); defined in `contract.ts` apart from the seven read tools so the web/SMS agent never sees it. Migration range `20261114060000`-`20261114060959`: `saved_notes.source` (`chat` default, `mcp`), and `magic_links` may target a saved note (`saved_note_id`, composite FK to `saved_notes`, exactly one of file or saved note). `/open/:token` opens `/notes/saved/<id>` for those. The MCP route joins the service-role allowed list for the text step only. It also runs on the demo URL token (Allen chose this), capped at 10 saves per student per hour; rotate the token after the demo. (2) MCP prompts `study_guide`, `cram_plan`, `quiz_me`. (3) The crunch-week text ends "Want a plan? Reply YES."; a YES-style reply within 24 hours of the student's latest sent crunch alert is answered with a study plan for that week by the same agent and tools. |
