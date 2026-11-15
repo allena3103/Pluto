@@ -507,8 +507,14 @@ export const CHAT_STREAM_CONTENT_TYPE = "application/x-ndjson";
 export const ChatStreamEvent = z.discriminatedUnion("type", [
   /** A piece of the reply text; concatenate deltas in order. */
   z.object({ type: z.literal("text"), delta: z.string() }),
-  /** A notes page the reply cites. */
-  z.object({ type: z.literal("citation"), fileId: Id, page: PageNumber, deepLink: DeepLink }),
+  /** A notes page the reply cites. `title` is the file's title, for the source chip ("<title> p.<page>"). */
+  z.object({
+    type: z.literal("citation"),
+    fileId: Id,
+    page: PageNumber,
+    deepLink: DeepLink,
+    title: z.string().min(1).max(300).optional(),
+  }),
   /** The agent needs more detail before it answers; the student replies with a new message. */
   z.object({
     type: z.literal("questions"),

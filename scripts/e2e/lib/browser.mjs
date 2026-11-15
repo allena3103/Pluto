@@ -126,7 +126,9 @@ export async function lastAssistant(page) {
   return page.$$eval(MESSAGES, (els) => {
     const el = els[els.length - 1];
     if (!el) return null;
-    const sources = [...el.querySelectorAll("ul[aria-label='Sources'] a")].map((a) => a.getAttribute("href"));
+    const links = [...el.querySelectorAll("ul[aria-label='Sources'] a")];
+    const sources = links.map((a) => a.getAttribute("href"));
+    const sourceLabels = links.map((a) => a.textContent.trim());
     const saved = el.querySelector("a[href^='/notes/saved/']");
     const alert = el.querySelector("[role=alert]");
     return {
@@ -134,6 +136,7 @@ export async function lastAssistant(page) {
       headings: [...el.querySelectorAll("h2, h3, h4")].map((h) => h.textContent.trim()),
       listItems: el.querySelectorAll("li").length - sources.length,
       sources,
+      sourceLabels,
       savedHref: saved ? saved.getAttribute("href") : null,
       savedText: saved ? saved.textContent.trim() : null,
       error: alert ? alert.textContent.trim() : null,

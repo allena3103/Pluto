@@ -106,6 +106,15 @@ async function checkNotesReply(page, db, reply, course, expectedTitle) {
   check(!/http/i.test(text), "chat text contains http");
   check(reply.sources.length > 0, "no source chips");
   for (const href of reply.sources) check(SOURCE_HREF.test(href), `bad source chip href ${href}`);
+  // Chips read "<file title> p.<n>", the same as on the saved note's page.
+  const fileIds = [...new Set(reply.sources.map((href) => href.split("/")[2].split("?")[0]))];
+  const { rows: files } = await db.query("select id, title from files where id = any($1::uuid[])", [fileIds]);
+  const titleOf = new Map(files.map((f) => [f.id, f.title.trim()]));
+  reply.sources.forEach((href, i) => {
+    const [, fileId, pageNumber] = /^\/notes\/([0-9a-f-]+)\?page=(\d+)$/.exec(href);
+    const expected = `${titleOf.get(fileId)} p.${pageNumber}`;
+    check(reply.sourceLabels[i] === expected, `chip "${reply.sourceLabels[i]}" != "${expected}"`);
+  });
   check(reply.savedText === `Saved to Notes · ${course.name}`, `saved chip was "${reply.savedText}"`);
   const id = noteIdOf(reply.savedHref);
   const row = await savedNote(db, id);

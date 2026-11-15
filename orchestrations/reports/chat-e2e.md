@@ -41,3 +41,10 @@ Unit/DB: `npm test` 585 tests pass; `npm run typecheck` and `npm run lint` pass.
 - COMPSCI 328 (41896): no modules, no Pages tab, `/files` 403, empty syllabus; 18 HTML sources scanned (announcements, assignments, quizzes, syllabus) hold 0 file links and 0 PDF links. A 2026-09-09 announcement says materials and discussion are on Piazza. Nothing in Canvas to read.
 - `DEFAULT_MAX_FILES` = 25: a first sync of the 88 real PDFs ingests 25 and leaves 63 pending with no message; each later manual sync takes the next 25 (4 syncs total). Rows that fail every time keep using the cap.
 - The server-side stop check holds a `SHARE` lock on `chat_messages` for about 2 s per run, so other local sessions' chat inserts wait that long.
+
+## Allen's decisions, applied
+
+- Hosted DB: migrations `20261114050000_saved_notes` and `20261114060000_mcp_saved_notes` pushed (dry run listed exactly these two, no seeds). Read-only check after: `saved_notes` exists with RLS on, three own-row policies, no `anon` grants, `source` column present. Production `/notes` no longer returns the server error.
+- Chat source chips now read "<file title> p.<n>" like saved notes: the `citation` stream event has an optional `title` (contract + `docs/plan.md`), filled from the student's own `files` rows. Mock scenarios 1-2 check every chip label against the DB.
+- Canvas files sync cap raised from 25 to 100 per run.
+- COMPSCI 328 counts as "no Canvas materials". Saving every finished cited answer is confirmed. Both are in the `docs/plan.md` decision log.
