@@ -10,7 +10,7 @@ import {
 import type { CanvasAssignment, CanvasFileMeta } from "../../src/types";
 
 const CANVAS = "https://umamherst.instructure.com";
-const COURSE = "40414";
+const COURSE = "10001";
 const STUDENT = "11111111-1111-4111-8111-111111111111";
 const NOW = new Date("2026-11-14T15:00:00.000Z");
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
