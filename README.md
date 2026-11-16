@@ -1,467 +1,81 @@
 # Pluto
 
-Pluto is an AI academic manager, built at HackUMass. It reads a student's Canvas courses, lecture PDFs, assignments and grades, and answers questions about them from three places:
+Pluto is an AI study assistant, built at HackUMass. It reads a student's Canvas courses, lecture PDFs, assignments and grades, and answers questions about them from Claude, ChatGPT or Cursor (through MCP), from the web app, or by text message. Every answer links to the exact PDF page it came from.
 
-- **Claude, ChatGPT or Cursor**, through the Pluto MCP server.
-- **The Pluto web app**, which has a chat page, notes, grades and deadlines.
-- **Text messages (SMS)**.
+**Just want to check it out?** Open **[pluto-sepia.vercel.app](https://pluto-sepia.vercel.app)** and click **Try the demo**. It signs you in to a shared demo student with sample courses, notes and deadlines. No sign-up needed.
 
-All three use the same agent, the same tool functions and the same database. So a notes page found by text opens to the same page in the web app.
+## What it does
 
-**The demo moment:** in Claude, a student types *"build me a study guide from my History 105 notes from the past 2 weeks, use Pluto."* Claude reads the real notes through the Pluto MCP server, writes the guide with a link to the exact page behind every fact, and saves it to the student's Notes page. The student never downloads or pastes anything.
+- **Canvas sync:** courses, weighted grade groups, assignments (with instructions and attachments) and lecture PDFs.
+- **Notes with page-level citations:** every PDF page is searchable, and every answer links to `/notes/<fileId>?page=<n>`.
+- **MCP server:** Claude, ChatGPT and Cursor connect over OAuth and get read-only tools, a `save_study_guide` tool, and `study_guide`, `cram_plan` and `quiz_me` prompts.
+- **Web chat:** streamed answers with source chips and clarifying questions. Answers built from notes are saved to the Notes page.
+- **Grades and deadlines:** the running weighted grade per course, and the next 30 days of work with moved due dates flagged.
+- **SMS:** text a question and get an answer with a one-time link to the cited page. Pluto also texts about crunch weeks and changed deadlines.
+- **Calendar feed:** a private ICS link per student.
 
----
-
-## Contents
-
-1. [What Pluto does](#what-pluto-does)
-2. [How it fits together](#how-it-fits-together)
-3. [Repository layout](#repository-layout)
-4. [Tech stack](#tech-stack)
-5. [Getting started (local)](#getting-started-local)
-6. [Environment variables](#environment-variables)
-7. [Using the app](#using-the-app)
-8. [The MCP server](#the-mcp-server)
-9. [The agent (web chat and SMS)](#the-agent-web-chat-and-sms)
-10. [Canvas sync](#canvas-sync)
-11. [Notes: PDF ingest, search and the viewer](#notes-pdf-ingest-search-and-the-viewer)
-12. [SMS, magic links and alerts](#sms-magic-links-and-alerts)
-13. [Data model and security](#data-model-and-security)
-14. [HTTP routes](#http-routes)
-15. [Testing](#testing)
-16. [Deploying](#deploying)
-17. [How the project was built](#how-the-project-was-built)
-18. [Troubleshooting](#troubleshooting)
-
----
-
-## What Pluto does
-
-| Feature | What the student sees |
-| --- | --- |
-| **Canvas sync** | Courses, assignment groups and weights, assignments (due dates, points, scores, instructions, attached files) and lecture PDFs are pulled from Canvas. This includes courses that hide the Files tab, whose PDFs are read from Modules instead. |
-| **Notes with page-level answers** | Every PDF page is stored as searchable text. Every answer cites a file and a 1-based page number, and links to `/notes/<fileId>?page=<n>`, which opens the PDF viewer on that page. |
-| **MCP server** | Claude, ChatGPT and Cursor connect to `/api/mcp` (OAuth) and get 8 read-only tools, 1 write tool (`save_study_guide`) and 3 one-click prompts (`study_guide`, `cram_plan`, `quiz_me`). |
-| **Web chat** | A chat page with streamed answers, source chips, a Stop button, clarifying-question cards (for example "which class?"), and automatic saving of notes-based answers to the Notes page under their class. |
-| **Grades** | The running weighted grade per course, computed from Canvas group weights, with the score and weight per group and a count of ungraded items. |
-| **Deadlines** | The next 30 days, soonest first. Each one shows its status (upcoming, submitted, graded, overdue) and the old date if it moved. Each assignment has its own page with its instructions and attachments. |
-| **SMS** | The student texts a question and Pluto texts back an answer with a one-time link to the exact notes page. |
-| **Proactive alerts** | A "crunch week" text (the heaviest upcoming week) with a calendar link that ends "Want a plan? Reply YES." Answering YES gets a day-by-day plan. A deadline-change text is sent whenever a Canvas sync finds a due date that moved. |
-| **Calendar feed** | A private ICS link per student (`/cal/<token>.ics`) for Apple or Google Calendar. No calendar OAuth is needed. |
-| **Preview account** | A **Preview** button on the login page signs anyone into a shared demo student with sample courses, notes and deadlines. No sign-up is needed. |
-
----
+Try this in Claude once Pluto is connected: *"Build me a study guide from my History 105 notes from the past 2 weeks, use Pluto."* Claude reads the notes, writes the guide with a page link behind every fact, and saves it to the Notes page.
 
 ## How it fits together
 
 ```mermaid
 flowchart LR
-  subgraph Surfaces
-    C[Claude / ChatGPT / Cursor]
-    W[Web app]
-    S[SMS via Sendblue]
-  end
-  C -- MCP over HTTP + OAuth --> M["/api/mcp"]
-  W -- NDJSON stream --> CH["/api/chat"]
-  S -- webhook --> IN["/api/sms/inbound"]
-  CH --> A[Agent loop<br/>Gemini function calling]
+  C[Claude / ChatGPT / Cursor] -- MCP + OAuth --> M["/api/mcp"]
+  W[Web app] --> CH["/api/chat"]
+  S[SMS] -- webhook --> IN["/api/sms/inbound"]
+  CH --> A[Gemini agent loop]
   IN --> A
-  M --> T[Core tool functions<br/>packages/core]
+  M --> T[Core tool functions]
   A --> T
   T --> DB[(Supabase Postgres<br/>RLS on every table)]
   CV[Canvas API] -- sync --> DB
-  DB --- ST[(Supabase Storage<br/>PDFs and attachments)]
 ```
 
-- **One core.** `packages/core` holds the contract (zod schemas) and the tool functions: `list_courses`, `get_recent_notes`, `get_note_pages`, `search_notes`, `get_deadlines`, `get_assignment`, `get_grades` and `get_crunch_weeks`. The MCP server, the web and SMS agent, and the web pages all call these same functions.
-- **One database.** Supabase Postgres has row-level security on every table. Each query also filters by `student_id` explicitly, so the code doesn't rely on RLS alone.
-- **One agent.** The Gemini loop in `packages/agent` serves both web chat and SMS. It differs only in the reply style for each channel.
-
----
-
-## Repository layout
+The MCP server, the web chat, SMS and the web pages all call the same tool functions in `packages/core`, against the same database.
 
 ```
-apps/
-  web/                 Next.js app (App Router): pages, API routes, MCP endpoint, PWA
-packages/
-  core/                Contract (contract.ts), tool functions, PDF/Word ingest, magic links, SMS, ICS
-  agent/               Gemini agent loop + deterministic mock agent (PLUTO_LLM=mock)
-  canvas/              Canvas REST client, sync, file download + ingest, fixtures
-  mcp/                 MCP server: tools, prompts, auth (OAuth, demo bearer, demo URL token)
-supabase/
-  migrations/          Schema, RLS, search function, storage policies, later additive migrations
-  seed.sql             Two students (demo + other) with courses, grade groups, assignments
-  config.toml          Local stack config (auth, OAuth server, ports)
-scripts/
-  env-local.mjs        Writes apps/web/.env.local from the local Supabase stack
-  seed.ts              Seeds students, passwords and uploads + ingests the synthetic PDFs
-  seed-judge.ts/.sql   Creates or resets the shared Preview (judge) account
-  dev.mjs              Starts the web app on PORT from .env.local
-  smoke/               End-to-end smoke test of core on the seeded demo student
-  e2e/                 Browser e2e: chat, saved notes, Stop, SMS, RLS (mock and Gemini scenarios)
-  gen-pdfs.ts          Regenerates the synthetic lecture PDFs
-  canvas/probe-files.ts  Read-only live Canvas probe (GET only)
-seed/                  Synthetic lecture PDFs (no real course material is ever committed)
-docs/
-  plan.md              Human-readable contract, data model, endpoints and decision log
-  demo-mcp.md          MCP demo runbook
-orchestrations/        Briefs, task files, plans, reports and handoffs from the multi-agent build
+apps/web/          Next.js app: pages, API routes, MCP endpoint
+packages/core/     Contract (zod), tool functions, PDF/Word ingest, magic links, SMS, ICS
+packages/agent/    Gemini agent loop, plus a deterministic mock
+packages/canvas/   Canvas client, sync, file ingest, fixtures
+packages/mcp/      MCP tools, prompts and auth
+supabase/          Migrations, RLS, seed
+scripts/           Env setup, seeding, smoke and e2e tests
+seed/              Synthetic lecture PDFs
+docs/plan.md       Contract, data model and decision log
 ```
 
----
+**Stack:** Next.js, Tailwind and shadcn/ui, Supabase (Auth, Postgres full-text search, Storage), the TypeScript MCP SDK, Google Gemini, Sendblue, zod, Vitest and GitHub Actions.
 
-## Tech stack
+## Run it locally
 
-| Layer | Choice |
-| --- | --- |
-| Web | Next.js (App Router, React), Tailwind CSS, shadcn/ui (Radix), lucide icons, installable PWA. Mobile first: every screen works at 390px width. |
-| PDF viewing | `pdfjs-dist`, which opens the viewer on a given page |
-| Auth and data | Supabase Auth, Postgres (full-text search with `tsvector`) and Storage |
-| MCP | TypeScript MCP SDK, streamable HTTP, served from the Next.js app. Supabase Auth acts as the OAuth 2.1 server, with dynamic client registration and a consent page. |
-| Agent | Google Gemini (`@google/genai`) with function calling |
-| SMS | Sendblue (iMessage/SMS sandbox), plus a built-in simulator |
-| Validation | zod. The contract lives in `packages/core/src/contract.ts`. |
-| Tooling | npm workspaces, TypeScript, ESLint, Vitest, GitHub Actions CI. Node 24 or newer is required. |
-| Hosting | Vercel (root `apps/web`) and a hosted Supabase project |
-
----
-
-## Getting started (local)
-
-### Prerequisites
-
-- **Node.js 24+** and npm
-- **Docker Desktop**, running (the local Supabase stack runs in Docker)
-- No API keys are needed. Gemini, SMS and Canvas all have mocks, and they are on by default.
-
-### First run
+You need Node 24+ and Docker Desktop. No API keys are needed: Gemini, SMS and Canvas all run as mocks by default.
 
 ```bash
-npm ci                     # install every workspace
-npx supabase start         # start local Postgres/Auth/Storage, apply migrations + supabase/seed.sql
-npm run env:local          # write apps/web/.env.local from the stack + .env.example defaults
-npm run seed               # set student passwords, upload and ingest the synthetic lecture PDFs
-npm run seed:judge         # optional: create the shared Preview account
-npm run dev                # http://localhost:3000
+npm ci
+npx supabase start     # local Postgres, Auth and Storage, with migrations and seed
+npm run env:local      # writes apps/web/.env.local
+npm run seed           # uploads and ingests the synthetic PDFs
+npm run dev            # http://localhost:3000
 ```
 
-Sign in as one of these local accounts:
-
-| Account | Email | Password |
-| --- | --- | --- |
-| Demo student | `demo@pluto.test` | `pluto-demo-local-1` |
-| Other student (for isolation tests) | `other@pluto.test` | `pluto-other-local-1` |
-| Preview (judge) | use the **Preview** button | server-side only |
-
-The demo student has three seeded courses: **History 105**, **Biology 151** and **Statistics 240**. They come with lecture PDFs, weighted grade groups, graded past work, one clear crunch week and one upcoming History 105 due-date change.
-
-### Daily commands
+Sign in as `demo@pluto.test` with password `pluto-demo-local-1`. See `.env.example` for every setting, including how to switch to real Gemini, Sendblue and Canvas.
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Starts the web app on `PORT` from `apps/web/.env.local` (default 3000) |
-| `npm run typecheck` | `tsc` in every workspace and in `scripts/` |
-| `npm run lint` | ESLint in every workspace and in `scripts/` |
-| `npm test` | Vitest in every workspace: unit tests plus database tests against local Supabase |
-| `npm run smoke` | End-to-end smoke test of core on the seeded demo student |
-| `npm run e2e:chat` | Browser e2e for chat, saved notes, Stop, SMS and RLS |
-| `npm run seed` | Re-seeds passwords and PDFs. It can be run again safely. |
-| `npm run seed:judge` | Creates or resets the Preview account. It touches no other student. |
+| `npm run typecheck` / `npm run lint` | Checks every workspace |
+| `npm test` | Unit tests, plus database tests against local Supabase |
+| `npm run smoke` | End-to-end check of the core tools |
+| `npm run e2e:chat` | Browser tests for chat, notes, SMS and RLS |
 
-> Do not run `supabase db reset` on a shared local stack unless you mean to wipe it. Migrations are additive.
+## Security
 
----
+- Row-level security on every table, and every query also filters by `student_id`. Tests check that one student can't read another's data.
+- Students can't write server-owned columns such as phone, storage paths or the Canvas token.
+- Canvas tokens are encrypted with AES-256-GCM. Magic-link and phone-link codes are stored only as hashes.
+- The service-role key is used only in server routes that first verify a secret, signature or token.
+- The agent treats all tool output as untrusted data, and only cites pages that tools returned.
 
-## Environment variables
+## How it was built
 
-`npm run env:local` writes `apps/web/.env.local` for you. Real keys are kept outside the repo, either in a secrets file that is never committed or in the Vercel project settings. Only `.env.example` is committed.
-
-| Variable | Purpose | Local default |
-| --- | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase client | filled from the local stack |
-| `SUPABASE_SERVICE_ROLE_KEY` | **Server only.** Used only in routes that must act without a user session, and each of those verifies a secret, signature or token first. | filled from the local stack |
-| `SUPABASE_DB_URL` | Direct Postgres URL, used by `npm run seed` and the DB tests | local `54322` |
-| `PORT`, `APP_URL`, `NEXT_PUBLIC_APP_URL` | The app's port and public origin, used to build deep links and magic links | `3000`, `http://localhost:3000` |
-| `INTERNAL_API_SECRET` | The `x-internal-secret` header for server-to-server routes | dev value |
-| `PLUTO_LLM` | `mock` (deterministic scripted tool calls) or `gemini` | `mock` |
-| `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FAST_MODEL` | Gemini key and models: web chat uses `GEMINI_MODEL`, SMS uses `GEMINI_FAST_MODEL` | `gemini-3.5-flash-lite` |
-| `SMS_PROVIDER` | `simulator` (messages are stored and shown at `/sms-sim`) or `sendblue` | `simulator` |
-| `SENDBLUE_API_KEY_ID`, `SENDBLUE_API_SECRET`, `SENDBLUE_FROM_NUMBER`, `SENDBLUE_WEBHOOK_SECRET` | Sendblue keys and webhook secret | empty |
-| `CANVAS_MODE` | `fixtures` (recorded JSON in `packages/canvas/fixtures`) or `live` | `fixtures` |
-| `CANVAS_BASE_URL` | The Canvas origin for the demo student's environment token | empty |
-| `CANVAS_TOKEN_KEY` | A 32-byte base64 key. Canvas tokens are encrypted at rest with AES-256-GCM. | dev-only key |
-| `PLUTO_DEMO_MCP_TOKEN` | A fallback MCP bearer token that maps to the demo student. Empty turns it off, and it needs at least 24 characters to work. | empty |
-| `PLUTO_DEMO_MCP_URL_ENABLED` | Set it to `1` to allow `/api/mcp/demo/<token>`, for claude.ai, which can't send custom headers | empty (off) |
-| `PLUTO_DEMO_STUDENT_ID` | Optional override of the seeded demo student id | empty |
-| `DEMO_STUDENT_*`, `OTHER_STUDENT_*` | Seeded student emails, passwords and an optional demo phone | local values |
-| `JUDGE_STUDENT_EMAIL`, `JUDGE_STUDENT_PASSWORD` | When both are set, the login page shows the **Preview** button | local values |
-
----
-
-## Using the app
-
-| Page | Path | What it shows |
-| --- | --- | --- |
-| Login / Sign up | `/login`, `/signup` | Email and password (Supabase Auth). `/login` also has the **Preview** button when it is configured. |
-| Home | `/` | The dashboard |
-| Chat | `/chat` | Chat with Pluto: streamed replies, source chips, Stop, clarifying questions |
-| Notes | `/notes` | Lecture files by class, plus saved study guides and chat answers |
-| PDF viewer | `/notes/<fileId>?page=<n>` | The PDF opened on page *n* (1-based) |
-| Saved note | `/notes/saved/<noteId>` | A study guide saved from chat or from Claude, with the pages it cites |
-| Grades | `/grades` | The weighted grade and the breakdown by group |
-| Deadlines | `/deadlines` | The next 30 days, grouped by day, with moved dates shown |
-| Assignment | `/assignments/<id>` | The Canvas instructions and attached files, with a viewer for each attachment |
-| Connect AI | `/mcp` | Copy-paste setup for Claude, ChatGPT and Cursor, plus the list of tools and prompts |
-| Canvas settings | `/settings/canvas` | Steps for making a Canvas access token, an Open Canvas button, save on paste, and **Sync now** |
-| Phone settings | `/settings/phone` | Link a phone by texting `LINK <code>` to the Pluto number |
-| SMS simulator | `/sms-sim` | Send and read texts without Sendblue (`SMS_PROVIDER=simulator`) |
-
-### The Preview account
-
-The **Preview** button on `/login` calls a server action that signs in to one shared account with credentials held on the server. The password never reaches the browser.
-
-- `npm run seed:judge` creates and resets the account. It gets the same synthetic courses and PDFs as the demo student, and the script touches no other student.
-- The account is shared, so it has **no SMS** (the Phone and SMS-simulator pages are hidden and their routes refuse it) and **no Canvas linking** (saving a token returns 403).
-- MCP still works through OAuth with the same button.
-
----
-
-## The MCP server
-
-Endpoint: **`/api/mcp`** (streamable HTTP). Code: `packages/mcp`, mounted in `apps/web/app/api/mcp`.
-
-### Connecting
-
-- **OAuth (the main way).** Add `https://<your-domain>/api/mcp` as a custom connector in Claude, ChatGPT or Cursor. The client finds the auth server from `/.well-known/oauth-protected-resource`, registers itself (dynamic client registration), and sends the student to `/oauth/consent`. Every call is then scoped to that student.
-- **Demo bearer.** `Authorization: Bearer <PLUTO_DEMO_MCP_TOKEN>` maps to the demo student. This is for MCP Inspector, Claude Code and Claude Desktop.
-- **Demo URL token.** `/api/mcp/demo/<token>` is for claude.ai, whose connector screen can't set headers. It is on only when `PLUTO_DEMO_MCP_URL_ENABLED=1`, and the token is compared in constant time. Turn it off and rotate the token after a demo.
-
-### Tools
-
-| Tool | Inputs | Returns |
-| --- | --- | --- |
-| `list_courses` | none | The course id, name and term for each course |
-| `get_recent_notes` | course (name or id), `days` (default 14) | Every lecture file added in the window, with the full text of each page, a deep link per page and a `truncated` flag |
-| `get_note_pages` | `fileId`, optional `firstPage`/`lastPage` (1-based) | The text of those pages, each with a deep link |
-| `search_notes` | `query`, optional course, `limit` | Matching pages: the file, the page, a short snippet and a deep link |
-| `get_deadlines` | optional course, `daysAhead` (default 30) | Assignment id, title, due date, the previous due date if it moved, points, weight group, status and attachment count |
-| `get_assignment` | `assignmentId` | The Canvas instructions and the text of the attached PDF and Word files, with links into Pluto (60,000-character cap) |
-| `get_grades` | optional course | Score and weight per group, the running weighted grade and the count of ungraded items |
-| `get_crunch_weeks` | `weeksAhead` (default 8) | The coming weeks ranked by how many deliverables are due and how much they weigh |
-| `save_study_guide` *(write)* | `title`, markdown body, optional course | Adds one saved note and texts the student a one-time link to it. It never edits or deletes anything. |
-
-The rules for `save_study_guide`:
-
-- Only deep links to the student's own existing pages are kept as cited pages, up to 100.
-- The limit is 10 saves per student per hour. The 11th returns `rate_limited`.
-- A text that fails or is skipped never undoes the save.
-- The tool is published with `readOnlyHint: false` and `destructiveHint: false`.
-
-### Prompts
-
-| Prompt | Arguments | What it asks the model to do |
-| --- | --- | --- |
-| `study_guide` | course, days | Read the recent notes, write a guide that cites every fact with its page link, and save it |
-| `cram_plan` | weeks | Find the heaviest week, read what is due, find the notes for each item, and write a day-by-day plan |
-| `quiz_me` | course, topic, count | Write a practice quiz with the answers at the end, each linking to its source page |
-
-### Try it
-
-1. Connect Claude to `/api/mcp`, or to the demo URL route.
-2. Ask: *"Build me a study guide from my History 105 notes from the past 2 weeks, use Pluto."*
-3. Claude calls `get_recent_notes`, and `get_note_pages` if the result was truncated. It writes the guide with page links and calls `save_study_guide`.
-4. Open **Notes** in the web app. The guide appears under History 105, and every link opens the PDF on the cited page.
-
----
-
-## The agent (web chat and SMS)
-
-The agent code is in `packages/agent`.
-
-- **Gemini mode** (`PLUTO_LLM=gemini`) is a function-calling loop over the core tools.
-  - Every tool call and every model call has a timeout.
-  - The loop has a cap on tool rounds. When it hits the cap, it answers with what it has instead of returning an empty reply.
-  - The system prompt treats all text returned by tools as untrusted data, never as instructions. This guards against prompt injection hidden in notes.
-  - Page numbers and URLs are never invented. Citations come only from tool results.
-- **Mock mode** (`PLUTO_LLM=mock`) makes deterministic scripted tool calls, so the app, the tests and CI run without a key.
-- **The web channel** streams NDJSON events (`text`, `citation`, `questions`, `saved_note`, `done`, `error`). When a request is missing a detail, the agent can ask clarifying questions, which appear as cards. For example, "look at my notes" with no class named gets a question listing the student's real class names.
-- **The SMS channel** sends short plain-text replies of 300 characters or fewer. The app adds a magic link to the cited page.
-- **Saving answers.** An answer built from notes pages is saved to Notes under its class, but only when the answer finished. A reply cut short by a timeout, an error or the round cap is marked `partial` and is never saved.
-
----
-
-## Canvas sync
-
-The code is in `packages/canvas`. The route is `POST /api/canvas/sync`, which accepts a signed-in student, or `x-internal-secret` with a `studentId`.
-
-1. **Token.** The student pastes a Canvas access token on `/settings/canvas`.
-   - It is encrypted with AES-256-GCM before it is stored.
-   - The base URL must be a single-label `*.instructure.com` host.
-   - The server's own environment token is used only with the environment base URL, and only for the demo student. It is never mixed with a URL the student chose, which prevents SSRF and token leaks.
-2. **Courses, groups, assignments.** These are read with pagination and handle rate limits: 429 and 403 responses with rate headers, timeouts and empty responses.
-   - Assignments include each submission, so status and score can be worked out.
-   - The HTML description is saved as plain-text instructions, with a link back to the Canvas page.
-3. **Due-date changes.** Each sync compares due dates with the saved copy. When a date moved, it saves `previous_due_at` and calls `/api/alerts/deadline-change`, which texts the student.
-4. **Lecture PDFs.** These come from `/files`. When a course hides the Files tab and that call returns 403, they are read from the files linked in Modules.
-   - Each PDF is downloaded to Storage with a size cap and a timeout. Redirects are followed by hand, so the token is only ever sent to the Canvas host.
-   - Each PDF is checked to really be a PDF, then ingested page by page.
-   - Files that are already current are skipped.
-5. **Assignment attachments.** Files linked inside an assignment's description become `assignment_files` rows.
-   - PDF and Word (.docx) files are downloaded and read in a worker with memory and time limits, and their text goes into `assignment_file_pages`.
-   - Other file types are listed but not read.
-   - Attachments are kept separate from lecture notes. They never appear on the Notes page or in notes search.
-
-**Fixtures mode** (`CANVAS_MODE=fixtures`) serves recorded Canvas JSON from `packages/canvas/fixtures`. Due dates are written relative to the current week, so seeded data always looks current. `POST /api/canvas/demo-date-change` moves one seeded due date, to demo the deadline-change text.
-
----
-
-## Notes: PDF ingest, search and the viewer
-
-- **Ingest.** `packages/core` (`/api/ingest`) extracts text per page and writes one `file_pages` row per page. Page numbers start at 1.
-- **Search.** Each page row has a generated column `to_tsvector('english', text)` with a GIN index. The `search_notes(...)` function runs as the caller (security invoker), so RLS still applies, and it returns ranked snippets.
-- **Size limits.** `get_recent_notes` stops at a fixed text cap and sets `truncated`, and the client then pages with `get_note_pages`. Row reads walk through results with `.range()`, so they are never cut off at PostgREST's 1,000-row limit.
-- **Viewer.** `/notes/<fileId>?page=<n>` renders the PDF with pdf.js and opens it on page *n*. An invalid `page` value is cleaned up.
-- **Storage.** PDFs live at `notes/<student_id>/<file_id>.pdf`. A check constraint enforces that exact path, so a row can't point at another student's object.
-
----
-
-## SMS, magic links and alerts
-
-- **Inbound** (`POST /api/sms/inbound`):
-  - The route verifies the Sendblue webhook secret.
-  - It is idempotent: each message is recorded in `sms_inbound_receipts`, so a retried webhook is handled once.
-  - It finds the student by `from_number` and calls the agent, then texts back the answer plus a magic link.
-  - Unknown numbers get a fixed reply.
-- **Sendblue sandbox rule:** a person must text the Pluto number first, and Pluto can then reply for 24 hours. Cold outbound texts are not relied on.
-- **Linking a phone.**
-  - `/settings/phone` shows a short single-use code. Only its hash is stored, and it expires after 15 minutes.
-  - The student texts `LINK <code>` to the Pluto number, and the webhook sets `profiles.phone`. No other path writes the phone number.
-  - Doing it this way proves the student owns the phone, and it fits the sandbox's "text first" rule.
-- **Magic links.**
-  - `/api/magic-link` creates a one-time link after checking that the file belongs to the student.
-  - `/open/<token>` signs the student in and opens the PDF page or the saved note.
-  - Tokens are stored as SHA-256 hashes and expire.
-- **Crunch-week alert.**
-  - `POST /api/alerts/demo` texts the heaviest upcoming week with an ICS link, and the text ends "Want a plan? Reply YES."
-  - A YES reply within 24 hours gets a day-by-day study plan from the same agent and tools.
-- **Deadline-change alert.** `POST /api/alerts/deadline-change` (internal secret) texts the new date with a calendar link.
-- **Calendar.** `/cal/<token>.ics` serves study blocks as a calendar feed, using an unguessable per-student token.
-
----
-
-## Data model and security
-
-| Table | Holds |
-| --- | --- |
-| `profiles` | One row per student: name, phone, encrypted Canvas token, Canvas base URL |
-| `courses` | Name, term, Canvas course id |
-| `grade_groups` | Group name and weight percent |
-| `assignments` | Title, due date, previous due date, date-changed time, points, weight group, score, graded/submitted, instructions (plain text), Canvas link |
-| `assignment_files`, `assignment_file_pages` | Files linked from assignment instructions and their page text |
-| `files`, `file_pages` | Lecture PDFs (title, week label, source, storage path, ingest status) and their searchable page text |
-| `chat_sessions`, `chat_messages` | Web and SMS conversations with cited file and page |
-| `saved_notes` | Study guides and saved chat answers (`source` is `chat` or `mcp`), shown on Notes by class |
-| `magic_links` | One-time links (hash, target, expiry) |
-| `alerts` | Crunch-week and date-change alerts, calendar feed token |
-| `sms_messages`, `sms_inbound_receipts`, `phone_link_codes` | SMS log and simulator store, webhook idempotency, phone-link codes |
-
-**Security rules the code follows:**
-
-- **Isolation.**
-  - Every table has row-level security, and every row belongs to one student.
-  - Composite `(student_id, id)` foreign keys stop a row from pointing at another student's row.
-  - Tests check that a second student can't read the first student's rows.
-- **Explicit filtering.** Every tool query filters by `student_id` explicitly *and* runs with RLS on.
-- **Locked-down student writes.** Students can't write server-owned columns:
-  - `files.storage_path` and the ingest fields
-  - `profiles.phone`, `profiles.canvas_base_url` and the Canvas token
-  - A trigger and column grants enforce this. Students can change only their name.
-- **Service role.** The service-role key is used only on the server, in routes that act without a user session: SMS webhook, ingest, alerts, Canvas sync, magic-link open, Canvas token save, and the text step of `save_study_guide`. Each of these checks a secret, signature or token first.
-- **Secrets.** Secrets are kept only in environment variables. Real course PDFs are never committed, and all seed material is synthetic.
-- **External calls.** Every external call (Canvas, Sendblue, Gemini, Supabase) has a timeout and handled errors.
-
----
-
-## HTTP routes
-
-| Route | Auth | Purpose |
-| --- | --- | --- |
-| `POST /api/chat` | session | Streams the agent's reply as NDJSON |
-| `POST /api/agent/reply` | internal secret | Agent reply for SMS |
-| `GET /api/grades` | session | Same data as `get_grades` |
-| `POST /api/magic-link` | internal | Creates a one-time link (checks ownership) |
-| `GET /open/<token>` | token | Signs the student in and opens the page or the saved note |
-| `POST /api/ingest` | internal secret | Extracts the pages of one file |
-| `POST /api/sms/inbound` | Sendblue webhook secret | Inbound text, sends the reply |
-| `POST /api/sms/link-code` | session | Creates a phone-link code |
-| `POST /api/alerts/demo` | session or internal secret | Sends the crunch-week text |
-| `POST /api/alerts/deadline-change` | internal secret | Sends the moved-deadline text |
-| `GET /cal/<token>.ics` | feed token | Calendar feed |
-| `POST /api/canvas/token` | session | Saves the encrypted Canvas token |
-| `POST /api/canvas/sync` | session or internal secret | Runs a Canvas sync |
-| `POST /api/canvas/demo-date-change` | demo student session or internal secret | Moves one seeded due date for the demo |
-| `/api/mcp`, `/api/mcp/demo/<token>` | OAuth / bearer / URL token | MCP server |
-| `/.well-known/oauth-protected-resource` | public | OAuth discovery for MCP clients |
-
-Shapes for every route and tool are defined in `packages/core/src/contract.ts`, and described in plain language in `docs/plan.md`. The two must agree. A field changes in the plan first, then in code.
-
----
-
-## Testing
-
-- **Unit tests:** Vitest in every workspace (`npm test`).
-- **Database tests** run against the real local Supabase stack. They cover RLS isolation, storage policies, search, tools, ingest, Canvas sync, files sync, MCP handlers and OAuth, and `save_study_guide`.
-  - They need `npx supabase start` and `npm run env:local` first.
-  - `PLUTO_SKIP_DB_TESTS=1` skips them. It is for CI only, and is never set in this repo's CI.
-- **Smoke test:** `npm run smoke` runs core against the seeded demo student.
-- **Browser e2e:** `npm run e2e:chat` covers chat, saved notes, Stop, SMS and RLS in mock mode, plus Gemini scenarios.
-- **CI** (`.github/workflows/ci.yml`, on every push and PR) runs these steps on Node 24:
-  1. `npm ci`
-  2. typecheck and lint
-  3. start Supabase
-  4. `env:local`
-  5. `seed` (this also checks that seeding can be re-run)
-  6. `npm test`
-  7. `npm run smoke`
-
----
-
-## Deploying
-
-1. **Vercel:** set the project root to `apps/web`, and set the environment variables listed in `.env.example` for Production and Preview. Use real values for `INTERNAL_API_SECRET`, `CANVAS_TOKEN_KEY` and `PLUTO_DEMO_MCP_TOKEN`. Set `APP_URL` and `NEXT_PUBLIC_APP_URL` to the public origin. Set `PLUTO_LLM=gemini` and `SMS_PROVIDER=sendblue`.
-2. **Hosted Supabase:** run `npx supabase link --project-ref <ref>`, then `npx supabase db push`. Seed with the hosted environment (`npm run env:local -- --hosted` writes `.env.production.local`), and run `npm run seed:judge` for the Preview account. In the Supabase dashboard, turn on the OAuth server with dynamic client registration, and set the consent path to `/oauth/consent`.
-3. **Vercel Deployment Protection** must be off for production. Otherwise MCP clients can't reach `/api/mcp`.
-4. **Sendblue:** point the webhook at `/api/sms/inbound` with the webhook secret. Before a live demo, text the Pluto number from the demo phone, because of the 24-hour sandbox window.
-5. **The `main` branch deploys automatically.** Other branches get preview deployments.
-
-See `docs/demo-mcp.md` for the full demo checklist.
-
----
-
-## How the project was built
-
-Pluto was built during the hackathon by a team of AI coding agents, directed by Allen. Each agent ran in its own git worktree, branch and herdr tab.
-
-- **Roles:**
-  - A **director** planned the work, owned the contract (`docs/plan.md` and `contract.ts`) and reran the checks after every merge.
-  - **Coders** each took one task in one worktree.
-  - **Fresh reviewers** with no prior context reviewed every security-sensitive PR (migrations, RLS, auth, magic links, webhooks, service-role routes, Canvas tokens) using `REVIEW.md`.
-- **Merging:** PRs were reviewed and merged by a reviewer bot: Grokbot at first, then a Claude `mergebot`. A PR was merged only when CI was green and, for security PRs, when the fresh reviewer approved it.
-- **Models:** early coders and reviewers ran on both Claude and Cursor (Composer and Grok models). From midway through the build, the work was Claude only.
-- **Records:** the briefs, task files, plans, escalations and handoffs are in `orchestrations/`. The decision log at the bottom of `docs/plan.md` records every contract change.
-
----
-
-## Troubleshooting
-
-| Symptom | Fix |
-| --- | --- |
-| `DB tests need local Supabase env` | Start Docker, then run `npx supabase start` and `npm run env:local` |
-| `failed to connect to the docker API` | Docker Desktop isn't running |
-| The agent says an assignment has no instructions or attachments | Run **Sync now** on `/settings/canvas`. Data synced before a feature shipped stays empty until the next sync. |
-| A Canvas course shows no PDFs | The course hides its Files tab, so files are read from Modules. Files that are locked or unpublished for the student are skipped. |
-| Claude can't reach `/api/mcp` on Vercel | Turn off Vercel Deployment Protection for production |
-| SMS replies don't arrive | The Sendblue sandbox only replies within 24 hours of the person texting first, or use `SMS_PROVIDER=simulator` and `/sms-sim` |
-| The Preview button is missing | Set both `JUDGE_STUDENT_EMAIL` and `JUDGE_STUDENT_PASSWORD`, then run `npm run seed:judge` |
-| `apps/web/.env.local not found` | Run `npm run env:local` |
+Pluto was built during the hackathon by a team of AI coding agents (Claude and Cursor). A director agent planned the work and owned the contract, coders each worked in their own git worktree, and fresh reviewers checked every security-sensitive PR before it merged. The briefs, plans and reports are in `orchestrations/`.
