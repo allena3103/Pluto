@@ -2,14 +2,14 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Gavel } from "lucide-react";
+import { AlertCircle, Sparkles } from "lucide-react";
 import { judgeSignIn, type SignInState } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const INITIAL_STATE: SignInState = { error: null };
 
-function JudgeButton() {
+function DemoButton() {
   const { pending } = useFormStatus();
   return (
     <Button
@@ -18,14 +18,14 @@ function JudgeButton() {
       className="w-full bg-violet-600 text-white shadow-warm hover:bg-violet-700"
       disabled={pending}
     >
-      <Gavel className="size-5" aria-hidden />
-      {pending ? "Opening the demo\u2026" : "Preview"}
+      <Sparkles className="size-5" aria-hidden />
+      {pending ? "Opening the demo…" : "Try the demo"}
     </Button>
   );
 }
 
-/** The one-click entry for hackathon judges: a shared account with sample courses and notes. */
-export function JudgeLogin({ next }: { next: string }) {
+/** One-click entry for visitors: a shared demo account with sample courses and notes. */
+export function DemoLogin({ next }: { next: string }) {
   const [state, formAction] = useActionState(judgeSignIn, INITIAL_STATE);
 
   return (
@@ -34,7 +34,7 @@ export function JudgeLogin({ next }: { next: string }) {
       className="mb-5 space-y-3 rounded-3xl border-2 border-violet-300 bg-lilac p-5 text-center shadow-warm-lg"
     >
       <input type="hidden" name="next" value={next} />
-      <p className="text-lg font-black text-violet-900">Judging Pluto?</p>
+      <p className="text-lg font-black text-violet-900">Just looking around?</p>
       <p className="text-sm font-semibold text-violet-800/80">
         One click, no sign-up. You get a demo student with sample courses, lecture notes and deadlines.
       </p>
@@ -44,7 +44,7 @@ export function JudgeLogin({ next }: { next: string }) {
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       ) : null}
-      <JudgeButton />
+      <DemoButton />
     </form>
   );
 }

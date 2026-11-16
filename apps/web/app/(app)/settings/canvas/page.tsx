@@ -33,7 +33,7 @@ export default async function CanvasSettingsPage() {
       {isJudgeUser(authData.user) ? (
         <div className="rounded-3xl border border-violet-200 bg-lilac p-5">
           <p className="text-sm font-semibold text-violet-900">
-            Canvas linking is off on the judge demo account, because every judge shares it. The sample courses
+            Canvas linking is off on the demo account, because every visitor shares it. The sample courses
             were loaded the same way a Canvas sync loads a student&apos;s real classes.
           </p>
         </div>
