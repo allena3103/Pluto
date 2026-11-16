@@ -37,7 +37,7 @@ Answers to clarifying questions are sent as `<original request>\n\n<Question? an
 
 - **Local stack**: Supabase in Docker on 54321/54322. Docker on PATH in bash: `export PATH="/c/Program Files/Docker/Docker/resources/bin:$PATH"`. Write env: `npm run env:local -- --port <port>` (reads `C:/Pluto/.env.secrets`; never print or commit it). Pick a free port (3500 was used for testing). Never `supabase db reset`.
 - **Do not touch** the servers already running: `localhost:3000` is `C:/Pluto-local` (another session, uncommitted edits, code from before #64) and `localhost:3210` is `C:/Pluto-canvas-live` (PR #55, also pre-#64). Allen was testing on these and saw stale behavior; that was not a bug in `main`.
-- **Production**: `https://pluto-allens-projects-4833779e.vercel.app`, Vercel project `pluto` in scope `allens-projects-4833779e` (`npx vercel@latest ... --scope allens-projects-4833779e`). `PLUTO_LLM` is set for Production only (value hidden; must be exactly `gemini`). On hosted, Allen's real Canvas courses belong to the **demo student** `11111111-1111-4111-8111-111111111111` (`demo@pluto.test`, password `PROD_DEMO_STUDENT_PASSWORD`). Read-only DB checks: `HOSTED_SUPABASE_DB_URL` with `begin read only`.
+- **Production**: `https://pluto-sepia.vercel.app`, Vercel project `pluto` in scope `<vercel-scope>` (`npx vercel@latest ... --scope <vercel-scope>`). `PLUTO_LLM` is set for Production only (value hidden; must be exactly `gemini`). On hosted, Allen's real Canvas courses belong to the **demo student** `11111111-1111-4111-8111-111111111111` (`demo@pluto.test`, password `PROD_DEMO_STUDENT_PASSWORD`). Read-only DB checks: `HOSTED_SUPABASE_DB_URL` with `begin read only`.
 - **LLM modes**: `PLUTO_LLM=mock` is deterministic (use for the e2e default); `PLUTO_LLM=gemini` with `GEMINI_API_KEY` for a real-model pass. The exact text "I couldn't find that in your notes." only comes from the mock.
 - **Browser automation**: the built-in `browser` tool's daemon failed on this machine. What worked: `puppeteer-core` in a temp dir driving system Chrome (`C:/Program Files/Google/Chrome/Application/chrome.exe`, headless, fresh `--user-data-dir`). Wait for hydration before typing (retry typing until `button[aria-label='Send message']` is enabled). Questions card submit: `form:has(fieldset) > button[type=submit]`. Delete X: `button[aria-label='Delete <title>']` (handle the `confirm` dialog). Stop: `button[aria-label='Stop reply']`.
 - **Killing your dev server**: stopping `next dev` leaves a child `start-server.js` on the port; find it with `netstat -ano` and stop that PID only if its command line is in your worktree.
@@ -68,13 +68,13 @@ Real Gemini (run once per change to `packages/agent`, not in CI):
 Canvas (unit/fixture level; live only read-only):
 
 13. `/files` 403 -> module files are read and PDFs kept (test exists in `packages/canvas/test/client/forbidden.test.ts`). Add a files-sync level test that module-sourced files are downloaded and ingested.
-14. Optional read-only live probe with `CANVAS_API_TOKEN`: `listCourseFiles` for the 4 real course ids (`40414` OIM 350, `41909` INFO 324, `41270` COMPSCI 325, `41896` COMPSCI 328). Expected now: 39 / 34 / 15 / 0 PDFs.
+14. Optional read-only live probe with `CANVAS_API_TOKEN`: `listCourseFiles` for the 4 real course ids (passed as arguments). Expected now: 39 / 34 / 15 / 0 PDFs.
 
 ## 5. Known issues to triage
 
 - Production `/notes` likely broken until the hosted migration is applied (section 2).
 - A sync run ingests at most 25 PDFs (`DEFAULT_MAX_FILES` in `packages/canvas/src/files-sync.ts`); nothing re-runs it automatically.
-- COMPSCI 328 has no modules and a 403 on files, so 0 PDFs. Check whether its PDFs are reachable another way (Pages, Announcements, Syllabus) before calling it done; ask Allen if it needs scope.
+- One real course has no modules and a 403 on files, so 0 PDFs. Check whether its PDFs are reachable another way (Pages, Announcements, Syllabus) before calling it done; ask Allen if it needs scope.
 - `stripLinks` leaves a stray `)` after a bare URL inside parentheses (cosmetic).
 - The mock only sees the current message plus the "Question? answer" lines; it is a test double, not product behavior.
 - Saved notes are created only for finished replies that cite notes pages; replies that end early (`partial`) are not saved. Confirm this matches what Allen expects.

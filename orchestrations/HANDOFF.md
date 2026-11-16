@@ -30,7 +30,7 @@ Nothing from web, mcp, assistant or canvas has had a milestone PR into `agent/pl
 ## 2. Blockers only Allen can clear (do these first)
 
 1. **Hosted database is empty.** `courses`, `file_pages`, `profiles` return 404 on the hosted project. Migrations and seed were never applied. Needs `SUPABASE_ACCESS_TOKEN` or `HOSTED_SUPABASE_DB_URL` in `C:/Pluto/.env.secrets`; then `npx supabase link --project-ref $SUPABASE_PROJECT_REF`, `npx supabase db push`, and run the seed against the hosted project (`npm run seed` with hosted env; it uploads and ingests the PDFs). Set `DEMO_STUDENT_PASSWORD` / `OTHER_STUDENT_PASSWORD` first. The hosted OAuth server, dynamic client registration, consent path and "email confirmation off" are already set.
-2. **Vercel Deployment Protection.** `pluto-allens-projects-4833779e.vercel.app` and every preview URL redirect to `vercel.com/sso-api`, so Claude/ChatGPT can't reach `/api/mcp` and grokbot can't UI-test previews. Turn off Vercel Authentication (at least for production) and record the production domain.
+2. **Vercel Deployment Protection.** `pluto-sepia.vercel.app` and every preview URL redirect to `vercel.com/sso-api`, so Claude/ChatGPT can't reach `/api/mcp` and grokbot can't UI-test previews. Turn off Vercel Authentication (at least for production) and record the production domain.
 3. **Vercel env vars** (Production + Preview), names from `.env.example`. Use the `PROD_*` values in `C:/Pluto/.env.secrets` for `INTERNAL_API_SECRET`, `CANVAS_TOKEN_KEY`, `PLUTO_DEMO_MCP_TOKEN` (drop the `PROD_` prefix). Also `PLUTO_DEMO_MCP_URL_ENABLED=1` for the demo, `APP_URL` and `NEXT_PUBLIC_APP_URL` = the public origin, hosted Supabase URL/anon/service-role keys, `GEMINI_API_KEY`, `GEMINI_MODEL`, `PLUTO_LLM=gemini`, Sendblue keys, `SMS_PROVIDER=sendblue`.
 
 ## 3. Critical path to the demo (in order)
@@ -84,7 +84,7 @@ State at stop: planner `canvas` was mid fresh-review of #38 when stopped. Worktr
 
 ## 6. Environment gotchas
 - **Memory:** 16 GB machine, often 0.4-2 GB free (Brave is the biggest user). One coder at a time under 2 GB; stop dev servers after checks; close coder tabs once their PR merges. Headless reviewers were killed by Claude Code's low-memory reaper; the mcp planner had better luck running reviewers as visible Cursor tabs.
-- **Usage:** the Claude 5-hour meter ran out twice. The Cursor CLI is on Allen's second account (aarriaga@umass.edu): only `composer-2.5`, `auto` and Grok models work there (`grok-4.7-high` for planners/reviewers, `grok-4.7-medium`/`composer-2.5` for coders). The first Cursor account is out of Opus until 11/30.
+- **Usage:** the Claude 5-hour meter ran out twice. The Cursor CLI is on Allen's second account: only `composer-2.5`, `auto` and Grok models work there (`grok-4.7-high` for planners/reviewers, `grok-4.7-medium`/`composer-2.5` for coders). The first Cursor account is out of Opus until 11/30.
 - **Reviewers must never run a server in the foreground** (a headless run hangs until timeout). Build, start in the background on a spare port, curl, stop.
 - **Shared local Supabase drift:** it has `phone_link_codes` and a hand-repaired hardening migration. Branches without assistant's migration fail `rls.test.ts` "covers every public table" locally only; CI is the judge. A `npx supabase db reset` + `npm run seed` at a quiet moment fixes it. Side containers (studio, realtime, etc.) were stopped to save memory.
 - **Docker on PATH:** in bash use `export PATH="C:\\Program Files\\Docker\\Docker\\resources\\bin;$PATH"` (Windows form) before `npm run env:local`.
