@@ -1,5 +1,5 @@
 // `npm run seed:judge`: creates or resets the shared judge demo account behind the login page's
-// "Judge demo login" button. Deletes the judge user (every judge row cascades: chats, saved notes,
+// "Preview" button. Deletes the judge user (every judge row cascades: chats, saved notes,
 // courses, files), recreates it with `app_metadata.judge`, loads the synthetic courses
 // (scripts/seed-judge.sql) and the lecture PDFs. Touches no other student, so it is safe to run
 // against the hosted project (`npm run env:local -- --hosted` writes .env.production.local; pass

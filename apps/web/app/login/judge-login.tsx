@@ -19,7 +19,7 @@ function JudgeButton() {
       disabled={pending}
     >
       <Gavel className="size-5" aria-hidden />
-      {pending ? "Opening the demo\u2026" : "Judge demo login"}
+      {pending ? "Opening the demo\u2026" : "Preview"}
     </Button>
   );
 }

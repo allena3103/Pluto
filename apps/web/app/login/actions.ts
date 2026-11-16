@@ -34,7 +34,7 @@ export async function signIn(_prevState: SignInState, formData: FormData): Promi
 
 const JUDGE_ERROR = "The judge demo account is not available right now. Please try again in a minute.";
 
-/** "Judge demo login": signs in to the shared judge account with server-held credentials. */
+/** "Preview" button: signs in to the shared judge account with server-held credentials. */
 export async function judgeSignIn(_prevState: SignInState, formData: FormData): Promise<SignInState> {
   const next = safeNext(typeof formData.get("next") === "string" ? (formData.get("next") as string) : null);
   const credentials = judgeCredentials();
