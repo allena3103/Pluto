@@ -10,3 +10,9 @@ supabase/.temp/
 coverage/
 supabase/.branches/
 .e2e-artifacts/
+*.log
+.DS_Store
+Thumbs.db
+.claude/settings.local.json
+*.pem
+*.key
